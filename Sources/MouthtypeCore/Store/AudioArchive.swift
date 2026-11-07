@@ -15,6 +15,10 @@ public struct AudioArchive: Sendable {
     public static let defaultRetention: TimeInterval = 90 * 24 * 3600
     public static let defaultMaxTotalBytes = 2 * 1024 * 1024 * 1024
     public static let sampleRate = 16_000
+    /// How long a failed or never-finished take's audio, and any in-progress copy, is kept for recovery before
+    /// retention treats it like any other audio: after this grace it follows the age and size limit. Well past `DictationRecovery.window`, which is only how far back a
+    /// launch offers a recovery.
+    public static let recoveryGrace: TimeInterval = 30 * 24 * 3600
 
     public let directory: URL
 
@@ -57,6 +61,12 @@ public struct AudioArchive: Sendable {
         try handle.write(contentsOf: Self.pcm(samples))
     }
 
+    /// Removes a take's archived WAV and in-progress copy.
+    public func remove(id: String) {
+        try? FileManager.default.removeItem(at: url(for: id))
+        discardPartial(id: id)
+    }
+
     public func discardPartial(id: String) {
         try? FileManager.default.removeItem(at: partialURL(for: id))
     }
@@ -70,21 +80,39 @@ public struct AudioArchive: Sendable {
         try Self.samples(fromWAV: Data(contentsOf: url(for: id)))
     }
 
+    /// The file names in the archive directory, or nil when it is missing or can't be listed. Callers deciding that audio
+    /// is gone must treat nil as "unknown", never as "everything is gone".
+    public func listedFileNames() -> Set<String>? {
+        guard let urls = try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil) else { return nil }
+        return Set(urls.map(\.lastPathComponent))
+    }
+
     /// Deletes files older than `cutoff`, then the oldest of the rest until the total fits `maxTotalBytes`.
-    /// When supplied, only `eligibleIDs` are counted or removed; crash partials are always excluded.
-    /// A delete that fails leaves its file for the next sweep, and the rest still run. Returns the ids actually removed
-    /// so the caller can null `audio_path`; throws only when a delete failed and none succeeded.
-    public func purge(olderThan cutoff: Date, maxTotalBytes: Int = defaultMaxTotalBytes, eligibleIDs: Set<String>? = nil) throws -> [String] {
+    /// When supplied, only `eligibleIDs` are counted or removed. `recoveryIDs` (failed and unfinished takes) and crash
+    /// partials join them only once their file is older than `recoveryCutoff`. Files with no matching row are never
+    /// removed (a partial is checked against `knownIDs`, every id with a row, when supplied). A delete that fails leaves its file for the next sweep, and the rest still run. Returns the ids of rows
+    /// whose WAV was actually removed so the caller can null `audio_path` (partials are not reported); throws only when a
+    /// delete failed and none succeeded.
+    public func purge(
+        olderThan cutoff: Date, maxTotalBytes: Int = defaultMaxTotalBytes, eligibleIDs: Set<String>? = nil,
+        recoveryIDs: Set<String> = [], recoveryCutoff: Date? = nil, knownIDs: Set<String>? = nil
+    ) throws -> [String] {
         let manager = FileManager.default
         guard manager.fileExists(atPath: directory.path) else { return [] }
         let keys: [URLResourceKey] = [.contentModificationDateKey, .fileSizeKey]
-        var files: [(id: String, url: URL, date: Date, size: Int)] = []
-        for url in try manager.contentsOfDirectory(at: directory, includingPropertiesForKeys: keys)
-        where url.pathExtension == "wav" && !url.lastPathComponent.hasSuffix(".partial.wav") {
-            let id = url.deletingPathExtension().lastPathComponent
-            guard eligibleIDs?.contains(id) != false else { continue }
+        var files: [(id: String, url: URL, date: Date, size: Int, isPartial: Bool)] = []
+        for url in try manager.contentsOfDirectory(at: directory, includingPropertiesForKeys: keys) where url.pathExtension == "wav" {
             let values = try url.resourceValues(forKeys: Set(keys))
-            files.append((id, url, values.contentModificationDate ?? .distantPast, values.fileSize ?? 0))
+            let date = values.contentModificationDate ?? .distantPast
+            let isPartial = url.lastPathComponent.hasSuffix(".partial.wav")
+            var id = url.deletingPathExtension().lastPathComponent
+            if isPartial {
+                id = String(id.dropLast(".partial".count))
+                guard let recoveryCutoff, date < recoveryCutoff, knownIDs?.contains(id) != false else { continue }
+            } else if let eligibleIDs, !eligibleIDs.contains(id) {
+                guard recoveryIDs.contains(id), let recoveryCutoff, date < recoveryCutoff else { continue }
+            }
+            files.append((id, url, date, values.fileSize ?? 0, isPartial))
         }
         files.sort { $0.date < $1.date }
 
@@ -101,7 +129,7 @@ public struct AudioArchive: Sendable {
                     continue
                 }
             }
-            removed.append(file.id)
+            if !file.isPartial { removed.append(file.id) }
             total -= file.size
         }
         if removed.isEmpty, let firstError { throw firstError }

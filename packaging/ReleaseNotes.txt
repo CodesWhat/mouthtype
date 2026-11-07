@@ -1,5 +1,16 @@
-Mouthtype 0.12.0
+Mouthtype 0.12.1
 
+Security fix: when macOS Secure Input was on, Mouthtype could paste into a password field in some apps (web and Electron apps, or a slow native password field). It now only pastes when it can confirm a normal text field. Otherwise it keeps your text on the card with a note that Secure Input is on.
+
+Damaged history search indexes are rebuilt from saved history. If the database still can't be opened, Mouthtype says so in the menu and Diagnostics instead of failing silently. A damaged database is set aside with its recordings (nothing is deleted) and a fresh one starts. Opening a second copy now returns you to the running app instead of opening the same history twice.
+
+Clipboard handling gives slow apps time to take the transcript and restores supported rich and multi-item clipboard data. If the previous clipboard contains only a file promise that can't be restored, the transcript stays on the clipboard with a warning. Missed field checks no longer report a paste failure, and an expanded selection in an unreadable field can't confirm a paste or trigger Return.
+
+Deleting a take now removes its audio too. Failed and interrupted recordings age out with your retention setting after a 30-day grace period, and saved recordings stay listed after an account rename. Cleanup also keeps saved recordings visible when their file still exists outside the current archive, including when it removes an old duplicate from the archive.
+
+Counted lists no longer leave a stray "and" or "then" at the end of an item.
+
+Earlier in 0.12.0:
 Achievements are new. The Stats page has a shelf of 27 trophies for things like how much you've dictated, edited and transformed. When you earn one, a small toast shows in the app window, and it stays quiet while you're dictating. Trophies you'd already earned are filled in without any toasts. Settings > Mac has an Achievements switch. Off hides the shelf and stops the work.
 
 There's now a Support Mouthtype item in the menu bar menu, right after About, with links to GitHub Sponsors and Donate. The About panel has the same links. Nothing prompts you and nothing shows at launch.

@@ -42,6 +42,21 @@ public final class TranscriptStore: Sendable {
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         pool = try DatabasePool(path: url.path)
         try Self.migrator.migrate(pool)
+        try pool.write { db in
+            do {
+                try db.execute(sql: "INSERT INTO take_search(take_search) VALUES ('integrity-check')")
+            } catch let error as DatabaseError where error.resultCode == .SQLITE_CORRUPT {
+                try db.execute(
+                    sql: """
+                        DROP TABLE take_search;
+                        CREATE VIRTUAL TABLE take_search USING fts5(raw_text, final_text, app_name);
+                        INSERT INTO take_search(rowid, raw_text, final_text, app_name)
+                            SELECT rowid, raw_text, final_text, app_name FROM dictation
+                            WHERE final_text IS NOT NULL AND TRIM(final_text) != '' AND COALESCE(is_secure, 0) = 0;
+                        """)
+                try db.execute(sql: "INSERT INTO take_search(take_search) VALUES ('integrity-check')")
+            }
+        }
     }
 
     static var migrator: DatabaseMigrator {
@@ -321,9 +336,33 @@ public final class TranscriptStore: Sendable {
         }
     }
 
-    public func delete(_ id: String) throws {
+    /// Deletes the take. With an `archive`, its archived WAV and in-progress copy go too, so no audio outlives its row.
+    public func delete(_ id: String, archive: AudioArchive? = nil) throws {
         try pool.write { db in try db.execute(sql: "DELETE FROM dictation WHERE id = ?", arguments: [id]) }
+        archive?.remove(id: id)
         inputsChanged(notify: true)
+    }
+
+    /// Every id with a row. Audio whose id is not here is never removed.
+    public func dictationIDs() throws -> Set<String> {
+        try pool.read { db in Set(try String.fetchAll(db, sql: "SELECT id FROM dictation")) }
+    }
+
+    /// Failed and never-finished takes. Their audio is kept for recovery until the recovery grace passes.
+    public func recoveryAudioIDs() throws -> Set<String> {
+        try pool.read { db in
+            Set(
+                try String.fetchAll(
+                    db, sql: "SELECT id FROM dictation WHERE status IN (?, ?, ?, ?)",
+                    arguments: [DictationStatus.failed, DictationStatus.started, DictationStatus.recorded, DictationStatus.transcribed]))
+        }
+    }
+
+    /// Ids and stored paths of every row that still points at audio.
+    public func audioPaths() throws -> [(id: String, path: String)] {
+        try pool.read { db in
+            try Row.fetchAll(db, sql: "SELECT id, audio_path FROM dictation WHERE audio_path IS NOT NULL").map { ($0["id"], $0["audio_path"]) }
+        }
     }
 
     /// Clears `audio_path` and `audio_expires_at` for rows whose audio was purged.

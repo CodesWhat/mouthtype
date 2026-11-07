@@ -1,13 +1,13 @@
-# Known limits for 0.12.0
+# Known limits for 0.12.1
 
 > [!NOTE]
-> This page covers what 0.12.0 doesn't promise. Most of it is evidence the maintainer didn't collect, not behavior known to be broken. For fixes to problems you can hit today, see [troubleshooting](TROUBLESHOOTING.md).
+> This page covers what 0.12.1 doesn't promise. Most of it is evidence the maintainer didn't collect, not behavior known to be broken. For fixes to problems you can hit today, see [troubleshooting](TROUBLESHOOTING.md).
 
 ## Not verified
 
 | Area | What isn't verified | Safe assumption |
 | --- | --- | --- |
-| Fresh install | Installing on a Mac that has never run Mouthtype wasn't verified for 0.12.0. That was a maintainer scope decision. | The first-run permission prompts and model downloads were tested only on machines that already had grants and caches, so they may behave differently on yours. |
+| Fresh install | Installing on a Mac that has never run Mouthtype wasn't verified for 0.12.1. That was a maintainer scope decision. | The first-run permission prompts and model downloads were tested only on machines that already had grants and caches, so they may behave differently on yours. |
 | Non-English speech | Dictation in languages other than English was checked with fixtures and synthetic voices, not by people speaking those languages on a Mac. Auto-detect's language picks weren't measured on real speech. | Expect more corrections outside English, most of all in the Beta languages. Pick the language yourself if Auto-detect guesses wrong. |
 | Japanese, Hindi and Tamil (Beta) | These languages were checked with synthetic speech only, never a fluent speaker or a physical microphone. The Whisper Turbo model is a separate 1.6 GB download, and live words are unavailable while it is in use, including English takes in an Auto-detect set that contains these languages. | Expect more corrections than in the Parakeet languages. Cleanup is Basic only, and the download path hasn't been run on a fresh machine. |
 | Press Return after inserting | The list in Settings > Advanced was checked with unit tests and offscreen renders only, never in a live app. | Try it in a throwaway chat before relying on it. Terminals can't confirm a paste, so when you add one Mouthtype presses Return a moment after the paste without checking. Other apps send only when Mouthtype can confirm the text landed. Neither has been tried in live apps yet. |
@@ -31,6 +31,10 @@
 | The Matrix padlock sprite is low-detail at its 9 px size. It's a pixel-art sprite. | Choose Pill size Large (Settings → Appearance) for more room. |
 | The Hi-Fi ears and 4 px gap were positioned by eye and haven't had a physical display check. | Use Classic if the spacing looks wrong on your display. |
 | The Hi-Fi card falls back to the Classic card for text its pixel font can't draw. Characters outside the font's range would turn into question marks. | Nothing to do. The card shows your text in the Classic style instead, and the text is unchanged. |
+
+## Secure Input
+
+- Secure Input safeguards depend on the destination's accessibility metadata. A missing subrole can still be accepted when the app reports an allowed text role without secure or protected markers and no lookup failed. Requiring a writable value or a caret range has not been validated as a stronger discriminator.
 
 ## Recognition and cleanup
 

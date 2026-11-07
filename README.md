@@ -11,12 +11,12 @@ Natural speech in, clean text out.
 </div>
 
 <p align="center">
-  <a href="https://mouthtype.app/download"><img src="https://img.shields.io/badge/version-0.12.0-2ea44f" alt="Version 0.12.0"></a>
+  <a href="https://mouthtype.app/download"><img src="https://img.shields.io/badge/version-0.12.1-2ea44f" alt="Version 0.12.1"></a>
   <a href="https://mouthtype.app/download"><img src="https://img.shields.io/badge/macOS-26%2B-000000?logo=apple&amp;logoColor=white" alt="macOS 26 or later"></a>
   <a href="https://mouthtype.app/download"><img src="https://img.shields.io/badge/Apple_Silicon-arm64-000000?logo=apple&amp;logoColor=white" alt="Apple Silicon"></a>
   <a href="https://github.com/CodesWhat/mouthtype/releases"><img src="https://img.shields.io/github/v/release/CodesWhat/mouthtype" alt="Latest release"></a>
   <a href="https://github.com/CodesWhat/mouthtype/actions/workflows/security.yml"><img src="https://github.com/CodesWhat/mouthtype/actions/workflows/security.yml/badge.svg" alt="Security CI"></a>
-  <a href="https://app.codecov.io/gh/CodesWhat/mouthtype/tree/dev%2Fv0.8.0"><img src="https://codecov.io/gh/CodesWhat/mouthtype/branch/dev%2Fv0.8.0/graph/badge.svg" alt="Coverage"></a>
+  <a href="https://app.codecov.io/gh/CodesWhat/mouthtype/tree/main"><img src="https://codecov.io/gh/CodesWhat/mouthtype/branch/main/graph/badge.svg" alt="Coverage"></a>
   <a href="https://securityscorecards.dev/viewer/?uri=github.com/CodesWhat/mouthtype"><img src="https://img.shields.io/ossf-scorecard/github.com/CodesWhat/mouthtype?label=openssf+scorecard&amp;style=flat" alt="OpenSSF Scorecard"></a>
   <a href="https://www.bestpractices.dev/projects/15781"><img src="https://www.bestpractices.dev/projects/15781/badge" alt="OpenSSF Best Practices"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0-blue" alt="License GPL-3.0"></a>
@@ -25,7 +25,7 @@ Natural speech in, clean text out.
 <hr>
 
 > [!IMPORTANT]
-> **Not verified on a device for 0.12.0:** fresh installation, VoiceOver (including voice edit, typing calibration and the trophy shelf and toast), voice edit after its final review fixes, FluidAudio 0.18 on real speech and long takes, Bluetooth and USB microphones, press Return after inserting in a live app, and the Japanese, Hindi and Tamil Beta paths with their 1.6 GB model download. See [known limits](https://docs.mouthtype.app/reference/known-limits/).
+> **Not verified on a device for 0.12.1:** fresh installation, VoiceOver (including voice edit, typing calibration and the trophy shelf and toast), voice edit after its final review fixes, FluidAudio 0.18 on real speech and long takes, Bluetooth and USB microphones, press Return after inserting in a live app, and the Japanese, Hindi and Tamil Beta paths with their 1.6 GB model download. See [known limits](https://docs.mouthtype.app/reference/known-limits/).
 
 <h2 align="center">Contents</h2>
 
@@ -67,7 +67,7 @@ Natural speech in, clean text out.
 | Saved audio and retention | [docs.mouthtype.app/privacy-and-data/saved-audio](https://docs.mouthtype.app/privacy-and-data/saved-audio/) |
 | Automation (`mouthtype://` and the command-line script) | [docs.mouthtype.app/automation/url-scheme-and-cli](https://docs.mouthtype.app/automation/url-scheme-and-cli/) |
 | Troubleshooting | [docs.mouthtype.app/troubleshooting](https://docs.mouthtype.app/troubleshooting/) |
-| Known limits for 0.12.0 | [docs.mouthtype.app/reference/known-limits](https://docs.mouthtype.app/reference/known-limits/) |
+| Known limits for 0.12.1 | [docs.mouthtype.app/reference/known-limits](https://docs.mouthtype.app/reference/known-limits/) |
 | Release notes | [`packaging/ReleaseNotes.txt`](packaging/ReleaseNotes.txt) |
 | Roadmap | See [Roadmap](#roadmap) below |
 | Changelog | [`CHANGELOG.md`](CHANGELOG.md) |
@@ -87,7 +87,7 @@ Natural speech in, clean text out.
 
 Mouthtype runs speech recognition and cleanup on your Mac. It puts the result in the text field you're already using, with local history and recovery when delivery fails. No account or transcription subscription is required.
 
-The Mac app is at 0.12.0, a stable release. It supports **Apple Silicon and macOS 26 or later**. The signed app and corresponding release source are at [mouthtype.app/download](https://mouthtype.app/download) and [mouthtype.app/source](https://mouthtype.app/source).
+The Mac app is at 0.12.1, a stable release. It supports **Apple Silicon and macOS 26 or later**. The signed app and corresponding release source are at [mouthtype.app/download](https://mouthtype.app/download) and [mouthtype.app/source](https://mouthtype.app/source).
 
 1. Download the signed, notarized DMG from [mouthtype.app/download](https://mouthtype.app/download).
 2. Open the DMG, drag Mouthtype to Applications and open it.
@@ -162,7 +162,7 @@ See [the usage reference](https://docs.mouthtype.app/reference/usage-overview/) 
 
 <h2 align="center" id="privacy-and-permissions">Privacy and Permissions</h2>
 
-Audio, transcripts, settings, spellings and phrases stay on this Mac. The default data directory is `~/Library/Application Support/Mouthtype/`. Text history is retained indefinitely. Completed audio defaults to 90 days and 2 GB; unfinished and recovery audio are protected from normal retention cleanup. The local database and recordings aren't encrypted by Mouthtype, so protect the Mac and its backups accordingly.
+Audio, transcripts, settings, spellings and phrases stay on this Mac. The default data directory is `~/Library/Application Support/Mouthtype/`. Text history is retained indefinitely. Completed audio defaults to 90 days and 2 GB; recovery audio is kept 30 days, then follows the same age and size limit. The local database and recordings aren't encrypted by Mouthtype, so protect the Mac and its backups accordingly.
 
 Microphone access records a take. Accessibility access handles the global shortcut, examines the destination and inserts text. Cleanup can read a small amount of nearby text for formatting and spelling hints, excluding secure fields. Phrase rules can explicitly insert the clipboard's text. These are powerful permissions; grant them only to a build you trust.
 
@@ -224,7 +224,10 @@ High-level themes only, with no dates. [`CHANGELOG.md`](CHANGELOG.md) has per-re
 | **0.7.0** ✅ | Beta languages and fixes | Japanese, Hindi and Tamil dictation in Beta through a separate 1.6 GB Whisper model, selected-text cleanup tone precedence, dictionary and cleanup fixes, a website typing speed test with a countdown |
 | **0.8.0** ✅ | Press Return after inserting | An opt-in list of apps where Mouthtype presses Return after a confirmed paste, and a Formal cleanup fix that keeps a real verb |
 | **0.9.0** ✅ | Press Return in terminals | Press Return after inserting now works in terminals you add and in Electron apps like the Claude desktop app |
-| **Planned** | Next | Linux desktop client acceptance and a supported release, a Ring pill style |
+| **0.10.x** ✅ | History search and playback | Search retained transcripts and app names, and play retained audio from Home |
+| **0.11.x** ✅ | Voice editing and typing calibration | Edit selected text by voice with a review preview, and measure your typing speed in Stats |
+| **0.12.x** ✅ | Achievements and support | A shelf of 27 trophies, optional achievement toasts and support links; Linux packaging remains experimental source |
+| **Planned** | Next | Linux desktop client acceptance and a supported release |
 
 **Still open:** fresh-install, VoiceOver, and Bluetooth and USB microphone verification, and wider app-compatibility testing. See [known limits](https://docs.mouthtype.app/reference/known-limits/).
 

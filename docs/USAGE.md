@@ -6,7 +6,7 @@ Click a text field, hold <kbd>Fn</kbd> and speak, then release to paste. Double-
 
 ## Mac release
 
-The latest published release, 0.12.0, supports Apple Silicon Macs on macOS 26 or later. Download the signed, notarized DMG from [mouthtype.app](https://mouthtype.app/download) and follow [the install notes](READ-ME.md). Repository access is not required. [Corresponding release source](https://mouthtype.app/source) is available separately.
+The latest published release, 0.12.1, supports Apple Silicon Macs on macOS 26 or later. Download the signed, notarized DMG from [mouthtype.app](https://mouthtype.app/download) and follow [the install notes](READ-ME.md). Repository access is not required. [Corresponding release source](https://mouthtype.app/source) is available separately.
 
 > [!NOTE]
 > Existing alpha.1–3 users need this download once to get the built-in updater.
@@ -110,11 +110,13 @@ For a terminal that loses text from large pastes, open **Settings > Advanced > D
 6. An interrupted paste offers the full transcript with Copy and warns that some text may already be there. Check the field before pasting the full copy, to avoid duplicates.
 
 > [!NOTE]
-> Split pastes preserve the text exactly and add no Return between parts. If the app is on the Press Return after inserting list, one Return can follow the whole paste once it is confirmed. A read permits advancing the clipboard; it does not prove insertion.
+> Split pastes preserve the text exactly and add no Return between parts. If the app is on the Press Return after inserting list, one Return can follow the whole paste. Mouthtype confirms it first except in terminals, where it can press Return without confirmation under the send policy above. A read permits advancing the clipboard; it does not prove insertion.
 
 Per-app paste shortcut selection and typed delivery are deferred. Per-app cleanup styles are available on the **Style** page. Your own rules start empty. Built-in app and website lists carry their own tones, and everything else uses the default tone.
 
 Mouthtype also waits for the preceding ordinary paste’s clipboard read before replacing its text. A missing read leaves the next take recoverable instead of overwriting the unread clipboard. A newer user copy remains untouched. Normal Quit first preserves active and queued capture audio, then settles the clipboard change Mouthtype still owns. If preservation fails, the app stays open for a Quit retry. Shutdown blocks late transcription delivery. These checks do not prove that the destination inserted the text; inspect the field before retrying.
+
+For a readable field, clipboard restoration also waits for the transcript to appear, up to a 1.2-second field hold. Supported rich and multi-item clipboard data is restored. If the previous clipboard contains only a file promise that can't be restored, the transcript stays on the clipboard and the delivery card says so. Missed verification checks leave the result unknown rather than reporting a paste failure. When field text can't be read, a change needs a collapsed selection to confirm delivery and arm Return.
 
 ## Choose cleanup strength and writing style
 
@@ -171,7 +173,7 @@ Click is the default sound set: a bright key-down thunk to start, a duller key-u
 
 History, settings, dictionary and audio stay on this Mac. The default store is `~/Library/Application Support/Mouthtype/mouthtype.sqlite`; recordings are in its sibling `audio` directory. Text history is retained indefinitely.
 
-**Settings > Advanced > Storage** offers 14, 30 or 90 days, or No age limit, and a 2 GB or 10 GB size limit. Defaults stay 90 days and 2 GB. The next launch prunes only completed Mouthtype recordings; unfinished and recovery audio are protected, and text and timings stay. See [saved audio](AUDIO-RETENTION.md). Model downloads require network access.
+**Settings > Advanced > Storage** offers 14, 30 or 90 days, or No age limit, and a 2 GB or 10 GB size limit. Defaults stay 90 days and 2 GB. The next launch prunes completed recordings past your age or size limit. Recovery audio (failed or interrupted takes and crash partials) is kept for 30 days, then the same limit applies to it. Text and timings stay. See [saved audio](AUDIO-RETENTION.md). Model downloads require network access.
 
 ## Website
 

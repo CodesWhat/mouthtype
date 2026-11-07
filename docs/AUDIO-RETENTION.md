@@ -5,7 +5,7 @@ Mouthtype keeps completed recordings for a limited time and size, and you choose
 | Setting | Choices | Default |
 | --- | --- | --- |
 | Age limit | 14 days, 30 days, 90 days, No age limit | 90 days |
-| Completed-audio size limit | 2 GB, 10 GB | 2 GB |
+| Completed audio size limit | 2 GB, 10 GB | 2 GB |
 
 No age limit still has a size limit. A change doesn't delete recordings immediately or interrupt a recording in progress.
 
@@ -14,24 +14,21 @@ No age limit still has a size limit. A change doesn't delete recordings immediat
 
 ## What happens at launch
 
-Changes apply to existing completed recordings the next time Mouthtype launches. Startup maintenance:
+Changes apply to retained recordings the next time Mouthtype launches. Recovery audio keeps its 30-day grace period. Startup maintenance:
 
-1. Selects only known completed dictations before inspecting their WAVs.
-2. Removes expired completed WAVs.
-3. Removes the oldest remaining completed WAVs until they fit the selected size limit.
+1. Selects known completed recordings and recovery audio past its 30-day grace period.
+2. Removes eligible WAVs past the selected age limit.
+3. Removes the oldest remaining eligible WAVs until they fit the selected size limit.
 
-New archive metadata records the selected expiration date, or no expiration date when there is no age limit. When startup maintenance removes a completed recording, its audio location and expiration are cleared from its database row; its text and statistics remain.
+New archive metadata records the selected expiration date, or no expiration date when there is no age limit. When startup maintenance removes a completed recording, its audio location and expiration are cleared from its database row; its text and statistics remain. If the saved location still points to an existing recording outside the current archive, cleanup keeps that location and expiration, including when it deletes an old archive copy with the same take ID.
 
-## What is never pruned
+## Recovery audio and unmatched files
 
-These are exempt from the completed-audio limits and can use additional storage:
+Recovery audio is failed or interrupted takes and crash partials. It isn't pruned for the first 30 days. After that it follows your age and size limit like any other audio.
 
-- Unfinished recordings.
-- Crash-recovery partials.
-- Failed takes available for recovery.
-- Files without a matching completed database record. They aren't assumed completed just because the database doesn't list them as unfinished.
+Files without a matching database record are never pruned. They aren't assumed completed just because the database doesn't list them as unfinished.
 
-Recovery audio remains available through **Saved Recordings**; the existing Recover and Discard behavior is unchanged. Discard ends the recovery offer and doesn't promise to delete its audio immediately.
+Recovery audio remains available through **Saved Recordings** during the grace period; the existing Recover and Discard behavior is unchanged. Discard ends the recovery offer and doesn't promise to delete its audio immediately.
 
 ## What stays
 

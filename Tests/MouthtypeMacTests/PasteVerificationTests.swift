@@ -96,19 +96,135 @@ import Testing
         #expect(judge([obs(base), obs(base), obs(base)]) == .notLanded)
     }
 
-    @Test func aChangedValueConfirms() {
+    @Test func aChangedValueWithoutThePastedTextIsNotConfirmed() {
         let changed = FieldReading(value: "Hello there", length: 5, selection: base.selection)
-        #expect(judge([obs(base), obs(changed)]) == .confirmed)
+        #expect(judge([obs(base), obs(changed)]) == .unknown)
     }
 
-    @Test func aChangedLengthConfirms() {
+    @Test func aChangedLengthConfirmsOnlyWhenTheFieldWasNotReadableBefore() {
+        let unreadable = FieldReading(value: nil, length: 5, selection: base.selection)
         let changed = FieldReading(value: nil, length: 11, selection: base.selection)
-        #expect(judge([obs(changed)]) == .confirmed)
+        #expect(judge([obs(changed)], baseline: V.Baseline(reading: unreadable, input: 7)) == .confirmed)
+        #expect(judge([obs(changed)]) == .unknown)
     }
 
-    @Test func aMovedCaretConfirms() {
-        let changed = FieldReading(value: "Hello", length: 5, selection: NSRange(location: 3, length: 0))
-        #expect(judge([obs(changed), obs(base), obs(base)]) == .confirmed)
+    @Test func aMovedCaretConfirmsOnlyWhenTheFieldWasNotReadableBefore() {
+        let unreadable = FieldReading(value: nil, length: 5, selection: base.selection)
+        let moved = FieldReading(value: nil, length: 5, selection: NSRange(location: 3, length: 0))
+        #expect(judge([obs(moved), obs(unreadable), obs(unreadable)], baseline: V.Baseline(reading: unreadable, input: 7)) == .confirmed)
+        let valueOnly = FieldReading(value: "Hello", length: 5, selection: NSRange(location: 3, length: 0))
+        #expect(judge([obs(valueOnly), obs(base), obs(base)]) == .unknown)
+    }
+
+    @Test(arguments: [nil, NSRange(location: 3, length: 2), NSRange(location: NSNotFound, length: 0)])
+    func anUnreadableFieldNeedsAKnownCollapsedSelectionToConfirmAChange(selection: NSRange?) {
+        let blind = V.Baseline(reading: FieldReading(value: nil, length: 5, selection: base.selection), input: 7)
+        let changed = FieldReading(value: nil, length: 11, selection: selection)
+        #expect(!V.confirms(obs(changed), baseline: blind, pasted: " world"))
+        #expect(judge([obs(changed)], baseline: blind) == .unknown)
+    }
+
+    @Test func aReadableFieldMustGainThePastedTextToConfirm() {
+        let landed = FieldReading(value: "Hello world", length: 11, selection: NSRange(location: 11, length: 0))
+        #expect(V.confirms(obs(landed), baseline: baseline, pasted: " world"))
+        let other = FieldReading(value: "Hello there", length: 11, selection: NSRange(location: 11, length: 0))
+        #expect(!V.confirms(obs(other), baseline: baseline, pasted: " world"))
+        #expect(!V.confirms(obs(nil), baseline: baseline, pasted: " world"))
+    }
+
+    @Test func repeatingTextTheFieldAlreadyHeldConfirmsOnlyWhenItAppearsAgain() {
+        let held = FieldReading(value: "Hello world", length: 11, selection: NSRange(location: 11, length: 0))
+        let twice = FieldReading(value: "Hello world world", length: 17, selection: NSRange(location: 17, length: 0))
+        let heldBaseline = V.Baseline(reading: held, input: 7)
+        #expect(!V.confirms(obs(held), baseline: heldBaseline, pasted: " world"))
+        #expect(V.confirms(obs(twice), baseline: heldBaseline, pasted: " world"))
+    }
+
+    @Test func whitespaceTheFieldRewritesDoesNotHideThePaste() {
+        // A single-line input drops the newlines.
+        let stripped = FieldReading(value: "Helloline oneline two", length: 21, selection: NSRange(location: 21, length: 0))
+        #expect(V.confirms(obs(stripped), baseline: baseline, pasted: "\nline one\nline two"))
+        // A web editor keeps words apart with no-break spaces and a zero-width space at the caret.
+        let nbsp = FieldReading(value: "Hello\u{a0}new\u{a0}words\u{200b}", length: 16, selection: NSRange(location: 15, length: 0))
+        #expect(V.confirms(obs(nbsp), baseline: baseline, pasted: " new words"))
+        // A code editor indents each pasted line.
+        let indented = FieldReading(value: "Hello\n    foo\n    bar", length: 21, selection: NSRange(location: 21, length: 0))
+        #expect(V.confirms(obs(indented), baseline: baseline, pasted: "\nfoo\nbar"))
+        // The stripped text still has to be the paste.
+        let other = FieldReading(value: "Hellosomething else", length: 19, selection: NSRange(location: 19, length: 0))
+        #expect(!V.confirms(obs(other), baseline: baseline, pasted: "\nline one\nline two"))
+    }
+
+    @Test func pastingOverASelectionThatHeldTheSameTextConfirms() {
+        let selected = V.Baseline(reading: FieldReading(value: "Hello world", length: 11, selection: NSRange(location: 6, length: 5)), input: 7)
+        let same = FieldReading(value: "Hello world", length: 11, selection: NSRange(location: 11, length: 0))
+        #expect(V.confirms(obs(same), baseline: selected, pasted: "world"))
+        // The previous clipboard landing over the selection instead is a change of the same size, and not the paste.
+        let other = FieldReading(value: "Hello hunter2", length: 13, selection: NSRange(location: 13, length: 0))
+        #expect(!V.confirms(obs(other), baseline: selected, pasted: "world"))
+        #expect(V.judge(baseline: selected, pasted: "world", observations: [obs(other), obs(other), obs(other)], expected: 3) == .unknown)
+    }
+
+    @Test func aFieldThatSwapsQuotesStillConfirmsByWhatItGained() {
+        let pasted = "the report she called \"final\" went out this morning"
+        let curly = FieldReading(
+            value: "Hellothe report she called \u{201c}final\u{201d} went out this morning", length: 56, selection: NSRange(location: 56, length: 0))
+        #expect(V.confirms(obs(curly), baseline: baseline, pasted: pasted))
+        // Typing in between could have put it there.
+        #expect(!V.confirms(obs(curly, input: 8), baseline: baseline, pasted: pasted))
+        // Too many characters differ for the gain to be the paste.
+        let rewritten = FieldReading(
+            value: "HelloTHE REPORT she called \u{201c}final\u{201d} went out this morning", length: 56, selection: NSRange(location: 56, length: 0))
+        #expect(!V.confirms(obs(rewritten), baseline: baseline, pasted: pasted))
+    }
+
+    @Test func aShortTranscriptInsideAWronglyPastedLongerClipboardDoesNotConfirm() {
+        // The target pasted the user's previous clipboard, which happens to contain the transcript.
+        let wrong = FieldReading(
+            value: "Hellothe meeting notes say ok and nothing else", length: 46, selection: NSRange(location: 46, length: 0))
+        #expect(!V.confirms(obs(wrong), baseline: baseline, pasted: "ok"))
+        // The transcript itself, landing as a short gain, still confirms.
+        let landed = FieldReading(value: "Hello ok", length: 8, selection: NSRange(location: 8, length: 0))
+        #expect(V.confirms(obs(landed), baseline: baseline, pasted: " ok"))
+    }
+
+    @Test func lengthChangingPunctuationRewritesStayUnconfirmed() {
+        let pasted = "wait... then... -- go -- now"
+        let rewrittenValue = "Hellowait… then… — go — now"
+        let rewritten = FieldReading(
+            value: rewrittenValue, length: rewrittenValue.utf16.count, selection: NSRange(location: rewrittenValue.utf16.count, length: 0))
+        #expect(judge([obs(rewritten)], pasted: pasted) == .unknown)
+        let exactValue = "Hello" + pasted
+        let exact = FieldReading(
+            value: exactValue, length: exactValue.utf16.count, selection: NSRange(location: exactValue.utf16.count, length: 0))
+        #expect(V.confirms(obs(exact), baseline: baseline, pasted: pasted))
+    }
+
+    @Test func gainingSomethingElseOfTheSameLengthDoesNotConfirm() {
+        let secret = FieldReading(value: "Hellosecret", length: 11, selection: NSRange(location: 11, length: 0))
+        #expect(!V.confirms(obs(secret), baseline: baseline, pasted: "send it"))
+        #expect(!V.confirms(obs(secret), baseline: baseline, pasted: "sendit"))
+        let judged = judge([obs(secret), obs(secret), obs(secret)], pasted: "send it")
+        #expect(judged == .unknown)
+    }
+
+    @Test func aTruncatedPasteDoesNotConfirm() {
+        let cut = FieldReading(value: "Hellosend the full", length: 18, selection: NSRange(location: 18, length: 0))
+        #expect(!V.confirms(obs(cut), baseline: baseline, pasted: "send the full report"))
+    }
+
+    @Test func anUnreadableBaselineConfirmsOnRewrittenWhitespaceOrAnyQuietChange() {
+        let blind = V.Baseline(reading: FieldReading(value: nil, length: 5, selection: base.selection), input: 7)
+        let shown = FieldReading(value: "Hello\u{a0}world", length: 11, selection: NSRange(location: 11, length: 0))
+        #expect(V.confirms(obs(shown), baseline: blind, pasted: " world"))
+        let grew = FieldReading(value: nil, length: 11, selection: NSRange(location: 11, length: 0))
+        #expect(V.confirms(obs(grew), baseline: blind, pasted: " world"))
+        #expect(!V.confirms(obs(grew, input: 8), baseline: blind, pasted: " world"))
+    }
+
+    @Test func compactingDropsEveryKindOfSpace() {
+        #expect(V.compact(" a\tb\nc\r\nd\u{a0}e\u{2003}f\u{200b}g\u{feff}") == "abcdefg")
+        #expect(V.compact("👩🏽‍💻 ok") == V.compact("👩🏽‍💻ok"))
     }
 
     @Test func aValueContainingThePastedTextConfirmsEvenWithTypingInBetween() {

@@ -479,6 +479,10 @@ final class DictationController {
     /// Shows a line for a URL command or a copy, without taking a live recording's pill. A hands-free recording shows it
     /// over the pill and comes back; a held-key recording keeps its pill and the line is dropped. While the capture is
     /// still coming up there is no recording on screen yet, so the line shows normally. Once the pill is up it counts as live.
+    /// After a paste over a clipboard that held only a file promise: the dictation is pasted, and stays on the clipboard
+    /// because the copied file can't be put back.
+    static let clipboardKeptNotice = PillMessage("Dictation left on the clipboard", detail: "The copied file couldn't be put back")
+
     func showNotice(_ message: PillMessage, duration: TimeInterval = 2.5) {
         guard phase == .recording, !captureStarting || recordingLive else {
             pill.showMessage(message, duration: duration)
@@ -709,6 +713,8 @@ final class DictationController {
             deliveringOwnCard = true
             cards.present(card)
             deliveringOwnCard = false
+        } else if result.transcriptStaysOnClipboard {
+            showNotice(Self.clipboardKeptNotice)
         }
         if verifying?.id == result.verificationID {
             verifying?.wrappedUp = true

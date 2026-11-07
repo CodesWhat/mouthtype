@@ -163,6 +163,10 @@ private final class VerifyGate {
     var closed = false
     /// Holds the unconfirmed-send delay, apart from the read-back's sleeps.
     var delayClosed = false
+    /// Parks the next read-back sleep only, then opens. The receipt settle (0.2s) is also one of the read-back's gaps,
+    /// so a gate that stays closed would stall a delivery waiting on the previous paste as well.
+    var parksOneSleep = false
+    var parkedCount: Int { waiters.count }
     private var waiters: [CheckedContinuation<Void, Never>] = []
     private var delayWaiters: [CheckedContinuation<Void, Never>] = []
     private static let delays: Set<TimeInterval> = {
@@ -182,6 +186,7 @@ private final class VerifyGate {
             return
         }
         guard closed, Self.delays.contains(delay) else { return }
+        if parksOneSleep { closed = false; parksOneSleep = false }
         await withCheckedContinuation { waiters.append($0) }
     }
 
@@ -257,7 +262,7 @@ private struct Rig {
 
     init(
         restrictedToPID: pid_t? = nil, chunks: Bool = false, sendsReturn: @escaping @MainActor (String) -> Bool = { _ in false }, gated: Bool = false,
-        observeBoundary: @escaping @MainActor (PasteBoundaryDiagnostic) -> Void = { _ in }
+        observeBoundary: @escaping @MainActor (PasteBoundaryDiagnostic) -> Void = { _ in }, advancesSleepClock: Bool = false
     ) {
         let pauses = pauses
         let gate = gate
@@ -274,6 +279,7 @@ private struct Rig {
             sleep: { delay in
                 await gate.pass(delay)
                 if chunks { await pauses.pause(delay) }
+                if advancesSleepClock { await clock.advance(delay) }
             }, now: { clock.instant }, inputGeneration: { input.value },
             restrictedToPID: restrictedToPID, chunkedPaste: { _ in chunks }, sendsReturn: sendsReturn, observeBoundary: observeBoundary)
     }
@@ -727,6 +733,7 @@ private struct Rig {
         let rig = Rig(chunks: true)
         defer { rig.pauses.observe = nil; rig.inserter.cancelVerification() }
         rig.focus.current.element = element(100)
+        rig.focus.current.role = "AXTextArea"
         _ = await rig.inserter.deliver("first", startFocus: nil)
         var changed = false
         rig.pauses.observe = { delay in
@@ -739,6 +746,48 @@ private struct Rig {
         let second = await rig.inserter.deliver("second", startFocus: nil)
         #expect(changed && second.method == .paste && !second.finalText.isEmpty)
         #expect(rig.poster.posts == 2)
+    }
+
+    @Test func secureInputTurningOnMidDeliveryDiscardsAnUnconfirmedElement() async {
+        let rig = Rig(chunks: true)
+        defer { rig.pauses.observe = nil; rig.inserter.cancelVerification() }
+        rig.focus.current.element = element(100)
+        rig.focus.current.role = "AXGroup"
+        let first = await rig.inserter.deliver("first", startFocus: nil)
+        #expect(first.method == .paste && !first.secureInputBlocked)
+        var changed = false
+        rig.pauses.observe = { delay in
+            if delay == 0.02, !changed {
+                changed = true
+                rig.focus.isSecureInputEnabled = true
+                rig.pasteboard.read()
+            }
+        }
+        let second = await rig.inserter.deliver("second", startFocus: nil)
+        #expect(changed)
+        #expect(second.method == .none && second.outcome == .secureDiscard && second.finalText.isEmpty)
+        #expect(second.secureInputBlocked)
+        #expect(rig.poster.posts == 1 && rig.pasteboard.writes.count == 1)
+        #expect(DeliveryCard.forDelivery(second, transcript: "second")?.header.contains("Secure Input is on") == true)
+    }
+
+    @Test func aRealSecureFieldKeepsTheSecureFieldCard() async {
+        let rig = Rig()
+        rig.focus.current = FocusSnapshot(pid: 100, role: "AXTextField", isSecure: true, element: element(100))
+        let result = await rig.inserter.deliver("x", startFocus: nil)
+        #expect(result.outcome == .secureDiscard && !result.secureInputBlocked)
+        #expect(DeliveryCard.forDelivery(result, transcript: "x") == .secure("x"))
+    }
+
+    @Test func secureInputWithAnUnconfirmedRoleShowsTheSecureInputCard() async {
+        let rig = Rig()
+        rig.focus.isSecureInputEnabled = true
+        rig.focus.current = FocusSnapshot(pid: 100, role: "AXWebArea", element: element(100))
+        let result = await rig.inserter.deliver("x", startFocus: nil)
+        let card = DeliveryCard.forDelivery(result, transcript: "x")
+        #expect(result.secureInputBlocked)
+        #expect(card == .secureInput("x"))
+        #expect(card?.actions == [.copy])
     }
 
     @Test(arguments: [false, true]) func preflightRecheckPrecedesMissingPasteKeyFallback(secureDestination: Bool) async {
@@ -930,6 +979,66 @@ private struct Rig {
         let result = await rig.inserter.deliver(String(repeating: "word ", count: 600), startFocus: nil)
         #expect(result.outcome == .unknown)
         #expect(postsAtSecondSettle == 1)
+    }
+
+    @Test func aLongPasteOverAPromiseOnlyClipboardAdvancesAndLeavesTheLastPart() async {
+        let rig = Rig(chunks: true)
+        rig.pasteboard.contents = PasteboardSnapshot(items: [], droppedFilePromise: true)
+        rig.poster.onPost = { Task { @MainActor in rig.pasteboard.read() } }
+        let passage = String(repeating: "word ", count: 600)
+        let result = await rig.inserter.deliver(passage, startFocus: nil)
+        #expect(result.method == .paste && result.outcome == .unknown)
+        #expect(result.transcriptStaysOnClipboard)
+        #expect(rig.poster.posts > 1)
+        #expect(rig.pasteboard.writes.map(\.text).joined() == passage)
+        #expect(rig.pasteboard.snapshots == 1)
+        #expect(!rig.inserter.isRestorePending)
+        rig.pending.runAll()
+        #expect(rig.pasteboard.publishedText == rig.pasteboard.writes.last?.text)
+        #expect(rig.pasteboard.contents.droppedFilePromise == false)
+    }
+
+    @Test func aPasteOverAPromiseOnlyClipboardLeavesTheTranscriptAndFreesTheNextPaste() async {
+        let rig = Rig(chunks: true)
+        rig.pasteboard.contents = PasteboardSnapshot(items: [], droppedFilePromise: true)
+        let first = await rig.inserter.deliver("first", startFocus: nil)
+        #expect(first.method == .paste && first.transcriptStaysOnClipboard)
+        #expect(!rig.inserter.isRestorePending)
+        rig.pasteboard.read()
+        await hop()
+        rig.pending.run(PasteboardSession.receiptSettle)
+        #expect(rig.pasteboard.publishedText == "first")
+        let second = await rig.inserter.deliver("second", startFocus: nil)
+        #expect(second.method == .paste && rig.poster.posts == 2)
+        // What was left to stay is the clipboard now, and comes back after the next paste.
+        #expect(rig.inserter.isRestorePending && !second.transcriptStaysOnClipboard)
+        rig.pasteboard.read()
+        await hop()
+        rig.pending.run(PasteboardSession.receiptSettle)
+        #expect(rig.pasteboard.publishedText == "first")
+    }
+
+    @Test func anUnreadPasteOverAPromiseOnlyClipboardStillHoldsOffTheNextPaste() async {
+        let rig = Rig(chunks: true)
+        defer { rig.pauses.observe = nil; rig.inserter.cancelVerification() }
+        rig.pasteboard.contents = PasteboardSnapshot(items: [], droppedFilePromise: true)
+        _ = await rig.inserter.deliver("first", startFocus: nil)
+        var polls = 0
+        rig.pauses.observe = { delay in
+            if delay == 0.02 { polls += 1 }
+        }
+        let second = await rig.inserter.deliver("second", startFocus: nil)
+        #expect(second.method == .none && second.finalText == "second")
+        #expect(rig.poster.posts == 1 && rig.pasteboard.writes.count == 1)
+        #expect(rig.pasteboard.publishedText == "first")
+        #expect(polls > 0 && polls <= 400)
+    }
+
+    @Test func aPlainPasteDoesNotSayTheTranscriptStays() async {
+        let rig = Rig()
+        rig.pasteboard.contents = PasteboardSnapshot(items: [[text("mine")]])
+        let result = await rig.inserter.deliver("hello", startFocus: nil)
+        #expect(result.method == .paste && !result.transcriptStaysOnClipboard)
     }
 
     @Test func aNewPasteBorrowsTheUsersLatestCopyInsteadOfAnOlderPendingSnapshot() async {
@@ -1159,11 +1268,52 @@ private struct Rig {
     @Test func secureInputWithAReadableNormalFieldPastes() async {
         let rig = Rig()
         rig.focus.isSecureInputEnabled = true
-        rig.focus.current = FocusSnapshot(pid: 100, element: element(100))
+        rig.focus.current = FocusSnapshot(pid: 100, role: "AXTextArea", element: element(100))
         let result = await rig.inserter.deliver("x", startFocus: nil)
         #expect(result.method == .paste)
         #expect(result.outcome == .unknown)
         #expect(rig.poster.posts == 1)
+    }
+
+    @Test func secureInputWithAnUnconfirmedRoleDiscards() async {
+        let rig = Rig()
+        rig.pasteboard.contents = original
+        rig.focus.isSecureInputEnabled = true
+        rig.focus.current = FocusSnapshot(pid: 100, element: element(100))
+        let result = await rig.inserter.deliver("x", startFocus: nil)
+        #expect(result.outcome == .secureDiscard)
+        #expect(rig.pasteboard.writes.isEmpty)
+        #expect(rig.poster.posts == 0)
+    }
+
+    @Test func deliveryDecisionUnderSecureInputNeedsAConfirmedField() {
+        let e = element(100)
+        func decide(_ snapshot: FocusSnapshot, secureInput: Bool = true) -> DeliveryDecision {
+            DeliveryDecision.decide(now: snapshot, secureInput: secureInput)
+        }
+        for role in ["AXGroup", "AXWebArea", "AXWindow", "AXScrollArea"] {
+            #expect(decide(FocusSnapshot(pid: 1, role: role, element: e)) == .discardSecure, "\(role)")
+        }
+        #expect(decide(FocusSnapshot(pid: 1, role: nil, element: e)) == .discardSecure)
+        #expect(decide(FocusSnapshot(pid: 1, role: "AXTextField", readsFailed: true, element: e)) == .discardSecure)
+        #expect(decide(FocusSnapshot(pid: 1, role: "AXTextField", subrole: "AXSecureTextField", element: e)) == .discardSecure)
+        #expect(decide(FocusSnapshot(pid: 1, role: "AXStaticText", element: e)) == .discardSecure)
+        #expect(decide(FocusSnapshot(pid: 1, role: "AXStaticText", isTextSettable: false, element: e)) == .discardSecure)
+        #expect(decide(FocusSnapshot(pid: 1, role: "AXStaticText", isTextSettable: true, element: e)) == .paste)
+        for role in ["AXTextField", "AXTextArea", "AXComboBox"] {
+            #expect(decide(FocusSnapshot(pid: 1, role: role, element: e)) == .paste, "\(role)")
+        }
+        #expect(decide(FocusSnapshot(pid: 1, role: "AXTextArea", subrole: "AXStandardWindow", element: e)) == .paste)
+    }
+
+    @Test func deliveryDecisionIsUnchangedWithSecureInputOff() {
+        let e = element(100)
+        for role in [nil, "AXGroup", "AXWebArea", "AXTextArea"] {
+            #expect(DeliveryDecision.decide(now: FocusSnapshot(pid: 1, role: role, element: e), secureInput: false) == .paste)
+        }
+        #expect(DeliveryDecision.decide(now: FocusSnapshot(pid: 1, role: "AXGroup", readsFailed: true, element: e), secureInput: false) == .paste)
+        #expect(DeliveryDecision.decide(now: FocusSnapshot(pid: 1, role: "AXTextField", isSecure: true, element: e), secureInput: false) == .discardSecure)
+        #expect(DeliveryDecision.decide(now: FocusSnapshot(), secureInput: false) == .clipboardOnly)
     }
 
     @Test func aSecureFieldAtStartButANormalOneAtDeliveryPastes() async {
@@ -1853,12 +2003,13 @@ private struct Rig {
 
     private static let before = FieldReading(value: "Hello", length: 5, selection: NSRange(location: 5, length: 0))
 
-    private func verified(_ rig: Rig, readings: [FieldReading], text: String = "world") async -> [PasteVerification] {
+    private func verified(_ rig: Rig, readings: [FieldReading], text: String = "world", armReturn: Bool = false) async -> [PasteVerification] {
         rig.focus.current = FocusSnapshot(pid: 100, bundleID: "com.example.app", role: "AXTextArea", element: element(100))
         rig.focus.readings = readings
         var seen: [PasteVerification] = []
         rig.inserter.observeVerification { seen.append($0) }
-        _ = await rig.inserter.deliver(text, startFocus: nil)
+        let result = await rig.inserter.deliver(text, startFocus: nil)
+        if armReturn { rig.inserter.armReturn(after: result) }
         await rig.inserter.waitForVerification()
         return seen
     }
@@ -1881,7 +2032,7 @@ private struct Rig {
         let seen = await verified(rig, readings: [Self.before])
         #expect(seen.map(\.verdict) == [.notLanded])
         #expect(seen.first?.id == 1)
-        #expect(rig.focus.reads == 4)
+        #expect(rig.focus.reads == 5)
         #expect(rig.poster.posts == 1)
     }
 
@@ -1937,6 +2088,56 @@ private struct Rig {
         #expect(seen.map(\.verdict) == [.confirmed])
     }
 
+    @Test(arguments: [0.1, 0.4]) func readBackOffsetsIncludeAccessibilityReadTime(readDuration: TimeInterval) async {
+        let rig = Rig(advancesSleepClock: true)
+        var postedAt: ContinuousClock.Instant?
+        var readTimes: [TimeInterval] = []
+        rig.poster.onPost = { postedAt = rig.clock.instant }
+        rig.focus.afterFieldRead = {
+            guard let postedAt else { return }
+            let elapsed = postedAt.duration(to: rig.clock.instant).components
+            readTimes.append(Double(elapsed.seconds) + Double(elapsed.attoseconds) / 1e18)
+            rig.clock.advance(readDuration)
+        }
+        let seen = await verified(rig, readings: [Self.before])
+        let expected = readDuration == 0.1 ? [0.15, 0.35, 0.65, 1.0] : [0.15, 0.65, 1.05]
+        #expect(seen.map(\.verdict) == [readDuration == 0.1 ? .notLanded : .unknown])
+        #expect(readTimes.count == expected.count)
+        for (actual, wanted) in zip(readTimes, expected) {
+            #expect(abs(actual - wanted) < 0.000_001)
+        }
+    }
+
+    @Test func aStalledReadBackDoesNotCountMissedChecksAsNotLanded() async {
+        let rig = Rig(gated: true)
+        defer { rig.gate.open(); rig.inserter.cancelVerification() }
+        rig.focus.current = FocusSnapshot(pid: 100, bundleID: "com.example.app", role: "AXTextArea", element: element(100))
+        rig.focus.readings = [Self.before]
+        var seen: [PasteVerification] = []
+        rig.inserter.observeVerification { seen.append($0) }
+        _ = await rig.inserter.deliver("world", startFocus: nil)
+        await hop { rig.gate.parkedCount == 1 }
+        rig.clock.advance(1.1)
+        rig.gate.open()
+        await rig.inserter.waitForVerification()
+        #expect(seen.map(\.verdict) == [.unknown])
+    }
+
+    @Test func aLateFinalReadCannotProveNotLanded() async {
+        let rig = Rig(advancesSleepClock: true)
+        var posted = false
+        var reads = 0
+        rig.poster.onPost = { posted = true }
+        rig.focus.afterFieldRead = {
+            guard posted else { return }
+            reads += 1
+            if reads == 3 { rig.clock.advance(0.5) }
+        }
+        let seen = await verified(rig, readings: [Self.before])
+        #expect(reads == 4)
+        #expect(seen.map(\.verdict) == [.unknown])
+    }
+
     @Test func inputInBetweenIsUnknown() async {
         let rig = Rig()
         rig.focus.current = FocusSnapshot(pid: 100, element: element(100))
@@ -1947,6 +2148,15 @@ private struct Rig {
         rig.input.value = 3
         await rig.inserter.waitForVerification()
         #expect(seen.map(\.verdict) == [.unknown])
+    }
+
+    @Test func anExpandedSelectionInAnUnreadableFieldDoesNotSendReturn() async {
+        let rig = Rig(sendsReturn: { _ in true })
+        let before = FieldReading(value: nil, length: 5, selection: NSRange(location: 5, length: 0))
+        let selected = FieldReading(value: nil, length: 11, selection: NSRange(location: 5, length: 6))
+        let seen = await verified(rig, readings: [before, selected], armReturn: true)
+        #expect(seen.map(\.verdict) == [.unknown])
+        #expect(rig.poster.returns.isEmpty)
     }
 
     @Test func anUnknownInputCountIsUnknown() async {
@@ -1999,10 +2209,116 @@ private struct Rig {
         #expect(rig.focus.reads == 0)
     }
 
+    @Test func anEarlySyncReadDoesNotReturnTheClipboardBeforeTheFieldShowsThePaste() async {
+        let rig = Rig(gated: true)
+        defer { rig.gate.open(); rig.inserter.cancelVerification() }
+        rig.pasteboard.contents = original
+        rig.focus.current = FocusSnapshot(pid: 100, bundleID: "com.example.app", role: "AXTextArea", element: element(100))
+        let grown = FieldReading(value: "Hello world", length: 11, selection: NSRange(location: 11, length: 0))
+        rig.focus.readings = [Self.before, Self.before, grown]
+        rig.inserter.observeVerification { _ in }
+        _ = await rig.inserter.deliver("world", startFocus: nil)
+        #expect(rig.pending.delays == [PasteboardSession.receiptCap, PasteboardSession.fieldHoldCap])
+        // A clipboard sync reads the promise at once; its settle comes due while the field still reads as before.
+        rig.pasteboard.read()
+        await hop { rig.pending.delays.contains(PasteboardSession.receiptSettle) }
+        rig.pending.run(PasteboardSession.receiptSettle)
+        #expect(rig.pasteboard.contents != original)
+        #expect(rig.inserter.isRestorePending)
+        // The slow target reads, pastes, and the read-back sees the text: the clipboard goes back at once.
+        rig.pasteboard.read()
+        rig.gate.open()
+        await rig.inserter.waitForVerification()
+        // That read means the target is still taking the text; the clipboard goes back on its settle.
+        #expect(rig.pasteboard.contents != original)
+        await hop { rig.pending.delays.filter { $0 == PasteboardSession.receiptSettle }.count >= 2 }
+        rig.pending.run(PasteboardSession.receiptSettle)
+        #expect(rig.pasteboard.contents == original)
+        #expect(!rig.inserter.isRestorePending)
+    }
+
+    @Test func aNextPasteKeepsWaitingWhileTheFieldHoldIsOn() async {
+        let rig = Rig(chunks: true, gated: true)
+        defer { rig.gate.open(); rig.pauses.observe = nil; rig.inserter.cancelVerification() }
+        rig.pasteboard.contents = original
+        rig.focus.current = FocusSnapshot(pid: 100, bundleID: "com.example.app", role: "AXTextArea", element: element(100))
+        rig.focus.readings = [Self.before]
+        rig.inserter.observeVerification { _ in }
+        _ = await rig.inserter.deliver("first", startFocus: nil)
+        rig.pasteboard.read()
+        await hop { rig.pending.delays.contains(PasteboardSession.receiptSettle) }
+        var holdPolls = 0
+        rig.pauses.observe = { delay in
+            guard delay == 0.02 else { return }
+            holdPolls += 1
+            // The receipts have settled, but the field hasn't shown the text: the first paste is still the lease.
+            if holdPolls < 4 { #expect(rig.poster.posts == 1) }
+            if holdPolls == 4 { rig.pending.run(PasteboardSession.fieldHoldCap) }
+        }
+        _ = await rig.inserter.deliver("second", startFocus: nil)
+        #expect(holdPolls >= 4)
+    }
+
+    @Test func aHoldConfirmedRestoreWithNoReceiptsStillSettlesTheNextPaste() async {
+        let rig = Rig(chunks: true, gated: true)
+        defer { rig.gate.open(); rig.pauses.observe = nil; rig.inserter.cancelVerification() }
+        rig.pasteboard.contents = original
+        rig.focus.current = FocusSnapshot(pid: 100, bundleID: "com.example.app", role: "AXTextArea", element: element(100))
+        let grown = FieldReading(value: "Hello world", length: 11, selection: NSRange(location: 11, length: 0))
+        rig.focus.readings = [Self.before, Self.before, grown]
+        rig.inserter.observeVerification { _ in }
+        _ = await rig.inserter.deliver("world", startFocus: nil)
+        var polls = 0
+        rig.pauses.observe = { delay in
+            guard delay == 0.02 else { return }
+            polls += 1
+            if rig.pending.delays.contains(PasteboardSession.receiptSettle) {
+                rig.pending.run(PasteboardSession.receiptSettle)
+            } else if polls == 3 {
+                rig.gate.openVerification()
+            }
+        }
+        let second = await rig.inserter.deliver("again", startFocus: nil)
+        #expect(second.method == .paste)
+        #expect(rig.poster.posts == 2)
+    }
+
+    @Test func anUnreadableFieldKeepsTheReceiptOnlyRestore() async {
+        let rig = Rig()
+        rig.pasteboard.contents = original
+        rig.focus.current = FocusSnapshot(pid: 100, bundleID: "com.example.app", role: "AXTextArea", element: element(100))
+        rig.focus.readings = []
+        rig.inserter.observeVerification { _ in }
+        _ = await rig.inserter.deliver("world", startFocus: nil)
+        #expect(rig.pending.delays == [PasteboardSession.receiptCap])
+        rig.pasteboard.read()
+        await hop { rig.pending.delays.contains(PasteboardSession.receiptSettle) }
+        rig.pending.run(PasteboardSession.receiptSettle)
+        #expect(rig.pasteboard.contents == original)
+    }
+
+    @Test func terminationDuringAFieldHoldRestoresOffTheReceiptAlone() async {
+        let rig = Rig()
+        defer { rig.inserter.cancelVerification() }
+        rig.pasteboard.contents = original
+        rig.focus.current = FocusSnapshot(pid: 100, bundleID: "com.example.app", role: "AXTextArea", element: element(100))
+        rig.focus.readings = [Self.before]
+        rig.inserter.observeVerification { _ in }
+        _ = await rig.inserter.deliver("world", startFocus: nil)
+        #expect(rig.pending.delays.contains(PasteboardSession.fieldHoldCap))
+        rig.pasteboard.read()
+        await hop { rig.pending.delays.contains(PasteboardSession.receiptSettle) }
+        await rig.inserter.prepareForTermination()
+        #expect(rig.pasteboard.contents == original)
+        #expect(!rig.inserter.isRestorePending)
+    }
+
     @Test func theReceiptTimeRidesAlongWithTheVerdict() async {
         let rig = Rig()
         rig.focus.current = FocusSnapshot(pid: 100, element: element(100))
-        rig.focus.readings = [Self.before]
+        rig.focus.readings = [
+            Self.before, FieldReading(value: "Hello world", length: 11, selection: NSRange(location: 11, length: 0)),
+        ]
         var seen: [PasteVerification] = []
         rig.inserter.observeVerification { seen.append($0) }
         _ = await rig.inserter.deliver("world", startFocus: nil)
@@ -2019,9 +2335,16 @@ private struct Rig {
         rig.focus.readings = [Self.before]
         var seen: [PasteVerification] = []
         rig.inserter.observeVerification { seen.append($0) }
+        // The older read-back is parked at its first sleep. Delivery waits on the previous paste's field hold, which a
+        // read-back left running would lift and report from, so without the park the order depends on the scheduler.
+        rig.gate.closed = true
+        rig.gate.parksOneSleep = true
         let first = await rig.inserter.deliver("one", startFocus: nil)
+        await hop(until: { rig.gate.parkedCount == 1 })
+        #expect(rig.gate.parkedCount == 1)
         rig.pasteboard.read()
         let second = await rig.inserter.deliver("two", startFocus: nil)
+        rig.gate.open()
         await rig.inserter.waitForVerification()
         #expect(seen.map(\.id) == [second.verificationID])
         #expect(first.verificationID != second.verificationID)
@@ -2326,6 +2649,34 @@ private struct Rig {
         #expect(rig.poster.returns == [100])
     }
 
+    @Test func aFieldThatRewritesWhitespaceStillGetsItsReturn() async {
+        let stripped = FieldReading(value: "Hellofirst linesecond line", length: 26, selection: NSRange(location: 26, length: 0))
+        let rig = rig(readings: [Self.before, stripped])
+        _ = await deliverAndArm(rig, "first line\nsecond line")
+        await finish(rig)
+        #expect(rig.poster.returns == [100])
+    }
+
+    @Test func aFieldThatShowsThePreviousClipboardInsteadGetsNoReturn() async {
+        let wrong = FieldReading(value: "Hellohunter2", length: 12, selection: NSRange(location: 12, length: 0))
+        let rig = rig(readings: [Self.before, wrong])
+        var seen: [PasteVerification] = []
+        rig.inserter.observeVerification { seen.append($0) }
+        _ = await deliverAndArm(rig)
+        await finish(rig)
+        #expect(seen.map(\.verdict) == [.unknown])
+        #expect(rig.poster.returns.isEmpty)
+    }
+
+    @Test func pastingOverTheSameSelectedTextStillGetsItsReturn() async {
+        let selected = FieldReading(value: "Hello world", length: 11, selection: NSRange(location: 6, length: 5))
+        let replaced = FieldReading(value: "Hello world", length: 11, selection: NSRange(location: 11, length: 0))
+        let rig = rig(readings: [selected, replaced])
+        _ = await deliverAndArm(rig)
+        await finish(rig)
+        #expect(rig.poster.returns == [100])
+    }
+
     @Test func aNotLandedVerdictSendsNothing() async {
         let rig = rig(readings: [Self.before])
         var seen: [PasteVerification] = []
@@ -2518,8 +2869,10 @@ private struct Rig {
     }
 
     @Test func aLongMultiPartPasteSendsOneReturnOnlyAfterTheFinalPartLands() async {
-        let rig = rig(chunks: true)
         let passage = String(repeating: "word ", count: 600)
+        let landed = FieldReading(
+            value: "Hello" + passage, length: 5 + passage.count, selection: NSRange(location: 5 + passage.count, length: 0))
+        let rig = rig(chunks: true, readings: [Self.before, landed])
         let result = await rig.inserter.deliver(passage, startFocus: nil)
         rig.inserter.armReturn(after: result)
         #expect(result.method == .paste && result.outcome == .unknown)

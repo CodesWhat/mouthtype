@@ -16,6 +16,10 @@ import MouthtypeCore
     var dictionaryError: String?
     var phrasesError: String?
     var historyError: String?
+    /// Set when history couldn't be opened at launch. History stays off for the session.
+    var historyOpenFailure: String?
+    /// Set when a damaged history file was set aside at launch and a new one started.
+    var historyNotice: String?
 
     func refreshModels(speech: String, failed: Bool, cleaner: any CleanupModelManaging, level: CleanupLevel) {
         engineStatus = speech
@@ -42,7 +46,9 @@ import MouthtypeCore
         if cleanupNeedsAttention { return "Cleanup model needs attention…" }
         if dictionaryError != nil { return "Saved spellings need attention…" }
         if phrasesError != nil { return "Phrase replacements need attention…" }
+        if historyOpenFailure != nil { return "History couldn't be opened…" }
         if historyError != nil { return "Recent takes unavailable…" }
+        if historyNotice != nil { return "History was reset after damage…" }
         return nil
     }
 

@@ -65,7 +65,9 @@ struct SettingsDiagnosticsView: View {
                     }
                 }
             }
-            if state.dictionaryError != nil || state.phrasesError != nil || state.historyError != nil {
+            if state.dictionaryError != nil || state.phrasesError != nil || state.historyError != nil
+                || state.historyOpenFailure != nil || state.historyNotice != nil
+            {
                 DesignSection(eyebrow: "LOCAL LIBRARIES") {
                     if let error = state.dictionaryError {
                         row("Saved spellings", error) { Button("Edit dictionary…", action: actions.editDictionary).buttonStyle(.designSecondary).fixedSize() }
@@ -73,7 +75,11 @@ struct SettingsDiagnosticsView: View {
                     if let error = state.phrasesError {
                         row("Phrase replacements", error) { Button("Edit phrases file…", action: actions.editPhrasesFile).buttonStyle(.designSecondary).fixedSize() }
                     }
-                    if let error = state.historyError { ModalCardNote(text: "Recent takes: " + error) }
+                    if let failure = state.historyOpenFailure {
+                        ModalCardNote(text: failure + ". Dictation still works, but takes aren't saved this session.")
+                    }
+                    if let notice = state.historyNotice { ModalCardNote(text: notice) }
+                    if let error = state.historyError, state.historyOpenFailure == nil { ModalCardNote(text: "Recent takes: " + error) }
                 }
             }
             DesignSection(eyebrow: "STATUS") {
