@@ -224,7 +224,10 @@ High-level themes only, with no dates. [`CHANGELOG.md`](CHANGELOG.md) has per-re
 | **0.7.0** ✅ | Beta languages and fixes | Japanese, Hindi and Tamil dictation in Beta through a separate 1.6 GB Whisper model, selected-text cleanup tone precedence, dictionary and cleanup fixes, a website typing speed test with a countdown |
 | **0.8.0** ✅ | Press Return after inserting | An opt-in list of apps where Mouthtype presses Return after a confirmed paste, and a Formal cleanup fix that keeps a real verb |
 | **0.9.0** ✅ | Press Return in terminals | Press Return after inserting now works in terminals you add and in Electron apps like the Claude desktop app |
-| **Planned** | Next | Linux desktop client acceptance and a supported release, a Ring pill style |
+| **0.10.x** ✅ | History search and playback | Search retained transcripts and app names, and play retained audio from Home |
+| **0.11.x** ✅ | Voice editing and typing calibration | Edit selected text by voice with a review preview, and measure your typing speed in Stats |
+| **0.12.x** ✅ | Achievements and support | A shelf of 27 trophies, optional achievement toasts and support links; Linux packaging remains experimental source |
+| **Planned** | Next | Linux desktop client acceptance and a supported release |
 
 **Still open:** fresh-install, VoiceOver, and Bluetooth and USB microphone verification, and wider app-compatibility testing. See [known limits](https://docs.mouthtype.app/reference/known-limits/).
 

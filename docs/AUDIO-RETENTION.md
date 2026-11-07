@@ -20,7 +20,7 @@ Changes apply to existing completed recordings the next time Mouthtype launches.
 2. Removes expired completed WAVs.
 3. Removes the oldest remaining completed WAVs until they fit the selected size limit.
 
-New archive metadata records the selected expiration date, or no expiration date when there is no age limit. When startup maintenance removes a completed recording, its audio location and expiration are cleared from its database row; its text and statistics remain.
+New archive metadata records the selected expiration date, or no expiration date when there is no age limit. When startup maintenance removes a completed recording, its audio location and expiration are cleared from its database row; its text and statistics remain. If the saved location still points to an existing recording outside the current archive, cleanup keeps that location and expiration, including when it deletes an old archive copy with the same take ID.
 
 ## Recovery audio and unmatched files
 
