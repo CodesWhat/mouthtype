@@ -18,6 +18,7 @@ The app’s Resources folder contains these notes and its license. Corresponding
 
 ## What changed in 0.12.1
 
+- Fixed: cleanup keeps the path and expiry of a recording that still exists outside the current archive, including when an old archive copy is removed.
 - Fixed: with Secure Input on, Mouthtype could paste into a password field in some apps (web and Electron apps, or a slow native password field). It now only pastes when it can confirm a normal text field, and otherwise keeps your text on the card with a note.
 - Fixed: damaged search indexes are rebuilt from saved history. If the database still can't be opened, Mouthtype says so in the menu and Diagnostics. A damaged database is set aside with its recordings and a fresh one starts. Nothing is deleted.
 - Fixed: a second copy defers to the running app before opening history or changing audio and Fn state.

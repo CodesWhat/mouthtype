@@ -6,7 +6,7 @@ Damaged history search indexes are rebuilt from saved history. If the database s
 
 Clipboard handling gives slow apps time to take the transcript and restores supported rich and multi-item clipboard data. If the previous clipboard contains only a file promise that can't be restored, the transcript stays on the clipboard with a warning. Missed field checks no longer report a paste failure, and an expanded selection in an unreadable field can't confirm a paste or trigger Return.
 
-Deleting a take now removes its audio too. Failed and interrupted recordings age out with your retention setting after a 30-day grace period, and saved recordings stay listed after an account rename.
+Deleting a take now removes its audio too. Failed and interrupted recordings age out with your retention setting after a 30-day grace period, and saved recordings stay listed after an account rename. Cleanup also keeps saved recordings visible when their file still exists outside the current archive, including when it removes an old duplicate from the archive.
 
 Counted lists no longer leave a stray "and" or "then" at the end of an item.
 
