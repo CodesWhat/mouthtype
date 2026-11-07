@@ -313,7 +313,7 @@ For fixes to common problems and the full list of what this release doesn't cove
 
 - Names and context-dependent recognition can be wrong. A real example was testing recognized as dusting across takes. Check text before sending. Mouthtype does not read previous chat messages to resolve it.
 - Broader browser/terminal/Electron behavior, clipboard restoration, microphone removal, silence, stop-cue counts and explicit Undo need more live coverage. The false-failure warning behavior is not fully verified.
-- Long terminal paste splitting is off by default. Splitting adds no Return between parts. If the app is on the Press Return after inserting list, one Return can follow the whole paste once it is confirmed.
+- Long terminal paste splitting is off by default. Splitting adds no Return between parts. If the app is on the Press Return after inserting list, one Return can follow the whole paste. Listed terminals can send after a short delay without confirming the paste; other apps require confirmation.
 - Setup’s microphone status can lag a recovered input until you return to the app and refresh it. Device transitions still need live coverage.
 - First installation and model downloads on another Mac need confirmation. Existing developer-machine grants and caches do not verify that path.
 - Linux has an experimental source-only daemon/CLI candidate. The full flow has run on one Arch/Omarchy desk; HiDPI, multi-monitor and other distros are untried. Container and headless component checks do not establish physical microphone or Hyprland support. See Linux source testing below.
@@ -343,7 +343,7 @@ Cleanup is off when the config has no `cleanup` key (`setup_speech.py` writes `b
 History, dictionary, settings and recordings stay on your Mac. Text history is retained indefinitely.
 
 - In **Settings > Advanced > Storage**, choose 14, 30 or 90 days, or No age limit, plus a 2 GB or 10 GB limit. Defaults stay 90 days and 2 GB.
-- Changes apply at the next launch to completed Mouthtype recordings only; unfinished recordings and recovery audio are exempt. Text and timings stay. No age limit still has a size limit.
+- Changes apply at the next launch to eligible files in the current archive. Completed recordings follow the selected age and size limits; recovery audio joins that policy after a 30-day grace period. Files without a matching database record and recordings outside the current archive are kept. Text and timings stay. No age limit still has a size limit.
 - Removed audio cannot be restored. See [saved audio](https://docs.mouthtype.app/privacy-and-data/saved-audio/).
 - The data directory is `~/Library/Application Support/Mouthtype`. Uninstalling the app does not remove it.
 
