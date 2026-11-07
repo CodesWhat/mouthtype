@@ -343,7 +343,7 @@ Cleanup is off when the config has no `cleanup` key (`setup_speech.py` writes `b
 History, dictionary, settings and recordings stay on your Mac. Text history is retained indefinitely.
 
 - In **Settings > Advanced > Storage**, choose 14, 30 or 90 days, or No age limit, plus a 2 GB or 10 GB limit. Defaults stay 90 days and 2 GB.
-- Changes apply at the next launch. Completed recordings follow the selected age and size limits; recovery audio joins that policy after a 30-day grace period. Text and timings stay. No age limit still has a size limit.
+- Changes apply at the next launch to eligible files in the current archive. Completed recordings follow the selected age and size limits; recovery audio joins that policy after a 30-day grace period. Files without a matching database record and recordings outside the current archive are kept. Text and timings stay. No age limit still has a size limit.
 - Removed audio cannot be restored. See [saved audio](https://docs.mouthtype.app/privacy-and-data/saved-audio/).
 - The data directory is `~/Library/Application Support/Mouthtype`. Uninstalling the app does not remove it.
 
