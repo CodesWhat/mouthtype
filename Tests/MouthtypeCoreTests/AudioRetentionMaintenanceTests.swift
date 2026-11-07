@@ -221,6 +221,35 @@ import Testing
         #expect(try store.dictation(id: "x")?.audioPath != nil)
     }
 
+    @Test(arguments: [false, true])
+    func pruneKeepsAnExistingRecordingOutsideTheCurrentArchive(purgesDuplicate: Bool) throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("mouthtype-retention-relocated-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let store = try TranscriptStore(url: dir.appendingPathComponent("store.sqlite"))
+        let oldArchive = AudioArchive(supportDirectory: dir.appendingPathComponent("previous-location"))
+        let archive = AudioArchive(supportDirectory: dir.appendingPathComponent("current-location"))
+        let now = Date()
+        let expires = now.addingTimeInterval(7 * 86_400)
+        try store.begin(DictationStart(id: "relocated"))
+        let audio = try oldArchive.write(samples: [0.1, 0.2], id: "relocated")
+        try store.recordCapture("relocated", CaptureRecord(audioPath: audio.url.path, audioExpiresAt: expires))
+        try store.recordInsertion("relocated", InsertionRecord(finalText: "Keep this recording."))
+        _ = try archive.write(samples: [0.1, 0.2], id: "unrelated")
+        if purgesDuplicate {
+            let duplicate = try archive.write(samples: [0.1, 0.2], id: "relocated")
+            try FileManager.default.setAttributes([.modificationDate: now.addingTimeInterval(-30 * 86_400)], ofItemAtPath: duplicate.url.path)
+        }
+
+        let removed = try AudioRetentionMaintenance.prune(archive: archive, store: store, policy: AudioRetentionPolicy(age: .days14), now: now)
+        #expect(removed == (purgesDuplicate ? ["relocated"] : []))
+        #expect(!FileManager.default.fileExists(atPath: archive.url(for: "relocated").path))
+
+        let row = try #require(try store.dictation(id: "relocated"))
+        #expect(row.audioPath == audio.url.path)
+        #expect(row.audioExpiresAt == expires.timeIntervalSince1970)
+        #expect(FileManager.default.fileExists(atPath: audio.url.path))
+    }
+
     @Test func pruneClearsPointersWhoseFileIsMissingButKeepsRelocatedOnes() throws {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("mouthtype-retention-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: dir) }
