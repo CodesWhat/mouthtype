@@ -5,7 +5,7 @@ Mouthtype keeps completed recordings for a limited time and size, and you choose
 | Setting | Choices | Default |
 | --- | --- | --- |
 | Age limit | 14 days, 30 days, 90 days, No age limit | 90 days |
-| Audio size limit | 2 GB, 10 GB | 2 GB |
+| Completed audio size limit | 2 GB, 10 GB | 2 GB |
 
 No age limit still has a size limit. A change doesn't delete recordings immediately or interrupt a recording in progress.
 
