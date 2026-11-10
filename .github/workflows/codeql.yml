@@ -41,15 +41,23 @@ jobs:
             runner: ubuntu-latest
             build-mode: none
             timeout: 30
-          # The package needs the Xcode 27 SDK, which macos-latest doesn't ship yet.
+          # Traced Swift analysis requires macOS and Xcode 26 or earlier.
           - language: swift
-            runner: xcode-27
+            runner: macos-26
             build-mode: manual
             timeout: 60
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+
+      - name: Select supported Swift toolchain
+        if: matrix.language == 'swift'
+        run: |
+          export DEVELOPER_DIR=/Applications/Xcode_26.6.app/Contents/Developer
+          echo "DEVELOPER_DIR=$DEVELOPER_DIR" >> "$GITHUB_ENV"
+          xcodebuild -version
+          swift --version
 
       # mlx-swift compiles Metal shaders, and Xcode ships the Metal toolchain as a separate component.
       - name: Metal toolchain

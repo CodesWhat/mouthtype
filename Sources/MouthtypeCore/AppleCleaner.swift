@@ -32,8 +32,13 @@ public final class AppleCleaner: MeasuredCleaner {
         #if canImport(FoundationModels)
         if #available(macOS 26.0, *) {
             let session = LanguageModelSession(instructions: CleanupPrompt.system(for: context))
+            #if compiler(>=6.4)
             let options = GenerationOptions(
                 samplingMode: .greedy, maximumResponseTokens: CleanupLimits.maxOutputTokens(for: transcript))
+            #else
+            let options = GenerationOptions(
+                sampling: .greedy, maximumResponseTokens: CleanupLimits.maxOutputTokens(for: transcript))
+            #endif
             let clock = ContinuousClock()
             let start = clock.now
             var text = ""
