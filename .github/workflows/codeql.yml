@@ -83,8 +83,8 @@ jobs:
         if: matrix.language == 'swift'
         run: |
           set -euo pipefail
-          find .build/out/Intermediates.noindex -maxdepth 4 -type d \
-            \( -name 'Mouthtype*' -o -name 'FnRemapKit*' -o -name 'mouthtype-*' \) -prune -exec rm -rf {} +
+          find .build -maxdepth 6 -type d \
+            \( -name 'Mouthtype*.build' -o -name 'FnRemapKit*.build' -o -name 'mouthtype-*.build' \) -prune -exec rm -rf {} +
           swift build --disable-sandbox
 
       - uses: github/codeql-action/analyze@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
