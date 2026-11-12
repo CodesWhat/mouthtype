@@ -72,7 +72,7 @@ jobs:
       # (including mlx-swift's shaders) untraced first. Only our own targets get rebuilt under tracing.
       - name: Prebuild dependencies
         if: matrix.language == 'swift'
-        run: swift build --disable-sandbox
+        run: swift build --triple arm64-apple-macosx26.0 --disable-sandbox
 
       - uses: github/codeql-action/init@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
         with:
@@ -83,9 +83,10 @@ jobs:
         if: matrix.language == 'swift'
         run: |
           set -euo pipefail
+          swift --version
           find .build -maxdepth 6 -type d \
             \( -name 'Mouthtype*.build' -o -name 'FnRemapKit*.build' -o -name 'mouthtype-*.build' \) -prune -exec rm -rf {} +
-          swift build --disable-sandbox
+          swift build --triple arm64-apple-macosx26.0 --disable-sandbox
 
       - uses: github/codeql-action/analyze@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
         with:
