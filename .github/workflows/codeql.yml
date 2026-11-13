@@ -46,7 +46,7 @@ jobs:
             # CodeQL runs natively on Intel, with 14 GB RAM instead of the ARM runner's 7 GB.
             runner: macos-26-intel
             build-mode: manual
-            timeout: 120
+            timeout: 180
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -82,7 +82,7 @@ jobs:
 
       - name: Build Swift package
         if: matrix.language == 'swift'
-        timeout-minutes: 75
+        timeout-minutes: 120
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/codeql-swift-diagnostics"
