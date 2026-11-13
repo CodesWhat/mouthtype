@@ -83,10 +83,62 @@ jobs:
         if: matrix.language == 'swift'
         run: |
           set -euo pipefail
-          swift --version
           find .build -maxdepth 6 -type d \
             \( -name 'Mouthtype*.build' -o -name 'FnRemapKit*.build' -o -name 'mouthtype-*.build' \) -prune -exec rm -rf {} +
-          swift build --triple arm64-apple-macosx26.0 --disable-sandbox
+          python3 -u - <<'PYTHON'
+          import os
+          import signal
+          import subprocess
+          import time
+          from pathlib import Path
+
+          destination = Path(os.environ["DIAGNOSTICS_DIR"])
+          destination.mkdir(parents=True, exist_ok=True)
+          with (destination / "build.log").open("w") as output:
+              print("Checking traced Swift toolchain", file=output, flush=True)
+              subprocess.run(["swift", "--version"], stdout=output,
+                             stderr=subprocess.STDOUT, timeout=30, check=True)
+              output.flush()
+              command = ["swift", "build", "--triple", "arm64-apple-macosx26.0",
+                         "--disable-sandbox", "--verbose"]
+              print("Starting traced package build", file=output, flush=True)
+              build = subprocess.Popen(command, stdout=output, stderr=subprocess.STDOUT,
+                                       start_new_session=True)
+              deadline = time.monotonic() + 30 * 60
+              try:
+                  while True:
+                      try:
+                          result = build.wait(timeout=min(60, max(0, deadline - time.monotonic())))
+                          break
+                      except subprocess.TimeoutExpired:
+                          with (destination / "processes.log").open("a") as processes:
+                              print(time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                                    file=processes, flush=True)
+                              subprocess.run(["ps", "-axo", "pid,ppid,pcpu,pmem,rss,etime,comm"],
+                                             stdout=processes, stderr=subprocess.STDOUT, timeout=15)
+                          print("Traced build still running; latest output:", flush=True)
+                          subprocess.run(["tail", "-n", "20", str(destination / "build.log")],
+                                         timeout=15, check=True)
+                          if time.monotonic() >= deadline:
+                              raise TimeoutError("Traced build exceeded its 30-minute diagnostic limit")
+              finally:
+                  if build.poll() is None:
+                      os.killpg(build.pid, signal.SIGKILL)
+                      build.wait(timeout=30)
+                  subprocess.run(["tail", "-n", "60", str(destination / "build.log")], timeout=15)
+              raise SystemExit(result)
+          PYTHON
+        env:
+          DIAGNOSTICS_DIR: ${{ runner.temp }}/codeql-swift-diagnostics
+
+      - name: Preserve Swift build diagnostics
+        if: always() && matrix.language == 'swift'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: codeql-swift-diagnostics
+          path: ${{ runner.temp }}/codeql-swift-diagnostics
+          retention-days: 7
+          if-no-files-found: warn
 
       - uses: github/codeql-action/analyze@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
         with:
