@@ -78,6 +78,7 @@ jobs:
         with:
           languages: ${{ matrix.language }}
           build-mode: ${{ matrix.build-mode }}
+          debug: ${{ matrix.language == 'swift' }}
 
       - name: Build Swift package
         if: matrix.language == 'swift'
@@ -95,11 +96,33 @@ jobs:
           destination = Path(os.environ["DIAGNOSTICS_DIR"])
           destination.mkdir(parents=True, exist_ok=True)
           with (destination / "build.log").open("w") as output:
-              print("Checking traced Swift toolchain", file=output, flush=True)
-              subprocess.run(["swift", "--version"], stdout=output,
-                             stderr=subprocess.STDOUT, timeout=30, check=True)
-              output.flush()
-              command = ["swift", "build", "--triple", "arm64-apple-macosx26.0",
+              compiler = str(Path(os.environ["DEVELOPER_DIR"]) /
+                             "Toolchains/XcodeDefault.xctoolchain/usr/bin/swift")
+              for label, executable in [("launcher", "swift"), ("compiler", compiler)]:
+                  print(f"Checking traced {label}: {executable}", file=output, flush=True)
+                  probe = subprocess.Popen([executable, "--version"], stdout=output,
+                                           stderr=subprocess.STDOUT, start_new_session=True)
+                  try:
+                      probe_result = probe.wait(timeout=120)
+                  except subprocess.TimeoutExpired:
+                      print(f"{label} version probe timed out", file=output, flush=True)
+                      with (destination / f"{label}-processes.log").open("w") as processes:
+                          subprocess.run(["ps", "-axo", "pid,ppid,pcpu,pmem,rss,etime,comm"],
+                                         stdout=processes, stderr=subprocess.STDOUT, timeout=15)
+                      try:
+                          subprocess.run(["sample", str(probe.pid), "1", "1", "-file",
+                                          str(destination / f"{label}-sample.txt")],
+                                         stdout=output, stderr=subprocess.STDOUT, timeout=15)
+                      except subprocess.TimeoutExpired:
+                          print("Process sampling timed out", file=output, flush=True)
+                      probe_result = 124
+                  finally:
+                      if probe.poll() is None:
+                          os.killpg(probe.pid, signal.SIGKILL)
+                          probe.wait(timeout=30)
+                  if label == "compiler" and probe_result:
+                      raise SystemExit(probe_result)
+              command = [compiler, "build", "--triple", "arm64-apple-macosx26.0",
                          "--disable-sandbox", "--verbose"]
               print("Starting traced package build", file=output, flush=True)
               build = subprocess.Popen(command, stdout=output, stderr=subprocess.STDOUT,
