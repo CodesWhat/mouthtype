@@ -78,81 +78,20 @@ jobs:
         with:
           languages: ${{ matrix.language }}
           build-mode: ${{ matrix.build-mode }}
-          debug: ${{ matrix.language == 'swift' }}
 
       - name: Build Swift package
         if: matrix.language == 'swift'
+        timeout-minutes: 40
         run: |
           set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/codeql-swift-diagnostics"
           find .build -maxdepth 6 -type d \
             \( -name 'Mouthtype*.build' -o -name 'FnRemapKit*.build' -o -name 'mouthtype-*.build' \) -prune -exec rm -rf {} +
-          python3 -u - <<'PYTHON'
-          import os
-          import signal
-          import subprocess
-          import time
-          from pathlib import Path
-
-          destination = Path(os.environ["DIAGNOSTICS_DIR"])
-          destination.mkdir(parents=True, exist_ok=True)
-          with (destination / "build.log").open("w") as output:
-              compiler = str(Path(os.environ["DEVELOPER_DIR"]) /
-                             "Toolchains/XcodeDefault.xctoolchain/usr/bin/swift")
-              for label, executable in [("launcher", "swift"), ("compiler", compiler)]:
-                  print(f"Checking traced {label}: {executable}", file=output, flush=True)
-                  probe = subprocess.Popen([executable, "--version"], stdout=output,
-                                           stderr=subprocess.STDOUT, start_new_session=True)
-                  try:
-                      probe_result = probe.wait(timeout=120)
-                  except subprocess.TimeoutExpired:
-                      print(f"{label} version probe timed out", file=output, flush=True)
-                      with (destination / f"{label}-processes.log").open("w") as processes:
-                          subprocess.run(["ps", "-axo", "pid,ppid,pcpu,pmem,rss,etime,comm"],
-                                         stdout=processes, stderr=subprocess.STDOUT, timeout=15)
-                      try:
-                          subprocess.run(["sample", str(probe.pid), "1", "1", "-file",
-                                          str(destination / f"{label}-sample.txt")],
-                                         stdout=output, stderr=subprocess.STDOUT, timeout=15)
-                      except subprocess.TimeoutExpired:
-                          print("Process sampling timed out", file=output, flush=True)
-                      probe_result = 124
-                  finally:
-                      if probe.poll() is None:
-                          os.killpg(probe.pid, signal.SIGKILL)
-                          probe.wait(timeout=30)
-                  if label == "compiler" and probe_result:
-                      raise SystemExit(probe_result)
-              command = [compiler, "build", "--triple", "arm64-apple-macosx26.0",
-                         "--disable-sandbox", "--verbose"]
-              print("Starting traced package build", file=output, flush=True)
-              build = subprocess.Popen(command, stdout=output, stderr=subprocess.STDOUT,
-                                       start_new_session=True)
-              deadline = time.monotonic() + 30 * 60
-              try:
-                  while True:
-                      try:
-                          result = build.wait(timeout=min(60, max(0, deadline - time.monotonic())))
-                          break
-                      except subprocess.TimeoutExpired:
-                          with (destination / "processes.log").open("a") as processes:
-                              print(time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-                                    file=processes, flush=True)
-                              subprocess.run(["ps", "-axo", "pid,ppid,pcpu,pmem,rss,etime,comm"],
-                                             stdout=processes, stderr=subprocess.STDOUT, timeout=15)
-                          print("Traced build still running; latest output:", flush=True)
-                          subprocess.run(["tail", "-n", "20", str(destination / "build.log")],
-                                         timeout=15, check=True)
-                          if time.monotonic() >= deadline:
-                              raise TimeoutError("Traced build exceeded its 30-minute diagnostic limit")
-              finally:
-                  if build.poll() is None:
-                      os.killpg(build.pid, signal.SIGKILL)
-                      build.wait(timeout=30)
-                  subprocess.run(["tail", "-n", "60", str(destination / "build.log")], timeout=15)
-              raise SystemExit(result)
-          PYTHON
-        env:
-          DIAGNOSTICS_DIR: ${{ runner.temp }}/codeql-swift-diagnostics
+          # The system Swift launcher stalls under tracing. Use the selected compiler directly.
+          # Keep compiler flags identical to the prebuild so dependencies stay cached.
+          "$DEVELOPER_DIR/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift" \
+            build --triple arm64-apple-macosx26.0 --disable-sandbox \
+            2>&1 | tee "$RUNNER_TEMP/codeql-swift-diagnostics/build.log"
 
       - name: Preserve Swift build diagnostics
         if: always() && matrix.language == 'swift'
