@@ -73,7 +73,80 @@ jobs:
       # Only our own targets get rebuilt under tracing.
       - name: Prebuild dependencies
         if: matrix.language == 'swift'
-        run: swift build --triple arm64-apple-macosx26.0 --disable-sandbox
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/codeql-build-context.py" <<'PYTHON'
+          import json
+          import os
+          import subprocess
+          import sys
+          import time
+          from pathlib import Path
+
+          root = Path(os.environ["RUNNER_TEMP"]) / "codeql-swift-diagnostics"
+          phase = sys.argv[1]
+          destination = root / phase
+          destination.mkdir(parents=True, exist_ok=True)
+          if phase != "monitor":
+              for index, path in enumerate(sorted(Path(".build").glob("*/debug/description.json"))):
+                  data = json.loads(path.read_text())
+                  fields = ("executable", "moduleName", "otherArguments", "sources", "objects", "inputs", "outputs")
+                  commands = {name: {key: value for key, value in command.items() if key in fields}
+                              for name, command in data.get("swiftCommands", {}).items()}
+                  (destination / f"plan-{index}.json").write_text(json.dumps(
+                      {"path": str(path), "keys": list(data), "swiftCommands": commands}, indent=2))
+              generated = sorted(Path(".build").glob("*/debug/swift-version-*.txt"))
+              generated += sorted(Path(".build").glob("*/debug/*/DerivedSources/resource_bundle_accessor.swift"))
+              paths = {}
+              for index, path in enumerate(generated):
+                  name = f"generated-{index}.txt"
+                  (destination / name).write_bytes(path.read_bytes())
+                  paths[name] = str(path)
+              (destination / "generated-paths.json").write_text(json.dumps(paths, indent=2))
+              if phase == "after":
+                  diagnostics = Path(os.environ["RUNNER_TEMP"]) / "codeql_databases/swift/diagnostic/extractors"
+                  for index, path in enumerate(sorted(diagnostics.rglob("*.jsonl"))):
+                      (destination / f"extractor-diagnostic-{index}.jsonl").write_bytes(path.read_bytes())
+              raise SystemExit(0)
+
+          if os.getpgrp() != os.getpid():
+              os.setsid()
+          deadline = time.monotonic() + 18 * 60
+          sample_after = [5 * 60, 10 * 60, 15 * 60]
+          started = time.monotonic()
+          iteration = 0
+          while time.monotonic() < deadline:
+              result = subprocess.run(["ps", "-axo", "pid,ppid,pcpu,pmem,rss,etime,comm"],
+                                      capture_output=True, text=True, timeout=15, check=True)
+              (destination / f"processes-{iteration}.txt").write_text(result.stdout)
+              with (destination / f"memory-{iteration}.txt").open("w") as output:
+                  subprocess.run(["sysctl", "hw.memsize", "hw.ncpu"], stdout=output,
+                                 stderr=subprocess.STDOUT, timeout=15, check=True)
+                  subprocess.run(["vm_stat"], stdout=output, stderr=subprocess.STDOUT,
+                                 timeout=15, check=True)
+              if sample_after and time.monotonic() - started >= sample_after[0]:
+                  sample_after.pop(0)
+                  candidates = []
+                  for line in result.stdout.splitlines():
+                      fields = line.split(None, 6)
+                      if len(fields) == 7 and any(name in fields[6] for name in
+                                                ("swift-frontend", "extractor.real", "swift-build")):
+                          candidates.append((float(fields[2]), int(fields[0])))
+                  for _, pid in sorted(candidates, reverse=True)[:2]:
+                      with (destination / f"command-{iteration}-{pid}.txt").open("w") as output:
+                          subprocess.run(["ps", "-ww", "-p", str(pid), "-o", "command="],
+                                         stdout=output, stderr=subprocess.STDOUT, timeout=15)
+                      try:
+                          subprocess.run(["sample", str(pid), "1", "1", "-file",
+                                          str(destination / f"stack-{iteration}-{pid}.txt")],
+                                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=15)
+                      except subprocess.TimeoutExpired:
+                          pass
+              iteration += 1
+              time.sleep(min(60, max(0, deadline - time.monotonic())))
+          PYTHON
+          swift build --triple arm64-apple-macosx26.0 --disable-sandbox
+          python3 "$RUNNER_TEMP/codeql-build-context.py" before
 
       - uses: github/codeql-action/init@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
         with:
@@ -82,17 +155,34 @@ jobs:
 
       - name: Build Swift package
         if: matrix.language == 'swift'
-        timeout-minutes: 40
+        timeout-minutes: 20
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/codeql-swift-diagnostics"
           find .build -maxdepth 6 -type d \
-            \( -name 'Mouthtype*.build' -o -name 'FnRemapKit*.build' -o -name 'mouthtype-*.build' \) -prune -exec rm -rf {} +
-          # The system Swift launcher stalls under tracing. Use the selected compiler directly.
-          # Keep compiler flags identical to the prebuild so dependencies stay cached.
+            \( -name 'Mouthtype*.build' -o -name 'FnRemapKit*.build' -o -name 'mouthtype-*.build' \) -prune -print -exec rm -rf {} + \
+            > "$RUNNER_TEMP/codeql-swift-diagnostics/removed-targets.txt"
+          python3 "$RUNNER_TEMP/codeql-build-context.py" clean
+          python3 "$RUNNER_TEMP/codeql-build-context.py" monitor \
+            > "$RUNNER_TEMP/codeql-swift-diagnostics/monitor.log" 2>&1 &
+          profiler_pid=$!
+          cleanup_profiler() {
+            kill -KILL -- "-$profiler_pid" 2>/dev/null || true
+            kill -KILL "$profiler_pid" 2>/dev/null || true
+            wait "$profiler_pid" 2>/dev/null || true
+          }
+          trap cleanup_profiler EXIT
+          # Use the selected compiler, keeping the same flags as the prebuild.
           "$DEVELOPER_DIR/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift" \
             build --triple arm64-apple-macosx26.0 --disable-sandbox \
             2>&1 | tee "$RUNNER_TEMP/codeql-swift-diagnostics/build.log"
+
+      - name: Record traced build plan
+        if: always() && matrix.language == 'swift'
+        run: |
+          if [[ -f "$RUNNER_TEMP/codeql-build-context.py" ]]; then
+            python3 "$RUNNER_TEMP/codeql-build-context.py" after
+          fi
 
       - name: Preserve Swift build diagnostics
         if: always() && matrix.language == 'swift'
