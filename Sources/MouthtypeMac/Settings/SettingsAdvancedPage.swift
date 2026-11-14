@@ -7,18 +7,18 @@ extension SettingsView {
         DesignSection(eyebrow: "RECOGNITION") {
             ModalToggleRow(
                 title: "Boost saved words", detail: boostDetail,
-                isOn: Binding(get: { model.boostSavedWords }, set: model.setBoostSavedWords), identifier: "settings-boost-saved-words")
+                isOn: Binding(get: { model.boostSavedWords }, set: { model.setBoostSavedWords($0) }), identifier: "settings-boost-saved-words")
             ModalToggleRow(
                 title: "Learn from my corrections", detail: "When you fix a take by hand, Mouthtype remembers the fix.",
-                isOn: Binding(get: { model.learnCorrections }, set: model.setLearnCorrections), identifier: "settings-learn-corrections")
+                isOn: Binding(get: { model.learnCorrections }, set: { model.setLearnCorrections($0) }), identifier: "settings-learn-corrections")
             ModalToggleRow(
                 title: "Code names from your editor",
                 detail: "Favours file and function names in your editor. Needs the boost above.",
-                isOn: Binding(get: { model.editorHints }, set: model.setEditorHints), identifier: "settings-editor-hints")
+                isOn: Binding(get: { model.editorHints }, set: { model.setEditorHints($0) }), identifier: "settings-editor-hints")
             ModalToggleRow(
                 title: "Names on screen",
                 detail: "Favours names on screen, in any app. Needs the boost above.",
-                isOn: Binding(get: { model.contextNames }, set: model.setContextNames), identifier: "settings-context-names")
+                isOn: Binding(get: { model.contextNames }, set: { model.setContextNames($0) }), identifier: "settings-context-names")
         }
         DesignSection(
             eyebrow: "TONE DETAILS",
@@ -26,20 +26,20 @@ extension SettingsView {
                 ? nil
                 : "Cleanup is Off, so these options don\u{2019}t apply yet."
         ) {
-            ModalToggleRow(title: "Remove fillers", isOn: Binding(get: { model.cleanup.fillers }, set: model.setFillers), identifier: "settings-fillers")
+            ModalToggleRow(title: "Remove fillers", isOn: Binding(get: { model.cleanup.fillers }, set: { model.setFillers($0) }), identifier: "settings-fillers")
             ModalToggleRow(
                 title: "Spoken commands and lists", detail: "Say \u{201C}new paragraph\u{201D}, \u{201C}number one\u{201D}, \u{201C}scratch that\u{201D}.",
-                isOn: Binding(get: { model.cleanup.spokenCommands }, set: model.setSpokenCommands), identifier: "settings-spoken-commands")
+                isOn: Binding(get: { model.cleanup.spokenCommands }, set: { model.setSpokenCommands($0) }), identifier: "settings-spoken-commands")
             ModalToggleRow(
                 title: "Slash commands in coding apps", detail: "In terminals, editors and agent apps, \u{201C}slash research\u{201D} types /research.",
-                isOn: Binding(get: { model.cleanup.slashCommands }, set: model.setSlashCommands), identifier: "settings-slash-commands")
-            ModalToggleRow(title: "Format numbers", isOn: Binding(get: { model.cleanup.numbers }, set: model.setNumbers), identifier: "settings-numbers")
+                isOn: Binding(get: { model.cleanup.slashCommands }, set: { model.setSlashCommands($0) }), identifier: "settings-slash-commands")
+            ModalToggleRow(title: "Format numbers", isOn: Binding(get: { model.cleanup.numbers }, set: { model.setNumbers($0) }), identifier: "settings-numbers")
             ModalToggleRow(
                 title: "Lowercase sentence starts", detail: "Shows as a Custom tone on the Style page.",
-                isOn: Binding(get: { model.cleanup.style.capitalisation == .lowercase }, set: model.setLowercaseStarts), identifier: "settings-lowercase-starts")
+                isOn: Binding(get: { model.cleanup.style.capitalisation == .lowercase }, set: { model.setLowercaseStarts($0) }), identifier: "settings-lowercase-starts")
             ModalToggleRow(
                 title: "Drop the final full stop", detail: "Shows as a Custom tone on the Style page.",
-                isOn: Binding(get: { model.cleanup.style.endingPunctuation == .dropFinalFullStop }, set: model.setDropFinalStop), identifier: "settings-drop-final-stop")
+                isOn: Binding(get: { model.cleanup.style.endingPunctuation == .dropFinalFullStop }, set: { model.setDropFinalStop($0) }), identifier: "settings-drop-final-stop")
         }.disabled(!sharedControlsEnabled)
         DesignSection(
             eyebrow: "DELIVERY",

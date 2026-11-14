@@ -527,11 +527,16 @@ public final class HotkeyService {
 
     /// True when a non-modifier key is down, so a press made while typing is refused.
     nonisolated static func liveKeysHeld(excluding: [UInt16]) -> Bool {
+        typingKeysHeld(excluding: excluding) { CGEventSource.keyState(.combinedSessionState, key: CGKeyCode($0)) }
+    }
+
+    nonisolated static func typingKeysHeld(excluding: [UInt16], isDown: (UInt16) -> Bool) -> Bool {
         (0..<128).contains { code in
             let code = UInt16(code)
-            return !ModifierState.isModifierKeyCode(code)
+            // Power is a system control, and its state can remain down after the button is released.
+            return code != 0x7F && !ModifierState.isModifierKeyCode(code)
                 && !excluding.contains(code)
-                && CGEventSource.keyState(.combinedSessionState, key: CGKeyCode(code))
+                && isDown(code)
         }
     }
 }

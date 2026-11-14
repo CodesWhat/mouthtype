@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.2] - 2026-11-14
+
+### Fixed
+
+- Fn/Globe dictation no longer stops responding when macOS reports the Power key as held.
+
+### Build and maintenance
+
+- Updated docs and website development dependencies.
+- Swift security scans use a supported toolchain and serialize extraction to fit the runner.
+
 ## [0.12.1] - 2026-11-07
 
 ### Security
@@ -252,7 +263,8 @@ First stable release for Apple Silicon Macs on macOS 26 or later. Hold Fn, speak
 
 0.1.0 was preceded by `v0.1.0-alpha.1` through `v0.1.0-alpha.9`, `v0.1.0-beta.1` and `v0.1.0-rc.1` through `v0.1.0-rc.4`. Each has a tag on the [releases page](https://github.com/CodesWhat/mouthtype/tags). Their notes are folded into the 0.1.0 entry in [`packaging/ReleaseNotes.txt`](packaging/ReleaseNotes.txt).
 
-[Unreleased]: https://github.com/CodesWhat/mouthtype/compare/v0.12.1...HEAD
+[Unreleased]: https://github.com/CodesWhat/mouthtype/compare/v0.12.2...HEAD
+[0.12.2]: https://github.com/CodesWhat/mouthtype/compare/v0.12.1...v0.12.2
 [0.12.1]: https://github.com/CodesWhat/mouthtype/compare/v0.12.0...v0.12.1
 [0.12.0]: https://github.com/CodesWhat/mouthtype/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/CodesWhat/mouthtype/compare/v0.10.0...v0.11.0
