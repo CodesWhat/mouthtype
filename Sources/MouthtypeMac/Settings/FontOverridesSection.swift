@@ -24,7 +24,7 @@ struct FontOverridesSection: View {
                 ? "Use the base text font, or choose a family for each part."
                 : "Pick separate heading, body and readout fonts."
         ) {
-            Toggle("Override individual fonts", isOn: Binding(get: { model.fontOverrides.enabled }, set: model.setFontOverridesEnabled))
+            Toggle("Override individual fonts", isOn: Binding(get: { model.fontOverrides.enabled }, set: { model.setFontOverridesEnabled($0) }))
                 .labelsHidden().toggleStyle(.designSwitch).accessibilityIdentifier("settings-font-overrides")
         }
         if model.fontOverrides.enabled {

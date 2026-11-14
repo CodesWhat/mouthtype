@@ -76,6 +76,23 @@ import Testing
         #expect(!mapper.hotkeyHeld)
     }
 
+    @Test func powerKeyStateDoesNotCountAsTyping() {
+        let typingAndModifierKeys = (0..<127).map(UInt16.init)
+        #expect(!HotkeyService.liveKeysHeld(excluding: typingAndModifierKeys))
+    }
+
+    @Test(arguments: [
+        ([UInt16(127)], [UInt16](), false),
+        ([UInt16(127), 0], [], true),
+        ([UInt16(126)], [], true),
+        ([UInt16(55), 57, 63, 127], [], false),
+        ([UInt16(80), 127], [80], false),
+        ([UInt16(80), 0, 127], [80], true),
+    ])
+    func heldKeyProbeIgnoresPowerButKeepsTypingProtection(held: [UInt16], excluded: [UInt16], expected: Bool) {
+        #expect(HotkeyService.typingKeysHeld(excluding: excluded, isDown: { held.contains($0) }) == expected)
+    }
+
     @Test func healthNamesTheCause() {
         func health(_ tap: Bool = true, recovering: Bool = false, secure: Bool = false, recording: Bool = false) -> HotkeyHealth {
             HotkeyHealth.resolve(tapPresent: tap, recovering: recovering, secureInput: secure, recording: recording)
