@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Fn/Globe dictation no longer stops responding when macOS reports the Power key as held.
+
 ## [0.12.1] - 2026-11-07
 
 ### Security
