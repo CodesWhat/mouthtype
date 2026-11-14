@@ -13,7 +13,7 @@ struct AudioRetentionSection: View {
         ) {
             DesignRow(title: "Keep finished audio for", detail: "Recovery audio is kept 30 days, then follows this limit.") {
                 DesignPopup(
-                    title: "Keep completed recordings", selection: Binding(get: { model.audioRetention.age }, set: model.setAudioRetentionAge),
+                    title: "Keep completed recordings", selection: Binding(get: { model.audioRetention.age }, set: { model.setAudioRetentionAge($0) }),
                     choices: [
                         DesignChoice("14 days", AudioRetentionAge.days14), DesignChoice("30 days", .days30),
                         DesignChoice("90 days", .days90), DesignChoice("No age limit", .noAgeLimit),
@@ -21,7 +21,7 @@ struct AudioRetentionSection: View {
                 )
                 .accessibilityIdentifier("settings-audio-age")
                 DesignPopup(
-                    title: "Completed audio size limit", selection: Binding(get: { model.audioRetention.size }, set: model.setAudioRetentionSize),
+                    title: "Completed audio size limit", selection: Binding(get: { model.audioRetention.size }, set: { model.setAudioRetentionSize($0) }),
                     choices: [DesignChoice("up to 2 GB", AudioRetentionSize.gb2), DesignChoice("up to 10 GB", .gb10)]
                 )
                 .accessibilityIdentifier("settings-audio-size")

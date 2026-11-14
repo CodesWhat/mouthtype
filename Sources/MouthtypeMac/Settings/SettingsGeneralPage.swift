@@ -61,11 +61,11 @@ extension SettingsView {
         DesignSection(eyebrow: "WHILE RECORDING") {
             ModalToggleRow(
                 title: "Recording sounds", detail: "A small cue when you start and finish.",
-                isOn: Binding(get: { model.sounds }, set: model.setSounds), identifier: "settings-sounds")
+                isOn: Binding(get: { model.sounds }, set: { model.setSounds($0) }), identifier: "settings-sounds")
             LivePreviewSettingsRow(model: model)
             ModalToggleRow(
                 title: "Quiet other audio", detail: "Mute the current output while recording, on supported devices.",
-                isOn: Binding(get: { model.quietOtherAudio }, set: model.setQuietOtherAudio), identifier: "settings-quiet-audio")
+                isOn: Binding(get: { model.quietOtherAudio }, set: { model.setQuietOtherAudio($0) }), identifier: "settings-quiet-audio")
         }
     }
 
@@ -104,7 +104,7 @@ extension SettingsView {
         if let updater = actions.updater {
             DesignSection(eyebrow: "UPDATES") {
                 DesignRow(title: "Check for updates automatically", detail: "Mouthtype looks in the background and tells you when one is ready.") {
-                    Toggle("Check for updates automatically", isOn: Binding(get: { updater.automaticallyChecksForUpdates }, set: updater.setAutomaticChecks))
+                    Toggle("Check for updates automatically", isOn: Binding(get: { updater.automaticallyChecksForUpdates }, set: { updater.setAutomaticChecks($0) }))
                         .labelsHidden().toggleStyle(.designSwitch).disabled(!updater.isAvailable).accessibilityIdentifier("settings-auto-updates")
                 }
                 DesignRow(title: "Updates", detail: updater.statusText) {

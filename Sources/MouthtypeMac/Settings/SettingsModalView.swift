@@ -56,7 +56,7 @@ struct SettingsModalView: View {
             HStack(spacing: 8) {
                 Text("Advanced options").font(DesignFont.sans(DesignFont.detail, .medium)).fixedSize(horizontal: false, vertical: true)
                 Spacer(minLength: 0)
-                Toggle("Advanced options", isOn: Binding(get: { model.advancedOptions }, set: model.setAdvancedOptions))
+                Toggle("Advanced options", isOn: Binding(get: { model.advancedOptions }, set: { model.setAdvancedOptions($0) }))
                     .labelsHidden().toggleStyle(.designSwitchCompact).accessibilityIdentifier("settings-advanced-options")
             }
             .padding(.horizontal, 10).padding(.top, 10).padding(.bottom, 8)

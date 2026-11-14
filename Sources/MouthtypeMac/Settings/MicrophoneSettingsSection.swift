@@ -72,7 +72,7 @@ struct MicrophonePriorityRows: View {
                 }
                 ModalToggleRow(
                     title: "Use System Default if no listed microphone is available",
-                    isOn: Binding(get: { priority.fallbackToDefault }, set: model.setPriorityFallback)
+                    isOn: Binding(get: { priority.fallbackToDefault }, set: { model.setPriorityFallback($0) })
                 )
                 .disabled(priority.devices.isEmpty)
                 if priority.devices.isEmpty { ModalCardNote(text: "Add a microphone before turning off System Default fallback.") }
