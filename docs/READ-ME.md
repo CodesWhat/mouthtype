@@ -1,4 +1,4 @@
-# Mouthtype 0.12.1
+# Mouthtype 0.12.2
 
 Local dictation for Apple Silicon Macs running macOS 26 or later. Hold Fn, speak, release, and clean text is pasted where you're typing. Recognition and cleanup run on your Mac.
 
@@ -15,6 +15,10 @@ Local dictation for Apple Silicon Macs running macOS 26 or later. Hold Fn, speak
 > This distribution is Developer ID signed and notarized. If macOS rejects it, record the exact message; do not disable Gatekeeper.
 
 The app’s Resources folder contains these notes and its license. Corresponding release source is available from https://mouthtype.app/source; the development repository is at https://github.com/CodesWhat/mouthtype.
+
+## What changed in 0.12.2
+
+- Fixed: Fn / Globe could stop starting dictation when macOS kept reporting the Power key as held. Other keys held while typing still prevent accidental dictation.
 
 ## What changed in 0.12.1
 
