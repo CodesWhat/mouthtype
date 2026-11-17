@@ -7,6 +7,7 @@ on:
     branches: [main, 'dev/**']
   schedule:
     - cron: '41 5 * * 2'
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -16,6 +17,44 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      swift: ${{ steps.diff.outputs.swift }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      # Pull requests scan Swift only when something the package build compiles changed.
+      # Pushes to dev/** skip it because the PR into dev already scanned that diff.
+      - id: diff
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REF: ${{ github.ref }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if [ "$EVENT_NAME" = "push" ] && [ "${REF#refs/heads/dev/}" != "$REF" ]; then
+            echo "swift=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ "$EVENT_NAME" != "pull_request" ]; then
+            echo "swift=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          changed=$(git diff --name-only "$BASE_SHA...$HEAD_SHA")
+          echo "$changed"
+          if echo "$changed" | grep -Eq '^(Sources/|Package\.swift$|Package\.resolved$|\.github/workflows/codeql\.yml$)'; then
+            echo "swift=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "swift=false" >> "$GITHUB_OUTPUT"
+          fi
+
   analyze:
     name: Analyze (${{ matrix.language }})
     runs-on: ${{ matrix.runner }}
@@ -41,19 +80,42 @@ jobs:
             runner: ubuntu-latest
             build-mode: none
             timeout: 30
-          # Traced Swift analysis requires macOS and Xcode 26 or earlier.
-          - language: swift
-            # CodeQL runs natively on Intel, with 14 GB RAM instead of the ARM runner's 7 GB.
-            runner: macos-26-intel
-            build-mode: manual
-            timeout: 180
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
+      - uses: github/codeql-action/init@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+
+      - uses: github/codeql-action/analyze@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          category: /language:${{ matrix.language }}
+
+  # Swift is the expensive one (macOS, up to 3h). A workflow-level paths filter would leave
+  # the required "Analyze (swift)" check missing and block merges, so gate at job level
+  # instead: a skipped job with the same name still satisfies the required check.
+  analyze-swift:
+    name: Analyze (swift)
+    needs: changes
+    if: needs.changes.outputs.swift == 'true'
+    # CodeQL runs natively on Intel, with 14 GB RAM instead of the ARM runner's 7 GB.
+    runs-on: macos-26-intel
+    timeout-minutes: 180
+    permissions:
+      security-events: write
+      packages: read
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Traced Swift analysis requires macOS and Xcode 26 or earlier.
       - name: Select supported Swift toolchain
-        if: matrix.language == 'swift'
         run: |
           export DEVELOPER_DIR=/Applications/Xcode_26.6.app/Contents/Developer
           echo "DEVELOPER_DIR=$DEVELOPER_DIR" >> "$GITHUB_ENV"
@@ -62,7 +124,6 @@ jobs:
 
       # mlx-swift compiles Metal shaders, and Xcode ships the Metal toolchain as a separate component.
       - name: Metal toolchain
-        if: matrix.language == 'swift'
         run: |
           if ! xcrun metal --version >/dev/null 2>&1; then
             xcodebuild -downloadComponent MetalToolchain
@@ -72,16 +133,14 @@ jobs:
       # Prebuild the package and Metal shaders, then clear project target outputs below.
       # Each CodeQL extractor loads SDK type information; serialize builds to bound memory use.
       - name: Prebuild dependencies
-        if: matrix.language == 'swift'
         run: swift build --triple arm64-apple-macosx26.0 --disable-sandbox --jobs 1
 
       - uses: github/codeql-action/init@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
         with:
-          languages: ${{ matrix.language }}
-          build-mode: ${{ matrix.build-mode }}
+          languages: swift
+          build-mode: manual
 
       - name: Build Swift package
-        if: matrix.language == 'swift'
         timeout-minutes: 120
         run: |
           set -euo pipefail
@@ -95,7 +154,7 @@ jobs:
             2>&1 | tee "$RUNNER_TEMP/codeql-swift-diagnostics/build.log"
 
       - name: Preserve Swift build diagnostics
-        if: always() && matrix.language == 'swift'
+        if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: codeql-swift-diagnostics
@@ -105,4 +164,4 @@ jobs:
 
       - uses: github/codeql-action/analyze@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
         with:
-          category: /language:${{ matrix.language }}
+          category: /language:swift
