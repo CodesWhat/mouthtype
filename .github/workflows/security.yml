@@ -83,6 +83,8 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 26
+      - name: Test npm audit waiver logic
+        run: node --test scripts/npm-audit-waivers.test.mjs
       - name: Audit locked direct and transitive website dependencies
         working-directory: website
         run: ../scripts/npm-audit-retry.sh --package-lock-only --audit-level=high
