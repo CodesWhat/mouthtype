@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./fixtures.js";
 
 for (const [choice, title, tagline] of [
   [0, "Words, straight", "SOFTWARE FOR SAYING THINGS"],
