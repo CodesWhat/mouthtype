@@ -75,6 +75,184 @@ import Testing
     }
 }
 
+@Suite struct WhisperTokenizerPinTests {
+    private func makeRoot() -> URL {
+        FileManager.default.temporaryDirectory.appendingPathComponent("tokenizer-pins-\(UUID().uuidString)", isDirectory: true)
+    }
+
+    /// Fake hub content: bytes per file name for a pin, with the pin's digests computed from them.
+    private func pin(repo: String = "openai/whisper-test", revision: String = String(repeating: "b", count: 40))
+        -> (pin: ModelPins.TokenizerPin, bytes: [String: Data])
+    {
+        let bytes = ["config.json": Data("{}".utf8), "tokenizer.json": Data("tok".utf8), "tokenizer_config.json": Data("cfg".utf8)]
+        return (ModelPins.TokenizerPin(repo: repo, revision: revision, files: bytes.mapValues { WhisperTokenizerFetch.sha256Hex($0) }), bytes)
+    }
+
+    @Test func everyTokenizerPinIsACommitWithSHA256Digests() {
+        for pin in ModelPins.whisperTokenizers.values {
+            #expect(pin.revision.count == 40 && pin.revision.allSatisfy { $0.isASCII && $0.isHexDigit && !$0.isUppercase })
+            #expect(Set(pin.files.keys) == ["config.json", "tokenizer.json", "tokenizer_config.json"])
+            for digest in pin.files.values { #expect(digest.count == 64 && digest.allSatisfy { $0.isASCII && $0.isHexDigit && !$0.isUppercase }) }
+        }
+    }
+
+    @Test func eachShippedVariantMapsToItsOwnTokenizerRepo() {
+        #expect(ModelPins.whisperTokenizers[WhisperEngine.turboVariant]?.repo == "openai/whisper-large-v3")
+        #expect(ModelPins.whisperTokenizers[WhisperEngine.smallEnVariant]?.repo == "openai/whisper-small.en")
+    }
+
+    @Test func fetchesAtTheExactPinnedRevisionForEachVariant() async {
+        for variant in [WhisperEngine.turboVariant, WhisperEngine.smallEnVariant] {
+            let expected = ModelPins.whisperTokenizers[variant]!
+            let seen = Seen()
+            let root = makeRoot()
+            defer { try? FileManager.default.removeItem(at: root) }
+            _ = try? await WhisperTokenizerFetch.prepare(
+                variant: variant, root: root,
+                fetch: { repo, revision, file in
+                    await seen.record("\(repo)@\(revision)/\(file)")
+                    throw URLError(.notConnectedToInternet)
+                })
+            #expect(await seen.revisions == ["\(expected.repo)@\(expected.revision)/config.json"])
+        }
+    }
+
+    @Test func propagatesRepoAndRevisionToEveryRequest() async throws {
+        let (pin, bytes) = pin()
+        let seen = Seen()
+        let root = makeRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let folder = try await WhisperTokenizerFetch.prepare(
+            pin: pin, root: root,
+            fetch: { repo, revision, file in
+                await seen.record("\(repo)@\(revision)/\(file)")
+                return bytes[file]!
+            })
+        let prefix = "openai/whisper-test@\(String(repeating: "b", count: 40))/"
+        #expect(await seen.revisions.sorted() == bytes.keys.sorted().map { prefix + $0 })
+        #expect(folder.lastPathComponent == pin.revision)
+        for (name, data) in bytes { #expect(try Data(contentsOf: folder.appendingPathComponent(name)) == data) }
+    }
+
+    @Test func aVerifiedCacheMakesNoRequests() async throws {
+        let (pin, bytes) = pin()
+        let root = makeRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        _ = try await WhisperTokenizerFetch.prepare(pin: pin, root: root, fetch: { _, _, file in bytes[file]! })
+        let seen = Seen()
+        _ = try await WhisperTokenizerFetch.prepare(
+            pin: pin, root: root,
+            fetch: { _, _, file in
+                await seen.record(file)
+                return bytes[file]!
+            })
+        #expect(await seen.revisions.isEmpty)
+    }
+
+    @Test func anAlteredCachedFileIsReplacedFromThePinnedCommit() async throws {
+        let (pin, bytes) = pin()
+        let root = makeRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let folder = try await WhisperTokenizerFetch.prepare(pin: pin, root: root, fetch: { _, _, file in bytes[file]! })
+        try Data("evil".utf8).write(to: folder.appendingPathComponent("tokenizer.json"))
+        let seen = Seen()
+        _ = try await WhisperTokenizerFetch.prepare(
+            pin: pin, root: root,
+            fetch: { _, _, file in
+                await seen.record(file)
+                return bytes[file]!
+            })
+        #expect(await seen.revisions == ["tokenizer.json"])
+        #expect(try Data(contentsOf: folder.appendingPathComponent("tokenizer.json")) == bytes["tokenizer.json"])
+    }
+
+    @Test func aMissingCachedFileIsRefetchedAndAnUnpinnedChatTemplateIsRemoved() async throws {
+        let (pin, bytes) = pin()
+        let root = makeRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let folder = try await WhisperTokenizerFetch.prepare(pin: pin, root: root, fetch: { _, _, file in bytes[file]! })
+        try FileManager.default.removeItem(at: folder.appendingPathComponent("config.json"))
+        try Data("{}".utf8).write(to: folder.appendingPathComponent("chat_template.json"))
+        let seen = Seen()
+        _ = try await WhisperTokenizerFetch.prepare(
+            pin: pin, root: root,
+            fetch: { _, _, file in
+                await seen.record(file)
+                return bytes[file]!
+            })
+        #expect(await seen.revisions == ["config.json"])
+        #expect(!FileManager.default.fileExists(atPath: folder.appendingPathComponent("chat_template.json").path))
+    }
+
+    @Test func concurrentPreparationOfTheSameUncachedVariantSucceeds() async throws {
+        let (pin, bytes) = pin()
+        let root = makeRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let fetch: WhisperTokenizerFetch.FetchFile = { _, _, file in
+            try await Task.sleep(nanoseconds: 50_000_000)
+            return bytes[file]!
+        }
+        let folders = try await withThrowingTaskGroup(of: URL.self) { group in
+            for _ in 0..<4 {
+                group.addTask { try await WhisperTokenizerFetch.prepare(pin: pin, root: root, fetch: fetch) }
+            }
+            var urls: [URL] = []
+            for try await url in group { urls.append(url) }
+            return urls
+        }
+        #expect(Set(folders).count == 1)
+        for (name, data) in bytes {
+            #expect(try Data(contentsOf: folders[0].appendingPathComponent(name)) == data)
+        }
+        #expect(try FileManager.default.contentsOfDirectory(atPath: folders[0].path).sorted() == bytes.keys.sorted())
+    }
+
+    @Test func downloadedBytesThatMissTheDigestFailLoudly() async {
+        let (pin, _) = pin()
+        let root = makeRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        await #expect(throws: (any Error).self) {
+            _ = try await WhisperTokenizerFetch.prepare(pin: pin, root: root, fetch: { _, _, _ in Data("tampered".utf8) })
+        }
+        #expect(!FileManager.default.fileExists(atPath: root.appendingPathComponent("openai/whisper-test/\(pin.revision)/tokenizer.json").path))
+    }
+
+    @Test func aFailedFetchFailsInsteadOfFallingBack() async {
+        let (pin, _) = pin()
+        let root = makeRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        await #expect(throws: (any Error).self) {
+            _ = try await WhisperTokenizerFetch.prepare(pin: pin, root: root, fetch: { _, _, _ in throw URLError(.notConnectedToInternet) })
+        }
+    }
+
+    @Test func aBranchNameIsNotAcceptedAsARevision() async {
+        let (pin, bytes) = pin(revision: "main")
+        let root = makeRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        await #expect(throws: (any Error).self) {
+            _ = try await WhisperTokenizerFetch.prepare(pin: pin, root: root, fetch: { _, _, file in bytes[file]! })
+        }
+    }
+
+    @Test func anUnknownVariantHasNoTokenizer() async {
+        await #expect(throws: (any Error).self) {
+            _ = try await WhisperTokenizerFetch.prepare(variant: "tiny", root: makeRoot(), fetch: { _, _, _ in Data() })
+        }
+    }
+
+    @Test func aFolderThatVerifiesButDoesNotParseStopsBeforeWhisperKit() async {
+        let (pin, bytes) = pin()
+        let root = makeRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        // The digests match, but the content isn't a tokenizer, so the engine's own parse must reject it.
+        await #expect(throws: (any Error).self) {
+            _ = try await WhisperEngine.verifiedTokenizerFolder(
+                variant: "test", pins: ["test": pin], root: root, fetch: { _, _, file in bytes[file]! })
+        }
+    }
+}
+
 private actor Seen {
     private(set) var revisions: [String] = []
     func record(_ revision: String) { revisions.append(revision) }
