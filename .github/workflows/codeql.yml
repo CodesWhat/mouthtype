@@ -47,7 +47,7 @@ jobs:
             echo "swift=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          changed=$(git diff --name-only "$BASE_SHA...$HEAD_SHA")
+          changed=$(git diff --name-only --no-renames "$BASE_SHA...$HEAD_SHA")
           echo "$changed"
           if echo "$changed" | grep -Eq '^(Sources/|Package\.swift$|Package\.resolved$|\.github/workflows/codeql\.yml$)'; then
             echo "swift=true" >> "$GITHUB_OUTPUT"
@@ -100,7 +100,8 @@ jobs:
   analyze-swift:
     name: Analyze (swift)
     needs: changes
-    if: needs.changes.outputs.swift == 'true'
+    # If change detection itself fails, scan anyway rather than report a skipped (passing) check.
+    if: always() && (needs.changes.result != 'success' || needs.changes.outputs.swift == 'true')
     # CodeQL runs natively on Intel, with 14 GB RAM instead of the ARM runner's 7 GB.
     runs-on: macos-26-intel
     timeout-minutes: 180
