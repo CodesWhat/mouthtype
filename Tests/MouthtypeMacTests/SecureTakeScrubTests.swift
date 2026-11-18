@@ -122,10 +122,19 @@ private final class WordsEngine: DictationEngine {
                 id: "cut-off", startedAt: Date(timeIntervalSinceNow: -60), mode: .hold, trigger: .fn,
                 target: DictationTarget(isSecure: true), appVersion: "t", osVersion: "t"))
         try rig.archive.appendPartial(samples: [Float](repeating: 0.2, count: 4000), id: "cut-off")
+        try rig.store.recordTranscription(
+            "cut-off",
+            TranscriptionRecord(
+                transcription: Transcription(text: "my password", words: [], processingSeconds: 0.1, engineID: "t"),
+                rawText: "my password"))
         let scan = try DictationRecovery.scan(store: rig.store, archive: rig.archive, now: Date(), launchedAt: Date())
         #expect(scan.newest == nil && scan.olderCount == 0)
         #expect(!FileManager.default.fileExists(atPath: rig.archive.partialURL(for: "cut-off").path))
-        #expect(try rig.store.dictation(id: "cut-off")?.isSecure == true)
+        let row = try #require(try rig.store.dictation(id: "cut-off"))
+        #expect(row.isSecure == true)
+        #expect(row.status == .failed)
+        #expect(row.rawText == nil && row.detText == nil && row.finalText == nil)
+        #expect(try rig.store.recentTakes(limit: 10, query: "password").isEmpty)
         #expect(try DictationRecovery.saved(store: rig.store, archive: rig.archive, now: Date(), launchedAt: Date()).isEmpty)
     }
 }

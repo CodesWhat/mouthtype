@@ -73,13 +73,15 @@ public enum DictationRecovery {
         var recoverable: [RecoverableDictation] = []
         var lost = 0
         for row in rows {
-            try store.finish(row.id, status: .failed, errorMessage: interruptedMessage)
-            // A take that began in a secure field is never offered back: its text and audio go instead.
+            // A take that began in a secure field is never offered back: its text and audio go instead. The scrub runs
+            // before the row ends, so a crash in between leaves it unfinished and the next scan scrubs it again.
             if row.isSecure == true {
                 try store.scrubSecureTake(row.id)
+                try store.finish(row.id, status: .failed, errorMessage: interruptedMessage)
                 archive.remove(id: row.id)
                 continue
             }
+            try store.finish(row.id, status: .failed, errorMessage: interruptedMessage)
             guard let audio = audio(for: row, archive: archive) else {
                 lost += 1
                 continue
