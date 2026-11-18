@@ -76,3 +76,5 @@ jobs:
         if: needs.changes.outputs.run == 'true'
       - run: npm test
         if: needs.changes.outputs.run == 'true'
+        env:
+          REQUIRE_DIST: "1"
