@@ -561,6 +561,7 @@ public final class TextInserter {
     func armReturn(after result: DeliveryResult) {
         guard result.method == .paste, result.outcome == .unknown else { return skipReturn("the delivery was not a clean paste") }
         guard !result.finalText.isEmpty else { return skipReturn("nothing was delivered") }
+        guard !result.focusMoved else { return skipReturn("focus moved since the take started") }
         guard let target = result.target, let pid = target.pid, pid > 0, let bundleID = target.bundleID else {
             return skipReturn("the paste target is unknown")
         }

@@ -2434,6 +2434,38 @@ private struct Rig {
         await rig.inserter.waitForVerification()
     }
 
+    @Test func focusMovedToAnotherOptedInTerminalSendsNothing() async {
+        let rig = rig()
+        let start = FocusSnapshot(pid: 5, bundleID: "com.example.start", element: element(5))
+        let result = await rig.inserter.deliver("world", startFocus: start)
+        #expect(result.focusMoved)
+        rig.inserter.armReturn(after: result)
+        #expect(rig.inserter.unconfirmedSend == nil)
+        await release(rig, nil)
+        #expect(rig.poster.returns.isEmpty)
+    }
+
+    @Test func focusMovedToAnotherFieldInTheSameTerminalSendsNothing() async {
+        let rig = rig()
+        let start = FocusSnapshot(pid: 100, bundleID: terminal, role: "AXTextArea", element: element(99))
+        let result = await rig.inserter.deliver("world", startFocus: start)
+        #expect(result.focusMoved)
+        rig.inserter.armReturn(after: result)
+        #expect(rig.inserter.unconfirmedSend == nil)
+        await release(rig, nil)
+        #expect(rig.poster.returns.isEmpty)
+    }
+
+    @Test func unmovedFocusInATerminalStillSends() async {
+        let rig = rig()
+        let start = FocusSnapshot(pid: 100, bundleID: terminal, role: "AXTextArea", element: element(100))
+        let result = await rig.inserter.deliver("world", startFocus: start)
+        #expect(!result.focusMoved)
+        rig.inserter.armReturn(after: result)
+        await release(rig, rig.inserter.unconfirmedSend)
+        #expect(rig.poster.returns == [100])
+    }
+
     @Test func sendsOnceAfterTheDelayWithNoVerdict() async {
         let rig = rig()
         let task = await arm(rig)
@@ -2631,6 +2663,36 @@ private struct Rig {
         let result = await rig.inserter.deliver(text, startFocus: nil)
         rig.inserter.armReturn(after: result)
         return result
+    }
+
+    @Test func focusMovedToAnotherOptedInAppSendsNothing() async {
+        let rig = rig()
+        let start = FocusSnapshot(pid: 5, bundleID: "com.example.start", element: element(5))
+        let result = await rig.inserter.deliver("world", startFocus: start)
+        #expect(result.focusMoved)
+        rig.inserter.armReturn(after: result)
+        await finish(rig)
+        #expect(rig.poster.posts == 1 && rig.poster.returns.isEmpty)
+    }
+
+    @Test func focusMovedToAnotherFieldInTheSameOptedInAppSendsNothing() async {
+        let rig = rig()
+        let start = FocusSnapshot(pid: 100, bundleID: app, role: "AXTextArea", element: element(99))
+        let result = await rig.inserter.deliver("world", startFocus: start)
+        #expect(result.focusMoved)
+        rig.inserter.armReturn(after: result)
+        await finish(rig)
+        #expect(rig.poster.posts == 1 && rig.poster.returns.isEmpty)
+    }
+
+    @Test func unmovedFocusStillSendsItsReturn() async {
+        let rig = rig()
+        let start = FocusSnapshot(pid: 100, bundleID: app, role: "AXTextArea", element: element(100))
+        let result = await rig.inserter.deliver("world", startFocus: start)
+        #expect(!result.focusMoved)
+        rig.inserter.armReturn(after: result)
+        await finish(rig)
+        #expect(rig.poster.returns == [100])
     }
 
     @Test func nothingIsSentWhileTheVerdictIsPendingAndExactlyOneAfterItLands() async {
