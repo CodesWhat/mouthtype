@@ -161,6 +161,20 @@ public final class TranscriptStore: Sendable {
                     END;
                     """)
         }
+        migrator.registerMigration("v5-scrub-secure-takes") { db in
+            // Takes from secure fields keep no transcript, timings or search entry. Rows from before this can't be told
+            // apart (a stuck Secure Input marked them the same way), so every one of them is scrubbed. The audio goes with
+            // the next retention sweep, which removes the WAV of any secure row that still points at one.
+            try db.execute(
+                sql: """
+                    UPDATE dictation SET raw_text = NULL, det_text = NULL, final_text = NULL, word_timings_json = NULL,
+                        words_raw = NULL, words_final = 0, chars_final = 0
+                    WHERE is_secure = 1;
+                    DELETE FROM edit_op WHERE dictation_id IN (SELECT id FROM dictation WHERE is_secure = 1);
+                    DELETE FROM correction WHERE dictation_id IN (SELECT id FROM dictation WHERE is_secure = 1);
+                    DELETE FROM take_search WHERE rowid IN (SELECT rowid FROM dictation WHERE is_secure = 1);
+                    """)
+        }
         return migrator
     }
 
@@ -341,6 +355,32 @@ public final class TranscriptStore: Sendable {
         try pool.write { db in try db.execute(sql: "DELETE FROM dictation WHERE id = ?", arguments: [id]) }
         archive?.remove(id: id)
         inputsChanged(notify: true)
+    }
+
+    /// Drops everything a take from a secure field said: the transcript columns, word timings, edits, offered
+    /// corrections and its search entry (the `take_search_update` trigger removes it). The row stays as a stub marked
+    /// secure, so the counts that leave secure rows out read the same. The audio pointer is cleared too; the caller
+    /// removes the files.
+    public func scrubSecureTake(_ id: String) throws {
+        try pool.write { db in
+            try db.execute(
+                sql: """
+                    UPDATE dictation SET raw_text = NULL, det_text = NULL, final_text = NULL, word_timings_json = NULL,
+                        words_raw = NULL, words_final = 0, chars_final = 0, is_secure = 1,
+                        audio_path = NULL, audio_expires_at = NULL
+                    WHERE id = ?
+                    """, arguments: [id])
+            try db.execute(sql: "DELETE FROM edit_op WHERE dictation_id = ?", arguments: [id])
+            try db.execute(sql: "DELETE FROM correction WHERE dictation_id = ?", arguments: [id])
+        }
+        inputsChanged(notify: true)
+    }
+
+    /// Secure-field rows that still point at audio: scrubbed rows from before the scrub existed, whose WAVs retention removes.
+    public func secureAudioIDs() throws -> [String] {
+        try pool.read { db in
+            try String.fetchAll(db, sql: "SELECT id FROM dictation WHERE is_secure = 1 AND audio_path IS NOT NULL")
+        }
     }
 
     /// Every id with a row. Audio whose id is not here is never removed.

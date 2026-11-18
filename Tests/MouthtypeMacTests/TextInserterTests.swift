@@ -776,6 +776,7 @@ private struct Rig {
         rig.focus.current = FocusSnapshot(pid: 100, role: "AXTextField", isSecure: true, element: element(100))
         let result = await rig.inserter.deliver("x", startFocus: nil)
         #expect(result.outcome == .secureDiscard && !result.secureInputBlocked)
+        #expect(result.target?.isSecure == true && result.storeOutcome == "secure discard")
         #expect(DeliveryCard.forDelivery(result, transcript: "x") == .secure("x"))
     }
 
@@ -786,6 +787,8 @@ private struct Rig {
         let result = await rig.inserter.deliver("x", startFocus: nil)
         let card = DeliveryCard.forDelivery(result, transcript: "x")
         #expect(result.secureInputBlocked)
+        // Stuck Secure Input doesn't mark the take as a secure-field one: it's stored as a take that didn't land.
+        #expect(result.target?.isSecure != true && result.storeOutcome == "not landed")
         #expect(card == .secureInput("x"))
         #expect(card?.actions == [.copy])
     }
@@ -1260,7 +1263,7 @@ private struct Rig {
         rig.focus.isSecureInputEnabled = true
         let result = await rig.inserter.deliver("x", startFocus: nil)
         #expect(result.outcome == .secureDiscard)
-        #expect(result.target?.isSecure == true)
+        #expect(result.secureInputBlocked && result.target?.isSecure != true)
         #expect(rig.pasteboard.writes.isEmpty)
         #expect(rig.poster.posts == 0)
     }

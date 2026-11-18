@@ -74,6 +74,12 @@ protocol DictationStoring: Sendable {
     func reopen(_ id: String) async throws
     func finish(_ id: String, status: DictationStatus, errorMessage: String?) async throws
     func appendEdits(_ id: String, _ edits: [EditOp]) async throws
+    /// A take from a secure field: its transcript, timings and search entry are dropped, leaving a stub row.
+    func scrubSecureTake(_ id: String) async throws
+}
+
+extension DictationStoring {
+    func scrubSecureTake(_ id: String) async throws {}
 }
 
 protocol DictationArchiving: Sendable {
@@ -84,6 +90,8 @@ protocol DictationArchiving: Sendable {
     func appendPartial(samples: [Float], id: String) throws
     func readPartial(id: String) throws -> [Float]
     func discardPartial(id: String)
+    /// Removes the archived WAV and the in-progress copy.
+    func remove(id: String)
 }
 
 extension DictationArchiving {
@@ -91,6 +99,7 @@ extension DictationArchiving {
     func appendPartial(samples: [Float], id: String) throws {}
     func readPartial(id: String) throws -> [Float] { [] }
     func discardPartial(id: String) {}
+    func remove(id: String) {}
 }
 
 @MainActor
@@ -272,6 +281,7 @@ struct TranscriptStoreWriter: DictationStoring {
         try store.finish(id, status: status, errorMessage: errorMessage)
     }
     func appendEdits(_ id: String, _ edits: [EditOp]) async throws { try store.appendEdits(id, edits) }
+    func scrubSecureTake(_ id: String) async throws { try store.scrubSecureTake(id) }
 }
 
 extension AudioArchive: DictationArchiving {

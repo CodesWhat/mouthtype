@@ -7,6 +7,10 @@ public enum AudioRetentionMaintenance {
     /// between deleting a file and clearing its pointer. Returns the row ids whose audio the policy removed.
     @discardableResult
     public static func prune(archive: AudioArchive, store: TranscriptStore, policy: AudioRetentionPolicy, now: Date) throws -> [String] {
+        // A secure-field take keeps no audio, whatever the policy says. This also catches rows scrubbed by the migration.
+        let secure = try store.secureAudioIDs()
+        for id in secure { archive.remove(id: id) }
+        if !secure.isEmpty { try store.clearAudio(ids: secure) }
         let completed = try store.audioRetentionCandidateIDs()
         let removed = try archive.purge(
             olderThan: policy.cutoff(at: now), maxTotalBytes: policy.maximumBytes, eligibleIDs: completed,
@@ -34,6 +38,6 @@ public enum AudioRetentionMaintenance {
             }
         }
         if !missing.isEmpty { try store.clearAudio(ids: Array(missing)) }
-        return removed
+        return removed + secure
     }
 }

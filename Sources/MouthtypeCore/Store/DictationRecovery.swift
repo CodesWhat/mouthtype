@@ -74,6 +74,12 @@ public enum DictationRecovery {
         var lost = 0
         for row in rows {
             try store.finish(row.id, status: .failed, errorMessage: interruptedMessage)
+            // A take that began in a secure field is never offered back: its text and audio go instead.
+            if row.isSecure == true {
+                try store.scrubSecureTake(row.id)
+                archive.remove(id: row.id)
+                continue
+            }
             guard let audio = audio(for: row, archive: archive) else {
                 lost += 1
                 continue
