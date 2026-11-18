@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import SwiftUI
 import Testing
 @testable import MouthtypeMac
 
@@ -74,6 +75,77 @@ private func store(
             <link rel="icon" href="https://tracker.other.net/bad.png">
             """
         #expect(FaviconLinks.candidates(html: html, base: base).map(\.host) == ["cdn.example.com"])
+    }
+}
+
+@Suite struct FaviconRedirectTests {
+    private func allows(_ from: String, _ to: String) -> Bool {
+        SiteFaviconStore.allowsRedirect(from: URL(string: from), to: URL(string: to))
+    }
+
+    @Test func refusesRedirectsToOtherHosts() {
+        #expect(!allows("https://example.com/", "https://evil.net/"))
+        #expect(!allows("https://example.com/", "https://notexample.com/"))
+        #expect(!allows("https://example.com/", "https://example.com.evil.net/"))
+        #expect(!allows("https://a.co.uk/", "https://b.co.uk/"))
+        #expect(!allows("https://a.github.io/", "https://b.github.io/"))
+    }
+
+    @Test func keepsSameSiteHttpsRedirects() {
+        #expect(allows("https://example.com/", "https://example.com/home"))
+        #expect(allows("https://example.com/", "https://www.example.com/"))
+        #expect(allows("https://www.example.com/", "https://example.com/"))
+        #expect(!allows("https://example.com/", "http://example.com/"))
+    }
+
+    @Test func siblingIconHostsAreNotAccepted() {
+        let base = URL(string: "https://a.co.uk/")!
+        let html = #"<link rel="icon" href="https://b.co.uk/x.png"><link rel="icon" href="https://cdn.a.co.uk/y.png">"#
+        #expect(FaviconLinks.candidates(html: html, base: base).map(\.host) == ["cdn.a.co.uk"])
+    }
+
+    @Test func delegateCancelsOffSiteRedirect() throws {
+        let session = URLSession(configuration: .ephemeral)
+        defer { session.invalidateAndCancel() }
+        let task = session.dataTask(with: URLRequest(url: URL(string: "https://example.com/")!))
+        let response = HTTPURLResponse(url: URL(string: "https://example.com/")!, statusCode: 302, httpVersion: nil, headerFields: nil)!
+        let delegate = SiteFaviconStore.RedirectLimit()
+        var results: [URLRequest?] = []
+        for target in ["https://evil.net/", "https://www.example.com/"] {
+            delegate.urlSession(session, task: task, willPerformHTTPRedirection: response, newRequest: URLRequest(url: URL(string: target)!)) { results.append($0) }
+        }
+        #expect(results[0] == nil)
+        #expect(results[1]?.url?.host == "www.example.com")
+    }
+}
+
+@Suite(.serialized) @MainActor struct StyleMemberIconFetchTests {
+    private func fetches(for members: [StyleMember]) async -> [String] {
+        let calls = Calls()
+        let store = store(tempDirectory(), calls: calls) { _ in nil }
+        for member in members {
+            let host = NSHostingView(rootView: StyleMemberIcon(member: member).environment(\.siteFavicons, store))
+            host.frame = NSRect(x: 0, y: 0, width: 40, height: 40)
+            let window = NSWindow(contentRect: host.frame, styleMask: [], backing: .buffered, defer: false)
+            window.contentView = host
+            host.layoutSubtreeIfNeeded()
+            try? await Task.sleep(nanoseconds: 400_000_000)
+            withExtendedLifetime(window) {}
+        }
+        return calls.all
+    }
+
+    @Test func builtInSiteMembersMakeNoRequests() async {
+        let builtIns = StyleContextID.allCases.flatMap { StyleContexts.builtIns($0) }.filter { $0.kind == .site }
+        #expect(builtIns.count >= 4)
+        #expect(builtIns.allSatisfy { !StyleMemberIcon.fetchesFavicon(for: $0) })
+        #expect(await fetches(for: builtIns).isEmpty)
+    }
+
+    @Test func addedSiteMembersStillFetch() async {
+        let added = StyleMember(kind: .site, name: "example.com", keys: ["example.com"], isBuiltIn: false)
+        #expect(StyleMemberIcon.fetchesFavicon(for: added))
+        #expect(await fetches(for: [added]).first == "https://example.com/")
     }
 }
 

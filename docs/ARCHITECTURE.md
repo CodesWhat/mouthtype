@@ -1,6 +1,6 @@
 # Architecture
 
-Mouthtype is a single-user, local macOS 26 menu bar dictation app written in Swift 6.2 (`Package.swift`). Speech recognition and text cleanup run on the Mac. The only network traffic is model downloads and update checks. For the security view of the same boundaries, see [SECURITY.md](SECURITY.md).
+Mouthtype is a single-user, local macOS 26 menu bar dictation app written in Swift 6.2 (`Package.swift`). Speech recognition and text cleanup run on the Mac. The only network traffic is model downloads, update checks, and an icon request to each website you add to a Style list (only to that site). For the security view of the same boundaries, see [SECURITY.md](SECURITY.md).
 
 ## Targets
 
