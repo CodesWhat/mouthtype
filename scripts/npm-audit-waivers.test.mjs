@@ -124,3 +124,15 @@ test("levelFromArgs", () => {
   assert.equal(levelFromArgs(["--audit-level", "critical"]), "critical");
   assert.equal(levelFromArgs([]), "low");
 });
+
+test("a waived high plus an unwaived moderate passes at high and fails at moderate", () => {
+  const mixed = report({
+    picomatch: {
+      name: "picomatch",
+      severity: "high",
+      via: [adv(), adv({ url: "https://github.com/advisories/GHSA-0000-0000-0000", severity: "moderate" })],
+    },
+  });
+  assert.equal(evaluate({ ...base, report: mixed }).ok, true);
+  assert.equal(evaluate({ ...base, report: mixed, level: "moderate" }).ok, false);
+});

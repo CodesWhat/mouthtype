@@ -115,20 +115,28 @@ export function evaluate({ report, waivers, today, level = "low", npmView }) {
     return w;
   };
 
-  // True when every advisory reachable from this package entry is waived.
-  const entryWaived = (name, seen) => {
+  // True when this entry reaches an unwaived advisory at or above the audit level.
+  // A string via resolves to that package's entry; a missing entry fails closed.
+  const blocking = (name, seen) => {
     const entry = vulns[name];
-    if (!entry || seen.has(name)) return !!entry;
+    if (!entry) return true;
+    if (seen.has(name)) return false;
     seen.add(name);
     const via = entry.via || [];
-    if (via.length === 0) return false;
-    return via.every((v) => (typeof v === "string" ? entryWaived(v, seen) : !!waiverFor(v)));
+    if (via.length === 0) return LEVELS.indexOf(entry.severity) >= min;
+    return via.some((v) => {
+      if (typeof v === "string") return blocking(v, seen);
+      const sev = LEVELS.indexOf(v.severity);
+      // An advisory without a known severity counts at the entry's severity.
+      const effective = sev === -1 ? LEVELS.indexOf(entry.severity) : sev;
+      return effective >= min && !waiverFor(v);
+    });
   };
 
   const remaining = [];
   for (const [name, entry] of Object.entries(vulns)) {
     if (LEVELS.indexOf(entry.severity) < min) continue;
-    if (!entryWaived(name, new Set())) remaining.push({ name, severity: entry.severity });
+    if (blocking(name, new Set())) remaining.push({ name, severity: entry.severity });
   }
 
   return {
