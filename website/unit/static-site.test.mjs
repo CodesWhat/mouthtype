@@ -40,9 +40,16 @@ function resolves(urlPath) {
 }
 
 function localPath(url) {
-  const local = url.startsWith(ORIGIN) ? url.slice(ORIGIN.length) || "/" : url;
-  if (!local.startsWith("/") || local.startsWith("//")) return null;
-  return local.split("#")[0].split("?")[0] || null;
+  if (url.startsWith("//")) return null;
+  let parsed;
+  try {
+    parsed = new URL(url, ORIGIN);
+  } catch {
+    return null;
+  }
+  if (parsed.origin !== new URL(ORIGIN).origin) return null;
+  if (!url.startsWith("/") && !url.startsWith(`${ORIGIN}/`) && url !== ORIGIN) return null;
+  return parsed.pathname || null;
 }
 
 test("every sitemap.xml URL has a built file", { skip }, () => {

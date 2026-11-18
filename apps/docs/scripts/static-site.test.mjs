@@ -52,10 +52,17 @@ test("every internal href and src in exported pages resolves", { skip }, () => {
   for (const file of walk(outDir).filter((entry) => entry.endsWith(".html"))) {
     const html = fs.readFileSync(file, "utf8");
     for (const match of html.matchAll(/\s(?:href|src)="([^"]+)"/g)) {
-      let url = match[1].replaceAll("&amp;", "&");
-      if (url.startsWith(ORIGIN)) url = url.slice(ORIGIN.length) || "/";
-      if (!url.startsWith("/") || url.startsWith("//")) continue;
-      const urlPath = url.split("#")[0].split("?")[0];
+      const url = match[1].replaceAll("&amp;", "&");
+      if (url.startsWith("//")) continue;
+      if (!url.startsWith("/") && !url.startsWith(`${ORIGIN}/`) && url !== ORIGIN) continue;
+      let parsed;
+      try {
+        parsed = new URL(url, ORIGIN);
+      } catch {
+        continue;
+      }
+      if (parsed.origin !== new URL(ORIGIN).origin) continue;
+      const urlPath = parsed.pathname;
       if (urlPath && !resolves(urlPath)) {
         broken.push(`${urlPath} (in ${path.relative(outDir, file)})`);
       }
