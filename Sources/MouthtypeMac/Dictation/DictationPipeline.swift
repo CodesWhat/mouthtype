@@ -482,17 +482,16 @@ struct DictationPipeline: Sendable {
 
     func recordInsertion(_ result: DeliveryResult, session: DictationSession, cleaned: CleanedDictation? = nil) async {
         let insertDoneMs = clock.milliseconds(from: session.keyDownAt, to: clock.nowNanos())
-        // A secure field keeps nothing of the take: the row is written with no text, then scrubbed, and its audio goes.
+        // A secure field keeps nothing of the take: the row is written with no text and scrubbed in one transaction, then its audio goes.
         // Secure Input alone (the field isn't confirmed secure) is an ordinary take that didn't land, text kept.
         if result.outcome == .secureDiscard, !result.secureInputBlocked {
-            await write(session, "recordInsertion") { store in
-                try await store.recordInsertion(
+            await write(session, "finishSecureTake") { store in
+                try await store.finishSecureTake(
                     session.id,
                     InsertionRecord(
                         finalText: "", method: result.storeMethod, outcome: result.storeOutcome, focusMoved: result.focusMoved,
                         insertDoneMs: insertDoneMs, target: result.target?.target))
             }
-            await write(session, "scrubSecureTake") { try await $0.scrubSecureTake(session.id) }
             archive?.remove(id: session.id)
             return
         }

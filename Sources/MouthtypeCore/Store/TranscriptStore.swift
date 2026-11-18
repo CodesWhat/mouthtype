@@ -243,6 +243,10 @@ public final class TranscriptStore: Sendable {
     }
 
     public func recordInsertion(_ id: String, _ record: InsertionRecord) throws {
+        try update(id, Self.insertionColumns(record))
+    }
+
+    private static func insertionColumns(_ record: InsertionRecord) -> [(String, (any DatabaseValueConvertible)?)] {
         let cleanup = record.cleanup
         var columns: [(String, (any DatabaseValueConvertible)?)] = [
             ("status", DictationStatus.inserted),
@@ -263,7 +267,7 @@ public final class TranscriptStore: Sendable {
                 ("is_secure", target.isSecure),
             ]
         }
-        try update(id, columns)
+        return columns
     }
 
     /// Settles an insertion after the fact: what the read-back verdict was, and how long the target took to read the
@@ -357,29 +361,48 @@ public final class TranscriptStore: Sendable {
         inputsChanged(notify: true)
     }
 
-    /// Drops everything a take from a secure field said: the transcript columns, word timings, edits, offered
-    /// corrections and its search entry (the `take_search_update` trigger removes it). The row stays as a stub marked
-    /// secure, so the counts that leave secure rows out read the same. The audio pointer is cleared too; the caller
-    /// removes the files.
-    public func scrubSecureTake(_ id: String) throws {
+    /// Ends a take from a secure field in one transaction: the insertion outcome is recorded with no text and everything
+    /// the take said is dropped in the same write, so a crash can't leave a terminal row holding a transcript. The audio
+    /// pointer stays until the files are gone (`AudioRetentionMaintenance` clears it), so a failed delete is retried.
+    public func finishSecureTake(_ id: String, _ record: InsertionRecord) throws {
+        var columns = Self.insertionColumns(record)
+        columns += [("is_secure", true)]
         try pool.write { db in
-            try db.execute(
-                sql: """
-                    UPDATE dictation SET raw_text = NULL, det_text = NULL, final_text = NULL, word_timings_json = NULL,
-                        words_raw = NULL, words_final = 0, chars_final = 0, is_secure = 1,
-                        audio_path = NULL, audio_expires_at = NULL
-                    WHERE id = ?
-                    """, arguments: [id])
-            try db.execute(sql: "DELETE FROM edit_op WHERE dictation_id = ?", arguments: [id])
-            try db.execute(sql: "DELETE FROM correction WHERE dictation_id = ?", arguments: [id])
+            let assignments = columns.map { "\($0.0) = ?" }.joined(separator: ", ")
+            var arguments = StatementArguments(columns.map { $0.1 })
+            arguments += [id]
+            try db.execute(sql: "UPDATE dictation SET \(assignments) WHERE id = ?", arguments: arguments)
+            if db.changesCount == 0 { throw TranscriptStoreError.unknownDictation(id) }
+            try Self.scrub(db, id)
         }
         inputsChanged(notify: true)
     }
 
-    /// Secure-field rows that still point at audio: scrubbed rows from before the scrub existed, whose WAVs retention removes.
-    public func secureAudioIDs() throws -> [String] {
+    /// Drops everything a take from a secure field said: the transcript columns, word timings, edits, offered
+    /// corrections and its search entry (the `take_search_update` trigger removes it). The row stays as a stub marked
+    /// secure, so the counts that leave secure rows out read the same. The audio pointer stays; retention removes the
+    /// files and then clears it.
+    public func scrubSecureTake(_ id: String) throws {
+        try pool.write { db in try Self.scrub(db, id) }
+        inputsChanged(notify: true)
+    }
+
+    private static func scrub(_ db: Database, _ id: String) throws {
+        try db.execute(
+            sql: """
+                UPDATE dictation SET raw_text = NULL, det_text = NULL, final_text = NULL, word_timings_json = NULL,
+                    words_raw = NULL, words_final = 0, chars_final = 0, is_secure = 1
+                WHERE id = ?
+                """, arguments: [id])
+        try db.execute(sql: "DELETE FROM edit_op WHERE dictation_id = ?", arguments: [id])
+        try db.execute(sql: "DELETE FROM correction WHERE dictation_id = ?", arguments: [id])
+    }
+
+    /// Every secure-field row with its stored audio path, if any. A scrubbed take can have no pointer yet still own a
+    /// final or partial WAV, so the sweep needs all of them.
+    public func secureTakes() throws -> [(id: String, audioPath: String?)] {
         try pool.read { db in
-            try String.fetchAll(db, sql: "SELECT id FROM dictation WHERE is_secure = 1 AND audio_path IS NOT NULL")
+            try Row.fetchAll(db, sql: "SELECT id, audio_path FROM dictation WHERE is_secure = 1").map { ($0["id"], $0["audio_path"]) }
         }
     }
 

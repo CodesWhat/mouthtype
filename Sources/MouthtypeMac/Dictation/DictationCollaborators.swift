@@ -76,10 +76,13 @@ protocol DictationStoring: Sendable {
     func appendEdits(_ id: String, _ edits: [EditOp]) async throws
     /// A take from a secure field: its transcript, timings and search entry are dropped, leaving a stub row.
     func scrubSecureTake(_ id: String) async throws
+    /// Records a secure-field take's outcome and scrubs it in one transaction.
+    func finishSecureTake(_ id: String, _ record: InsertionRecord) async throws
 }
 
 extension DictationStoring {
     func scrubSecureTake(_ id: String) async throws {}
+    func finishSecureTake(_ id: String, _ record: InsertionRecord) async throws {}
 }
 
 protocol DictationArchiving: Sendable {
@@ -282,6 +285,7 @@ struct TranscriptStoreWriter: DictationStoring {
     }
     func appendEdits(_ id: String, _ edits: [EditOp]) async throws { try store.appendEdits(id, edits) }
     func scrubSecureTake(_ id: String) async throws { try store.scrubSecureTake(id) }
+    func finishSecureTake(_ id: String, _ record: InsertionRecord) async throws { try store.finishSecureTake(id, record) }
 }
 
 extension AudioArchive: DictationArchiving {

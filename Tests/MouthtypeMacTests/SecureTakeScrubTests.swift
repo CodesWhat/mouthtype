@@ -64,13 +64,36 @@ private final class WordsEngine: DictationEngine {
 
         let row = try #require(try rig.store.dictation(id: rig.session.id))
         #expect(row.rawText == nil && row.detText == nil && row.finalText == nil && row.wordTimingsJson == nil)
-        #expect(row.isSecure == true && row.audioPath == nil && row.audioExpiresAt == nil)
+        #expect(row.isSecure == true)
         #expect(row.insertOutcome == "secure discard")
         #expect(try rig.store.editOps(id: rig.session.id).isEmpty)
         #expect(try rig.store.recentTakes(limit: 10).isEmpty)
         #expect(try rig.store.recentTakes(limit: 10, query: "hunter").isEmpty)
         #expect(!FileManager.default.fileExists(atPath: rig.archive.url(for: rig.session.id).path))
         #expect(!FileManager.default.fileExists(atPath: rig.archive.partialURL(for: rig.session.id).path))
+        // The pointer waits for the sweep, which clears it once the file is confirmed gone.
+        _ = try AudioRetentionMaintenance.prune(archive: rig.archive, store: rig.store, policy: .init(), now: Date())
+        #expect(try rig.store.dictation(id: rig.session.id)?.audioPath == nil)
+    }
+
+    @Test func theSecureRefusalAndScrubLandInOneWrite() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("mouthtype-secure-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = try TranscriptStore(url: directory.appendingPathComponent("s.sqlite"))
+        try store.begin(DictationStart(id: "one", target: DictationTarget(isSecure: true)))
+        try store.recordTranscription(
+            "one",
+            TranscriptionRecord(
+                transcription: Transcription(text: "hunter", words: [WordTiming(word: "hunter", start: 0, end: 0.3, confidence: 1)], processingSeconds: 0, engineID: "t"),
+                rawText: "hunter"))
+        try store.appendEdits("one", [EditOp(stage: "cleanup", kind: .replace, fromText: "hunter", toText: "Hunter", wordDelta: 0, position: 0)])
+        try store.recordCapture("one", CaptureRecord(audioPath: "/tmp/elsewhere/one.wav"))
+        try store.finishSecureTake("one", InsertionRecord(finalText: "", method: "none", outcome: "secure discard"))
+        let row = try #require(try store.dictation(id: "one"))
+        #expect(row.status == .inserted && row.isSecure == true)
+        #expect(row.rawText == nil && row.detText == nil && row.finalText == nil && row.wordTimingsJson == nil)
+        #expect(try store.editOps(id: "one").isEmpty)
+        #expect(row.audioPath == "/tmp/elsewhere/one.wav")
     }
 
     @Test func aTakeBlockedOnlyBySecureInputIsKeptAndShowsInHome() async throws {

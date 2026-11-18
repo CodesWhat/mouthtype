@@ -115,13 +115,13 @@ import Testing
             try #expect(SavedData.indexedRowids(db) == SavedData.eligibleRowids(db))
         }
         // Their audio pointer stays until a retention sweep removes the file.
-        try #expect(store.secureAudioIDs().count == 4)
+        try #expect(store.secureTakes().filter { $0.audioPath != nil }.count == 4)
         let archive = AudioArchive(supportDirectory: directory)
         try archive.write(samples: [Float](repeating: 0.1, count: 100), id: "00000000-0000-0000-0000-000000000020")
         let removed = try AudioRetentionMaintenance.prune(archive: archive, store: store, policy: .init(), now: now)
         #expect(removed.contains("00000000-0000-0000-0000-000000000020"))
         #expect(!FileManager.default.fileExists(atPath: archive.url(for: "00000000-0000-0000-0000-000000000020").path))
-        try #expect(store.secureAudioIDs().isEmpty)
+        try #expect(store.secureTakes().allSatisfy { $0.audioPath == nil })
     }
 
     /// Shipped migrations must never be edited: a user already past one never re-runs it, so a changed body would split
