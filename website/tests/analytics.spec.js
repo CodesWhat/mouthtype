@@ -185,3 +185,87 @@ test("the download button reports the download CTA", async ({ page, analytics })
   const ctas = await waitForEvent(analytics, "cta activated");
   expect(ctas.map((event) => event.properties.cta_id)).toEqual(["download"]);
 });
+
+const ANALYTICS_CHUNK = "**/assets/analytics-*.js";
+
+test("a blocked analytics chunk does not stop the download countdown", async ({ page, browserName }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "platform", { value: "MacIntel" });
+    Object.defineProperty(navigator, "maxTouchPoints", { value: 0 });
+  });
+  const errors = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  let blocked = 0;
+  await page.route(ANALYTICS_CHUNK, (route) => {
+    blocked += 1;
+    return route.abort();
+  });
+  await page.route("**/download/file", (route) =>
+    route.fulfill({
+      status: 200,
+      headers: {
+        "content-type": "application/zip",
+        "content-disposition": 'attachment; filename="Mouthtype.zip"',
+      },
+      body: "Blocked analytics fixture",
+    }),
+  );
+  await page.clock.install();
+  await page.goto("/download/");
+  const status = page.locator("[data-download-status]");
+  await expect(status).toHaveText("Your download starts in 5 seconds.");
+  await page.clock.runFor(1000);
+  await expect(status).toHaveText("Your download starts in 4 seconds.");
+  await page.clock.runFor(4000);
+  await expect(status).toHaveText("Download requested. Use Download now to retry.");
+  expect(blocked, `${browserName} requested the analytics chunk`).toBeGreaterThan(0);
+  expect(errors).toEqual([]);
+});
+
+test("a blocked analytics chunk does not stop the homepage interactions", async ({ page }) => {
+  const errors = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  let blocked = 0;
+  await page.route(ANALYTICS_CHUNK, (route) => {
+    blocked += 1;
+    return route.abort();
+  });
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await page.clock.install();
+  await page.goto("/");
+  await page.locator(".product-preview").scrollIntoViewIfNeeded();
+  await expect(page.locator("#voice-copy")).toBeVisible();
+  await page.clock.runFor(3000);
+  await expect(page.locator("#voice-copy")).toHaveText("I'll send the first draft before lunch.");
+  expect(blocked).toBeGreaterThan(0);
+  expect(errors).toEqual([]);
+});
+
+test("web vitals go out once, by beacon, when the page is hidden", async ({
+  page,
+  analytics,
+  browserName,
+}) => {
+  test.skip(browserName !== "chromium", "beacon interception is asserted on Chromium");
+  await page.goto("/");
+  await waitForEvent(analytics, "$pageview");
+  await page.waitForFunction(() => performance.getEntriesByName("first-contentful-paint").length > 0);
+  await page.waitForTimeout(500);
+  expect(sentEvents(analytics).filter((event) => event.event === "$web_vitals")).toEqual([]);
+
+  // A real navigation cancels the beacon before Playwright can route it, so fire the lifecycle
+  // events the browser would: hidden first, then pagehide. Our listeners run ahead of PostHog's.
+  await page.evaluate(() => {
+    Object.defineProperty(document, "visibilityState", { get: () => "hidden" });
+    document.dispatchEvent(new Event("visibilitychange"));
+    window.dispatchEvent(new Event("pagehide"));
+  });
+  const [vitals] = await waitForEvent(analytics, "$web_vitals");
+  expect(vitals.properties.$web_vitals_FCP_value).toBeGreaterThan(0);
+  await page.waitForTimeout(500);
+  expect(sentEvents(analytics).filter((event) => event.event === "$web_vitals")).toHaveLength(1);
+  const beacon = analytics.find((request) =>
+    decode(request).some((event) => event.event === "$web_vitals"),
+  );
+  expect(beacon.method()).toBe("POST");
+});

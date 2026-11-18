@@ -188,31 +188,49 @@ test("posthog options keep the privacy posture", () => {
   assert.equal(typeof options.before_send, "function");
 });
 
-test("the vitals buffer emits once, when all four report or the delay runs out", () => {
+test("the vitals buffer keeps the latest value per metric and sends only on flush", () => {
   const sent = [];
-  const timers = [];
-  const buffer = createVitalsBuffer(
-    (properties) => sent.push(properties),
-    (fn) => timers.push(fn),
-    () => {},
-  );
+  const buffer = createVitalsBuffer((properties) => sent.push(properties));
   buffer.record("LCP", 1000);
   buffer.record("NOPE", 1);
   buffer.record("CLS", -1);
-  assert.equal(timers.length, 1);
+  buffer.record("FCP", Number.NaN);
   buffer.record("CLS", 0.1);
-  timers[0]();
-  assert.deepEqual(sent, [{ $web_vitals_LCP_value: 1000, $web_vitals_CLS_value: 0.1 }]);
-  buffer.record("INP", 5);
-  assert.equal(sent.length, 1);
-
-  const full = [];
-  const all = createVitalsBuffer((properties) => full.push(properties));
-  for (const name of ["CLS", "FCP", "INP", "LCP"]) all.record(name, 1);
-  assert.equal(full.length, 1);
+  assert.deepEqual(sent, [], "nothing is sent before a flush, even with all four in");
+  for (const name of ["FCP", "INP"]) buffer.record(name, 1);
+  buffer.record("LCP", 1200);
+  buffer.flush();
+  assert.deepEqual(sent, [
+    {
+      $web_vitals_LCP_value: 1200,
+      $web_vitals_CLS_value: 0.1,
+      $web_vitals_FCP_value: 1,
+      $web_vitals_INP_value: 1,
+    },
+  ]);
+  buffer.flush();
+  assert.equal(sent.length, 1, "an unchanged buffer sends nothing");
   const empty = [];
   createVitalsBuffer((properties) => empty.push(properties)).flush();
   assert.deepEqual(empty, []);
+});
+
+test("metrics arriving after the old 5s window are kept and sent once, never twice", () => {
+  const sent = [];
+  const buffer = createVitalsBuffer((properties) => sent.push(properties));
+  buffer.record("FCP", 300);
+  buffer.flush();
+  // CLS, INP and LCP report late, on interaction or page hide.
+  buffer.record("CLS", 0.05);
+  buffer.record("CLS", 0.2);
+  buffer.record("INP", 90);
+  buffer.record("LCP", 2500);
+  buffer.flush();
+  buffer.flush();
+  assert.deepEqual(sent, [
+    { $web_vitals_FCP_value: 300 },
+    { $web_vitals_CLS_value: 0.2, $web_vitals_INP_value: 90, $web_vitals_LCP_value: 2500 },
+  ]);
 });
 
 test("the generated route list matches the docs manifest", () => {
@@ -243,11 +261,7 @@ test("before_send drops every event under DNT or GPC, and passes otherwise", () 
 
 test("installVitalsFlush sends buffered CLS and INP once across visibilitychange and pagehide", () => {
   const sent = [];
-  const buffer = createVitalsBuffer(
-    (properties) => sent.push(properties),
-    () => 1,
-    () => {},
-  );
+  const buffer = createVitalsBuffer((properties) => sent.push(properties));
   buffer.record("CLS", 0.2);
   buffer.record("INP", 80);
   const doc = new EventTarget();
@@ -267,11 +281,7 @@ test("installVitalsFlush sends buffered CLS and INP once across visibilitychange
 
   remove();
   const later = [];
-  const buffer2 = createVitalsBuffer(
-    (p) => later.push(p),
-    () => 1,
-    () => {},
-  );
+  const buffer2 = createVitalsBuffer((p) => later.push(p));
   buffer2.record("CLS", 0.1);
   const remove2 = installVitalsFlush(win, buffer2);
   remove2();

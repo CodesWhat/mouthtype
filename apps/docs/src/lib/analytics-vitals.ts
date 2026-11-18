@@ -1,36 +1,30 @@
 import { WEB_VITAL_NAMES } from "./analytics-contract.ts";
 
-const WEB_VITALS_FLUSH_DELAY_MS = 5000;
-
-type Timer = unknown;
-
 /**
- * Collects CLS, FCP, INP and LCP for one page load and emits a single properties object, once:
- * when all four have reported, when the flush delay after the first one runs out, or on flush().
+ * Collects CLS, FCP, INP and LCP for one page load, keeping the latest value per metric. CLS, INP
+ * and LCP keep changing until the page is hidden, so nothing is sent until flush(), which the
+ * lifecycle listeners call. A flush emits only the metrics that are new or changed since the last
+ * one, so no value is sent twice and none is dropped.
  */
-export function createVitalsBuffer(
-  emit: (properties: Record<string, number>) => void,
-  schedule: (callback: () => void, delayMs: number) => Timer = setTimeout,
-  cancel: (timer: Timer) => void = (timer) => clearTimeout(timer as ReturnType<typeof setTimeout>),
-) {
-  const metrics: Record<string, number> = {};
+export function createVitalsBuffer(emit: (properties: Record<string, number>) => void) {
+  const latest: Record<string, number> = {};
+  const sent: Record<string, number> = {};
   const names: readonly string[] = WEB_VITAL_NAMES;
-  let timer: Timer;
-  let sent = false;
 
   function flush() {
-    if (sent) return;
-    sent = true;
-    if (timer !== undefined) cancel(timer);
-    if (Object.keys(metrics).length > 0) emit({ ...metrics });
+    const changed: Record<string, number> = {};
+    for (const [key, value] of Object.entries(latest)) {
+      if (sent[key] !== value) changed[key] = value;
+    }
+    if (Object.keys(changed).length === 0) return;
+    Object.assign(sent, changed);
+    emit(changed);
   }
 
   function record(name: string, value: number) {
-    if (sent || !names.includes(name)) return;
+    if (!names.includes(name)) return;
     if (typeof value !== "number" || !Number.isFinite(value) || value < 0) return;
-    metrics[`$web_vitals_${name}_value`] = value;
-    if (Object.keys(metrics).length === names.length) flush();
-    else if (timer === undefined) timer = schedule(flush, WEB_VITALS_FLUSH_DELAY_MS);
+    latest[`$web_vitals_${name}_value`] = value;
   }
 
   return { record, flush };
@@ -38,24 +32,33 @@ export function createVitalsBuffer(
 
 type FlushTarget = {
   document: Pick<Document, "addEventListener" | "removeEventListener" | "visibilityState">;
-  addEventListener: (type: "pagehide", listener: () => void) => void;
-  removeEventListener: (type: "pagehide", listener: () => void) => void;
+  addEventListener: (
+    type: "pagehide",
+    listener: () => void,
+    options?: AddEventListenerOptions,
+  ) => void;
+  removeEventListener: (
+    type: "pagehide",
+    listener: () => void,
+    options?: AddEventListenerOptions,
+  ) => void;
 };
 
 /**
  * Flushes on visibilitychange→hidden and on pagehide, since some browsers fire only one of them
- * when a page is closed or navigated away. The buffer sends once, so firing both is safe.
- * Returns a cleanup function.
+ * when a page is closed or navigated away. The buffer never repeats a value, so firing both is
+ * safe. The listeners are capturing so they run before PostHog's own unload handler. Returns a
+ * cleanup function.
  */
 export function installVitalsFlush(win: FlushTarget, vitals: { flush: () => void }) {
   const onHidden = () => {
     if (win.document.visibilityState === "hidden") vitals.flush();
   };
   const onPageHide = () => vitals.flush();
-  win.document.addEventListener("visibilitychange", onHidden);
-  win.addEventListener("pagehide", onPageHide);
+  win.document.addEventListener("visibilitychange", onHidden, { capture: true });
+  win.addEventListener("pagehide", onPageHide, { capture: true });
   return () => {
-    win.document.removeEventListener("visibilitychange", onHidden);
-    win.removeEventListener("pagehide", onPageHide);
+    win.document.removeEventListener("visibilitychange", onHidden, { capture: true });
+    win.removeEventListener("pagehide", onPageHide, { capture: true });
   };
 }

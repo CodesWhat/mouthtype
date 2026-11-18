@@ -156,3 +156,5 @@ new IntersectionObserver(
   },
   { threshold: 0.4 },
 ).observe(card);
+
+import("./analytics.js").catch(() => {});

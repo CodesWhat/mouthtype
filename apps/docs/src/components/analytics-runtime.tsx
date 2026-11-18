@@ -39,8 +39,18 @@ export function AnalyticsRuntime() {
   const vitals = useRef<ReturnType<typeof createVitalsBuffer> | null>(null);
 
   useEffect(() => {
-    if (!start()) return;
-    vitals.current = createVitalsBuffer((properties) => posthog.capture("$web_vitals", properties));
+    // Vitals are only sent while the page is going away. PostHog's own unload handler may already
+    // have drained its queue by then, so they go out by beacon, and our listeners are registered
+    // (capturing) before posthog.init so they run first.
+    vitals.current = createVitalsBuffer((properties) =>
+      posthog.capture("$web_vitals", properties, { transport: "sendBeacon", send_instantly: true }),
+    );
+    const buffer = vitals.current;
+    const removeFlush = installVitalsFlush(window, buffer);
+    if (!start()) {
+      removeFlush();
+      return;
+    }
     // Delegated, so links inside the rendered Markdown are covered too. An explicit data-cta wins
     // over the href mapping.
     const onClick = (event: MouseEvent) => {
@@ -50,9 +60,7 @@ export function AnalyticsRuntime() {
         link.dataset.cta ?? ctaIdForHref(link.getAttribute("href") ?? "", location.origin),
       );
     };
-    const buffer = vitals.current;
     document.addEventListener("click", onClick, true);
-    const removeFlush = installVitalsFlush(window, buffer);
     return () => {
       document.removeEventListener("click", onClick, true);
       removeFlush();

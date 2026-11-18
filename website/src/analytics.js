@@ -1,3 +1,7 @@
 import { startAnalytics } from "./analytics/client.js";
 
-startAnalytics();
+try {
+  startAnalytics();
+} catch {
+  // Analytics must never break the page.
+}

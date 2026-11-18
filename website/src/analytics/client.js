@@ -38,16 +38,21 @@ function installCtaTracking(doc, origin) {
 
 export function startAnalytics(win = window) {
   if (isOptedOut(win.navigator)) return false;
+  // Vitals are only sent while the page is going away. PostHog's own unload handler may already
+  // have drained its queue by then, so they go out by beacon, and our listeners are registered
+  // (capturing) before init so they run first.
+  const vitals = createVitalsBuffer((properties) =>
+    posthog.capture("$web_vitals", properties, { transport: "sendBeacon", send_instantly: true }),
+  );
+  installVitalsFlush(win, vitals);
   posthog.init(POSTHOG_PROJECT_KEY, createPostHogOptions(win.navigator));
   posthog.capture("$pageview");
 
-  const vitals = createVitalsBuffer((properties) => posthog.capture("$web_vitals", properties));
   const report = ({ name, value }) => vitals.record(name, value);
   onCLS(report);
   onFCP(report);
   onINP(report);
   onLCP(report);
-  installVitalsFlush(win, vitals);
 
   installCtaTracking(win.document, win.location.origin);
   return true;

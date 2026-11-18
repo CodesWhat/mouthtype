@@ -118,3 +118,29 @@ test("a Global Privacy Control signal turns analytics off", async ({ page }) => 
   await page.waitForTimeout(500);
   expect(page.sent).toEqual([]);
 });
+
+test("web vitals go out once, by beacon, when the page is hidden", async ({
+  page,
+  browserName,
+}) => {
+  test.skip(browserName !== "chromium", "beacon interception is asserted on Chromium");
+  await page.goto("/");
+  await waitFor(page, "$pageview");
+  await page.waitForFunction(
+    () => performance.getEntriesByName("first-contentful-paint").length > 0,
+  );
+  await page.waitForTimeout(500);
+  expect(events(page).filter((event) => event.event === "$web_vitals")).toEqual([]);
+
+  // A real navigation cancels the beacon before Playwright can route it, so fire the lifecycle
+  // events the browser would: hidden first, then pagehide. Our listeners run ahead of PostHog's.
+  await page.evaluate(() => {
+    Object.defineProperty(document, "visibilityState", { get: () => "hidden" });
+    document.dispatchEvent(new Event("visibilitychange"));
+    window.dispatchEvent(new Event("pagehide"));
+  });
+  const [vitals] = await waitFor(page, "$web_vitals");
+  expect(vitals.properties.$web_vitals_FCP_value).toBeGreaterThan(0);
+  await page.waitForTimeout(500);
+  expect(events(page).filter((event) => event.event === "$web_vitals")).toHaveLength(1);
+});
