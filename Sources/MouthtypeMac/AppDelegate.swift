@@ -36,7 +36,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             }, retrySpeech: { [weak self] in self?.engineHost.start() },
             inputSettings: { [weak self] in self?.settingsWindow.present(destination: .settings(.health)) }))
     private let fontChooser = TextFontMenuSection()
-    private lazy var appUpdater: AppUpdater = AppUpdater(
+    lazy var appUpdater: AppUpdater = AppUpdater(
         driver: UpdateLaunchPolicy.allows(
             arguments: CommandLine.arguments, bundleURL: Bundle.main.bundleURL,
             info: Bundle.main.infoDictionary ?? [:]) ? SparkleDriver() : nil,
@@ -689,6 +689,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             return .terminateLater
         }
         guard Self.mayQuit(allowsTermination: appUpdater.allowsTermination, resolveDraft: { signalShutdown ? saveDraftsForSignal() : (builtSettingsWindow?.resolveDraftForQuit() ?? true) }) else {
+            appUpdater.installWasDeferred()
             return .terminateCancel
         }
         isTerminating = true
@@ -700,7 +701,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                 await inserter?.prepareForTermination()
             },
             reply: { [self] ready in
-                if !ready { isTerminating = false }
+                if !ready { isTerminating = false; appUpdater.installWasDeferred() }
                 // The draft the user agreed to discard goes only once the quit is certain; a delayed quit keeps it.
                 if ready, !signalShutdown { builtSettingsWindow?.discardDraftForQuit() }
                 replyToTermination(sender, ready)

@@ -151,6 +151,49 @@ import Testing
         #expect(!updater.blocksNewWork)
     }
 
+    @Test func aCancelledQuitAdmitsRecordingAgainAndKeepsTheInstallOnOffer() throws {
+        let activity = Activity(), driver = Driver()
+        let updater = AppUpdater(driver: driver, activity: { activity.value })
+        updater.start()
+        #expect(!updater.postponeInstallation {})
+        updater.updateWillRelaunch()
+        #expect(updater.blocksNewWork && !updater.installDeferred && !updater.canCheckForUpdates)
+        updater.installWasDeferred()
+        #expect(!updater.blocksNewWork)
+        activity.value = .recording
+        updater.refreshActivity()
+        #expect(!updater.blocksNewWork && updater.installDeferred && updater.hasUpdate)
+        activity.value = .idle
+        updater.refreshActivity()
+        // Nothing holds the next quit, which is what lets Sparkle's waiting installer finish.
+        #expect(updater.allowsTermination && updater.installDeferred)
+        #expect(updater.statusText == "The update is ready. It installs the next time you quit Mouthtype.")
+        let section = UpdateAvailableMenuSection(updater: updater)
+        let item = try #require(section.items.first)
+        #expect(item.title == "Update Available…" && item.isEnabled)
+        // Asking again hands back to Sparkle's retry window and leaves the update on offer.
+        _ = item.target?.perform(item.action, with: item)
+        #expect(driver.checks == 1 && updater.hasUpdate && updater.installDeferred)
+        updater.updateFinished(error: nil)
+        #expect(!updater.installDeferred && !updater.hasUpdate && !updater.blocksNewWork)
+    }
+
+    @Test func aCancelledQuitWithNoInstallUnderwayChangesNothing() {
+        let activity = Activity(), driver = Driver()
+        let updater = AppUpdater(driver: driver, activity: { activity.value })
+        updater.start()
+        updater.installWasDeferred()
+        #expect(!updater.installDeferred && !updater.hasUpdate && !updater.blocksNewWork)
+        activity.value = .recording
+        var installed = 0
+        #expect(updater.postponeInstallation { installed += 1 })
+        updater.installWasDeferred()
+        #expect(!updater.installDeferred && !updater.allowsTermination)
+        activity.value = .idle
+        updater.refreshActivity()
+        #expect(installed == 1 && updater.blocksNewWork)
+    }
+
     @Test func activityIncludesRecoveryAndMissingControllerIsNotIdle() {
         #expect(UpdateActivity.resolve(phase: nil, recovering: false) == .starting)
         #expect(UpdateActivity.resolve(phase: .idle, recovering: false, transcribingFile: true) == .fileTranscription)
