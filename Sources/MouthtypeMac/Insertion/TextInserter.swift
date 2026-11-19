@@ -191,7 +191,6 @@ public final class TextInserter {
         let moved = startFocus?.hasChanged(to: now) ?? false
         if DeliveryDecision.decide(now: now, secureInput: secureInput) == .discardSecure {
             let blockedBySecureInput = secureInput && !now.isSecure
-            now.isSecure = now.isSecure || secureInput
             return DeliveryResult(
                 method: .none, outcome: .secureDiscard, focusMoved: moved, target: now, finalText: "",
                 secureInputBlocked: blockedBySecureInput)
@@ -223,11 +222,10 @@ public final class TextInserter {
                     method: .none, outcome: .failed("Paste canceled"),
                     focusMoved: moved, target: now, finalText: text)
             }
-            var checked = focus.snapshot()
+            let checked = focus.snapshot()
             let checkedSecureInput = focus.isSecureInputEnabled
             if DeliveryDecision.decide(now: checked, secureInput: checkedSecureInput) == .discardSecure {
                 let blockedBySecureInput = checkedSecureInput && !checked.isSecure
-                checked.isSecure = checked.isSecure || checkedSecureInput
                 return DeliveryResult(
                     method: .none, outcome: .secureDiscard,
                     focusMoved: moved || now.hasChanged(to: checked), target: checked, finalText: "",
@@ -255,7 +253,6 @@ public final class TextInserter {
         switch DeliveryDecision.decide(now: now, secureInput: secureInput) {
         case .discardSecure:
             let blockedBySecureInput = secureInput && !now.isSecure
-            now.isSecure = now.isSecure || secureInput
             Log.app.info("secure field focused; transcript discarded")
             return DeliveryResult(
                 method: .none, outcome: .secureDiscard, focusMoved: moved, target: now, finalText: "",
@@ -320,7 +317,6 @@ public final class TextInserter {
             }
             if DeliveryDecision.decide(now: checked, secureInput: checkedSecureInput) == .discardSecure {
                 let blockedBySecureInput = checkedSecureInput && !checked.isSecure
-                checked.isSecure = checked.isSecure || checkedSecureInput
                 return DeliveryResult(
                     method: .none, outcome: .secureDiscard,
                     focusMoved: moved || now.hasChanged(to: checked), target: checked, finalText: "",

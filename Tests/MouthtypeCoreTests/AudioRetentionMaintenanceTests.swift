@@ -271,3 +271,74 @@ import Testing
         #expect(try store.dictation(id: "moved")?.audioPath != nil)
     }
 }
+
+@Suite struct SecureAudioSweepTests {
+    private func rig() throws -> (dir: URL, store: TranscriptStore, archive: AudioArchive) {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("mouthtype-secure-sweep-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return (dir, try TranscriptStore(url: dir.appendingPathComponent("store.sqlite")), AudioArchive(supportDirectory: dir))
+    }
+
+    @Test func removesASecureTakesWavWhenThePointerIsNull() throws {
+        let (dir, store, archive) = try rig()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try store.begin(DictationStart(id: "sec", target: DictationTarget(isSecure: true)))
+        try store.begin(DictationStart(id: "plain"))
+        try archive.write(samples: [0.1, 0.2], id: "sec")
+        try archive.write(samples: [0.1, 0.2], id: "plain")
+        try store.recordCapture("plain", CaptureRecord(audioPath: archive.url(for: "plain").path))
+        try store.recordInsertion("plain", InsertionRecord(finalText: "Plain."))
+        _ = try AudioRetentionMaintenance.prune(archive: archive, store: store, policy: .init(), now: Date())
+        #expect(!FileManager.default.fileExists(atPath: archive.url(for: "sec").path))
+        #expect(FileManager.default.fileExists(atPath: archive.url(for: "plain").path))
+        #expect(try store.dictation(id: "plain")?.audioPath == archive.url(for: "plain").path)
+    }
+
+    @Test func removesAPartialWavForASecureId() throws {
+        let (dir, store, archive) = try rig()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try store.begin(DictationStart(id: "sec", target: DictationTarget(isSecure: true)))
+        try archive.appendPartial(samples: [Float](repeating: 0.2, count: 2000), id: "sec")
+        try store.begin(DictationStart(id: "other"))
+        try archive.appendPartial(samples: [Float](repeating: 0.2, count: 2000), id: "other")
+        _ = try AudioRetentionMaintenance.prune(archive: archive, store: store, policy: .init(), now: Date())
+        #expect(!FileManager.default.fileExists(atPath: archive.partialURL(for: "sec").path))
+        #expect(FileManager.default.fileExists(atPath: archive.partialURL(for: "other").path))
+    }
+
+    @Test func removesAStoredPathOutsideTheArchiveAndClearsItsPointer() throws {
+        let (dir, store, archive) = try rig()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let old = dir.appendingPathComponent("old-location")
+        try FileManager.default.createDirectory(at: old, withIntermediateDirectories: true)
+        let file = old.appendingPathComponent("sec.wav")
+        try Data([1, 2, 3]).write(to: file)
+        try store.begin(DictationStart(id: "sec", target: DictationTarget(isSecure: true)))
+        try store.recordCapture("sec", CaptureRecord(audioPath: file.path))
+        _ = try AudioRetentionMaintenance.prune(archive: archive, store: store, policy: .init(), now: Date())
+        #expect(!FileManager.default.fileExists(atPath: file.path))
+        #expect(try store.dictation(id: "sec")?.audioPath == nil)
+    }
+
+    @Test func keepsThePointerWhenTheStoredFileCantBeDeleted() throws {
+        let (dir, store, archive) = try rig()
+        let old = dir.appendingPathComponent("locked")
+        try FileManager.default.createDirectory(at: old, withIntermediateDirectories: true)
+        let file = old.appendingPathComponent("sec.wav")
+        try Data([1, 2, 3]).write(to: file)
+        try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: old.path)
+        defer {
+            try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: old.path)
+            try? FileManager.default.removeItem(at: dir)
+        }
+        try store.begin(DictationStart(id: "sec", target: DictationTarget(isSecure: true)))
+        try store.recordCapture("sec", CaptureRecord(audioPath: file.path))
+        _ = try AudioRetentionMaintenance.prune(archive: archive, store: store, policy: .init(), now: Date())
+        #expect(FileManager.default.fileExists(atPath: file.path))
+        #expect(try store.dictation(id: "sec")?.audioPath == file.path)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: old.path)
+        _ = try AudioRetentionMaintenance.prune(archive: archive, store: store, policy: .init(), now: Date())
+        #expect(!FileManager.default.fileExists(atPath: file.path))
+        #expect(try store.dictation(id: "sec")?.audioPath == nil)
+    }
+}

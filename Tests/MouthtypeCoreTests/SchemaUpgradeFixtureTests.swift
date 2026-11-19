@@ -33,18 +33,22 @@ import Testing
 
         let before = try SavedData.state(url)
         #expect(before.rows == ["dictation": 27, "edit_op": 4, "correction": 3])
+        let beforeOrdinary = try SavedData.state(url, excludingSecure: true)
         let appliedBefore = try DatabaseQueue(path: url.path).read { try TranscriptStore.migrator.appliedMigrations($0) }
         #expect(appliedBefore == fixture.applied)
 
         let store = try TranscriptStore(url: url)
 
+        // Every row survives and every ordinary row is byte for byte intact. Secure-field rows stay as scrubbed stubs.
         let after = try SavedData.state(url)
-        #expect(after.rows == before.rows)
-        #expect(after.digests == before.digests)
+        #expect(after.rows["dictation"] == before.rows["dictation"])
+        let afterOrdinary = try SavedData.state(url, excludingSecure: true)
+        #expect(afterOrdinary.rows == beforeOrdinary.rows)
+        #expect(afterOrdinary.digests == beforeOrdinary.digests)
 
         try store.pool.read { db in
             let migrator = TranscriptStore.migrator
-            try #expect(migrator.appliedMigrations(db) == ["v1", "v2", "v3", "v4-history-search"])
+            try #expect(migrator.appliedMigrations(db) == ["v1", "v2", "v3", "v4-history-search", "v5-scrub-secure-takes"])
             try #expect(migrator.appliedMigrations(db) == migrator.migrations)
             try #expect(!migrator.hasBeenSuperseded(db))
             let eligible = try SavedData.eligibleRowids(db)
@@ -73,6 +77,51 @@ import Testing
         #expect(interrupted.status == .failed)
         #expect(interrupted.errorMessage == DictationRecovery.interruptedMessage)
         try #expect(store.unfinished(from: now.addingTimeInterval(-DictationRecovery.window), before: now).isEmpty)
+    }
+
+    /// Secure-field rows from before the scrub, including ones a stuck Secure Input marked, lose their text everywhere.
+    @Test func upgradeScrubsEverySecureRowAndItsSearchEntry() throws {
+        let directory = try SavedData.newTemporaryDirectory("scrub")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let url = directory.appendingPathComponent("mouthtype.sqlite")
+        try SavedData.loadFixture("schema-v0.10.0.sql", into: url)
+        try DatabaseQueue(path: url.path).write { db in
+            try db.execute(
+                sql: """
+                    UPDATE dictation SET word_timings_json = '[{"word":"omega"}]', det_text = 'omega det',
+                        audio_path = '/tmp/secure.wav' WHERE is_secure = 1;
+                    INSERT INTO edit_op (dictation_id, stage, kind, from_text, to_text, word_delta, position)
+                        VALUES ('00000000-0000-0000-0000-000000000020', 'dictionary', 'replace', 'omga', 'omega', 0, 0);
+                    INSERT INTO correction (dictation_id, kind, heard, corrected, accepted, created_at)
+                        VALUES ('00000000-0000-0000-0000-000000000020', 'remember', 'omga', 'omega', NULL, 1791721300.0);
+                    """)
+        }
+        let secureCount = try DatabaseQueue(path: url.path).read { try Int.fetchOne($0, sql: "SELECT COUNT(*) FROM dictation WHERE is_secure = 1") }
+        #expect(secureCount == 4)
+
+        let store = try TranscriptStore(url: url)
+
+        try store.pool.read { db in
+            let leftovers = try Int.fetchOne(
+                db,
+                sql: """
+                    SELECT COUNT(*) FROM dictation WHERE is_secure = 1 AND (raw_text IS NOT NULL OR det_text IS NOT NULL
+                        OR final_text IS NOT NULL OR word_timings_json IS NOT NULL OR words_final != 0)
+                    """)
+            #expect(leftovers == 0)
+            try #expect(Int.fetchOne(db, sql: "SELECT COUNT(*) FROM dictation WHERE is_secure = 1") == 4)
+            try #expect(Int.fetchOne(db, sql: "SELECT COUNT(*) FROM edit_op WHERE dictation_id = '00000000-0000-0000-0000-000000000020'") == 0)
+            try #expect(Int.fetchOne(db, sql: "SELECT COUNT(*) FROM correction WHERE dictation_id = '00000000-0000-0000-0000-000000000020'") == 0)
+            try #expect(SavedData.indexedRowids(db) == SavedData.eligibleRowids(db))
+        }
+        // Their audio pointer stays until a retention sweep removes the file.
+        try #expect(store.secureTakes().filter { $0.audioPath != nil }.count == 4)
+        let archive = AudioArchive(supportDirectory: directory)
+        try archive.write(samples: [Float](repeating: 0.1, count: 100), id: "00000000-0000-0000-0000-000000000020")
+        let removed = try AudioRetentionMaintenance.prune(archive: archive, store: store, policy: .init(), now: now)
+        #expect(removed.contains("00000000-0000-0000-0000-000000000020"))
+        #expect(!FileManager.default.fileExists(atPath: archive.url(for: "00000000-0000-0000-0000-000000000020").path))
+        try #expect(store.secureTakes().allSatisfy { $0.audioPath == nil })
     }
 
     /// Shipped migrations must never be edited: a user already past one never re-runs it, so a changed body would split
@@ -144,7 +193,7 @@ import Testing
         try older.migrate(pool)
         try pool.read { db in
             try #expect(older.hasBeenSuperseded(db))
-            try #expect(older.appliedIdentifiers(db) == ["v1", "v2", "v3", "v4-history-search"])
+            try #expect(older.appliedIdentifiers(db) == ["v1", "v2", "v3", "v4-history-search", "v5-scrub-secure-takes"])
         }
         try pool.write { db in
             try db.execute(

@@ -56,7 +56,8 @@ public struct DeliveryResult: Sendable {
     public var storeOutcome: String {
         switch outcome {
         case .unknown, .partialPaste: "unknown"
-        case .secureDiscard: "secure discard"
+        // Secure Input alone blocks the paste: the take is kept, as one that never landed.
+        case .secureDiscard: secureInputBlocked ? "not landed" : "secure discard"
         case .failed: "not landed"
         }
     }

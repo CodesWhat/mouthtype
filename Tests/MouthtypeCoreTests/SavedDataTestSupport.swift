@@ -12,7 +12,8 @@ enum SavedData {
         var digests: [String: String]
     }
 
-    static func state(_ url: URL) throws -> State {
+    /// `excludingSecure` leaves out secure-field rows and what hangs off them: the store scrubs those on open.
+    static func state(_ url: URL, excludingSecure: Bool = false) throws -> State {
         return try DatabaseQueue(path: url.path).read { db in
             let schema = try String.fetchAll(db, sql: "SELECT type || ':' || name || ':' || COALESCE(sql, '') FROM sqlite_master ORDER BY type, name")
             var counts: [String: Int] = [:]
@@ -20,7 +21,10 @@ enum SavedData {
             for table in ["dictation", "edit_op", "correction"] {
                 var digest = SHA256()
                 var count = 0
-                let cursor = try Row.fetchCursor(db, sql: "SELECT * FROM \(table) ORDER BY id")
+                let secure = "SELECT id FROM dictation WHERE COALESCE(is_secure, 0) = 1"
+                let filter =
+                    !excludingSecure ? "" : table == "dictation" ? "WHERE COALESCE(is_secure, 0) = 0" : "WHERE dictation_id NOT IN (\(secure))"
+                let cursor = try Row.fetchCursor(db, sql: "SELECT * FROM \(table) \(filter) ORDER BY id")
                 while let row = try cursor.next() {
                     count += 1
                     for value in row.databaseValues {

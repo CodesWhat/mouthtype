@@ -154,7 +154,7 @@ import Testing
         }
         #expect(tables.contains("dictation") && tables.contains("edit_op"))
         #expect(indexes.contains("dictation_local_day") && indexes.contains("dictation_started_at") && indexes.contains("dictation_status"))
-        #expect(migrations == ["v1", "v2", "v3", "v4-history-search"])
+        #expect(migrations == ["v1", "v2", "v3", "v4-history-search", "v5-scrub-secure-takes"])
         #expect(indexes.contains("dictation_stats"))
         #expect(tables.contains("correction"))
         for column in [
@@ -242,7 +242,7 @@ import Testing
         let reopened = try TranscriptStore(url: dir.appendingPathComponent("nested/mouthtype.sqlite"))
         #expect(try reopened.dictation(id: id) == before)
         let migrations = try reopened.pool.read { try String.fetchAll($0, sql: "SELECT identifier FROM grdb_migrations") }
-        #expect(migrations == ["v1", "v2", "v3", "v4-history-search"])
+        #expect(migrations == ["v1", "v2", "v3", "v4-history-search", "v5-scrub-secure-takes"])
     }
 
     @Test func stagedLifecycleRoundTrips() throws {
