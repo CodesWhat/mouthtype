@@ -1,5 +1,6 @@
 import Foundation
 import GRDB
+import Synchronization
 
 /// What opening the history database came to. `store` is nil only when `failure` is set.
 public struct StoreOpenOutcome: Sendable {
@@ -28,6 +29,19 @@ public struct StoreOpenOutcome: Sendable {
     }
 }
 
+/// What an open is doing that a quit must not cut short. The open runs off the main thread; the app reads this from the main one.
+public final class StoreOpenActivity: Sendable {
+    private let quarantining = Mutex(false)
+
+    public init() {}
+
+    /// True while the damaged database, its -wal and -shm and the audio folder are being renamed aside. Exiting part way
+    /// would split them; everything else an open does is a read or a transaction SQLite rolls back.
+    public var isQuarantining: Bool { quarantining.withLock { $0 } }
+
+    public func setQuarantining(_ active: Bool) { quarantining.withLock { $0 = active } }
+}
+
 public enum TranscriptStoreOpener {
     public static let busyRetryDelay: TimeInterval = 0.5
 
@@ -40,6 +54,7 @@ public enum TranscriptStoreOpener {
         retryDelay: TimeInterval = busyRetryDelay,
         now: () -> Date = Date.init,
         sleep: (TimeInterval) -> Void = { Thread.sleep(forTimeInterval: $0) },
+        activity: StoreOpenActivity? = nil,
         opener: (URL) throws -> TranscriptStore = { try TranscriptStore(url: $0) },
         mover: (URL, URL) throws -> Void = { try FileManager.default.moveItem(at: $0, to: $1) }
     ) -> StoreOpenOutcome {
@@ -54,7 +69,10 @@ public enum TranscriptStoreOpener {
         if isDamaged(lastError) {
             let audio = audioDirectory ?? url.deletingLastPathComponent().appendingPathComponent("audio", isDirectory: true)
             let moved: Quarantined
-            switch quarantine(url, audio: audio, at: now(), move: mover) {
+            activity?.setQuarantining(true)
+            let quarantined = quarantine(url, audio: audio, at: now(), move: mover)
+            activity?.setQuarantining(false)
+            switch quarantined {
             case .success(let result): moved = result
             case .failure(let failure):
                 var text = "the damaged file couldn't be set aside (\(describe(failure.error)))"

@@ -37,6 +37,46 @@ import Testing
         _ = try outcome.store?.stats(now: Date())
     }
 
+    @Test func theActivityFlagCoversEveryQuarantineMoveAndNothingElse() throws {
+        let dir = try Self.makeDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let url = dir.appendingPathComponent("mouthtype.sqlite")
+        try Data("junk that is not a database, long enough to look wrong".utf8).write(to: url)
+        try Data("wal".utf8).write(to: URL(fileURLWithPath: url.path + "-wal"))
+        let activity = StoreOpenActivity()
+        var duringMoves: [Bool] = []
+        var duringOpens: [Bool] = []
+        let outcome = TranscriptStoreOpener.open(
+            url: url, activity: activity,
+            opener: {
+                duringOpens.append(activity.isQuarantining)
+                return try TranscriptStore(url: $0)
+            },
+            mover: {
+                duringMoves.append(activity.isQuarantining)
+                try FileManager.default.moveItem(at: $0, to: $1)
+            })
+        #expect(outcome.quarantinedTo != nil)
+        #expect(duringMoves.count >= 2)
+        #expect(duringMoves.allSatisfy { $0 })
+        #expect(duringOpens == [false, false])
+        #expect(!activity.isQuarantining)
+    }
+
+    @Test func theActivityFlagClearsWhenTheQuarantineFails() throws {
+        let dir = try Self.makeDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let url = dir.appendingPathComponent("mouthtype.sqlite")
+        try Data("junk".utf8).write(to: url)
+        let activity = StoreOpenActivity()
+        let outcome = TranscriptStoreOpener.open(
+            url: url, activity: activity,
+            opener: { _ in throw DatabaseError(resultCode: .SQLITE_NOTADB, message: "file is not a database") },
+            mover: { _, _ in throw CocoaError(.fileWriteNoPermission) })
+        #expect(outcome.failure != nil)
+        #expect(!activity.isQuarantining)
+    }
+
     @Test func quarantineMovesTheWalAndShmAlongside() throws {
         let dir = try Self.makeDir()
         defer { try? FileManager.default.removeItem(at: dir) }
