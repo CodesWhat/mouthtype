@@ -1,6 +1,7 @@
 import FluidAudio
 import Foundation
 import Testing
+import WhisperKit
 @testable import MouthtypeCore
 
 @Suite struct ModelPinsTests {
@@ -123,6 +124,11 @@ import Testing
     /// A model folder with Hub's per-file sidecars, in the format `HubApi.writeDownloadMetadata` writes.
     private func makeCache(variant: String, revision: String = ModelPins.whisperKit.revision) throws -> (root: URL, folder: String) {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("whisper-cache-\(UUID().uuidString)", isDirectory: true)
+        return (root, try Self.writeCache(root: root, variant: variant, revision: revision))
+    }
+
+    @discardableResult
+    private static func writeCache(root: URL, variant: String, revision: String = ModelPins.whisperKit.revision) throws -> String {
         let folder = try #require(WhisperModelFetch.catalogFolders[variant])
         for file in try #require(ModelPins.whisperKitFiles[variant]) {
             let url = root.appending(path: folder).appending(path: file)
@@ -132,14 +138,15 @@ import Testing
             try FileManager.default.createDirectory(at: sidecar.deletingLastPathComponent(), withIntermediateDirectories: true)
             try "\(revision)\n4b37ac79e4370895417e0c9a1b125c39f3943a09\n1791818233.918445\n".write(to: sidecar, atomically: true, encoding: .utf8)
         }
-        return (root, folder)
+        return folder
     }
 
     private static func sidecar(root: URL, folder: String, file: String) -> URL {
         root.appending(path: ".cache/huggingface/download").appending(path: folder).appending(path: file + ".metadata")
     }
 
-    /// Resolves `variant` against `root` and reports whether the pinned snapshot had to run.
+    /// Resolves `variant` against `root` and reports whether the pinned snapshot had to run. The snapshot stands in for a
+    /// real download: it leaves every file and sidecar at the pin.
     private func resolve(variant: String, root: URL) async throws -> (folder: URL, snapshots: [String]) {
         let seen = Seen()
         let folder = try await WhisperModelFetch.download(
@@ -148,6 +155,7 @@ import Testing
             listFiles: { _, _ in throw URLError(.notConnectedToInternet) },
             snapshot: { globs, revision in
                 await seen.record("\(globs)@\(revision)")
+                try Self.writeCache(root: root, variant: variant, revision: revision)
                 return root
             }
         )
@@ -203,6 +211,35 @@ import Testing
         let (root, _) = try makeCache(variant: WhisperEngine.turboVariant, revision: String(repeating: "c", count: 40))
         defer { try? FileManager.default.removeItem(at: root) }
         #expect(try await resolve(variant: WhisperEngine.turboVariant, root: root).snapshots.count == 1)
+    }
+
+    @Test func anOlderCacheTheSnapshotAcceptsOfflineIsNotLoaded() async throws {
+        for (variant, _) in Self.catalogFolders {
+            let (root, _) = try makeCache(variant: variant, revision: String(repeating: "c", count: 40))
+            defer { try? FileManager.default.removeItem(at: root) }
+            await #expect(throws: WhisperError.self) {
+                _ = try await WhisperModelFetch.download(
+                    variant: variant,
+                    cacheRoot: root,
+                    listFiles: { _, _ in throw URLError(.notConnectedToInternet) },
+                    snapshot: { _, _ in root }
+                )
+            }
+        }
+    }
+
+    @Test func aSnapshotThatLeavesAFileMissingIsNotLoaded() async throws {
+        let (root, folder) = try makeCache(variant: WhisperEngine.smallEnVariant)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.removeItem(at: root.appending(path: folder).appending(path: "config.json"))
+        await #expect(throws: WhisperError.self) {
+            _ = try await WhisperModelFetch.download(
+                variant: WhisperEngine.smallEnVariant,
+                cacheRoot: root,
+                listFiles: { _, _ in [] },
+                snapshot: { _, _ in root }
+            )
+        }
     }
 
     @Test func aMissingSidecarGoesToThePinnedSnapshot() async throws {

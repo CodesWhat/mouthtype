@@ -138,14 +138,21 @@ enum WhisperModelFetch {
         // snapshot can't be relied on for that: it validates locally only once its path monitor reports no connection, and
         // that check doesn't compare the cached commit with the requested one.
         if let folder = catalogFolders[variant] {
-            if let cacheRoot, revision == ModelPins.whisperKit.revision, let files = ModelPins.whisperKitFiles[variant],
-                let cached = cachedFolder(root: cacheRoot, folder: folder, files: files, revision: revision)
-            {
-                return cached
+            var pinnedCache: (@Sendable () -> URL?)?
+            if let cacheRoot, revision == ModelPins.whisperKit.revision, let files = ModelPins.whisperKitFiles[variant] {
+                pinnedCache = { cachedFolder(root: cacheRoot, folder: folder, files: files, revision: revision) }
             }
+            if let cached = pinnedCache?() { return cached }
             // Anything missing or from another commit goes to the pinned snapshot, which downloads or repairs it. It skips
             // the listing, a separate request the exact folder doesn't need.
             let root = try await snapshot(["\(folder)/*"], revision)
+            // A real download leaves every sidecar at the pin. Offline, the snapshot accepts a cache from any commit, so
+            // one that still doesn't match is an older model and isn't loaded as the pinned one.
+            if let pinnedCache, pinnedCache() == nil {
+                throw WhisperError.modelsUnavailable(
+                    "The cached Whisper model \(folder) doesn't match the pinned revision \(revision). Connect to the internet to update it."
+                )
+            }
             return root.appending(path: folder)
         }
         var searchPath = "*\(variant)/*"
