@@ -332,6 +332,12 @@ final class DictationController {
         var websiteRead: Task<String?, Never>?
         do {
             try await capture.start(keyDownAtNanos: nanos)
+        } catch CaptureError.busy {
+            // Another consumer holds the microphone. Refused like the admission check above: nothing was recorded, so no row is opened.
+            captureStarting = false
+            pill.showMessage(Self.busyMessage, duration: 2.5)
+            finished()
+            return
         } catch {
             startError = error
         }
