@@ -2,6 +2,8 @@ name: Security checks
 
 on:
   pull_request:
+    # labeled/unlabeled re-run the Package.resolved guard, which reads the downgrade and dependencies labels.
+    types: [opened, synchronize, reopened, labeled, unlabeled]
   push:
     branches: [main, 'dev/**']
   schedule:
