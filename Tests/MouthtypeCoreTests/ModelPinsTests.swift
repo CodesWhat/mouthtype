@@ -120,6 +120,103 @@ import Testing
         }
     }
 
+    /// A model folder with Hub's per-file sidecars, in the format `HubApi.writeDownloadMetadata` writes.
+    private func makeCache(variant: String, revision: String = ModelPins.whisperKit.revision) throws -> (root: URL, folder: String) {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("whisper-cache-\(UUID().uuidString)", isDirectory: true)
+        let folder = try #require(WhisperModelFetch.catalogFolders[variant])
+        for file in try #require(ModelPins.whisperKitFiles[variant]) {
+            let url = root.appending(path: folder).appending(path: file)
+            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try Data("x".utf8).write(to: url)
+            let sidecar = Self.sidecar(root: root, folder: folder, file: file)
+            try FileManager.default.createDirectory(at: sidecar.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try "\(revision)\n4b37ac79e4370895417e0c9a1b125c39f3943a09\n1791818233.918445\n".write(to: sidecar, atomically: true, encoding: .utf8)
+        }
+        return (root, folder)
+    }
+
+    private static func sidecar(root: URL, folder: String, file: String) -> URL {
+        root.appending(path: ".cache/huggingface/download").appending(path: folder).appending(path: file + ".metadata")
+    }
+
+    /// Resolves `variant` against `root` and reports whether the pinned snapshot had to run.
+    private func resolve(variant: String, root: URL) async throws -> (folder: URL, snapshots: [String]) {
+        let seen = Seen()
+        let folder = try await WhisperModelFetch.download(
+            variant: variant,
+            cacheRoot: root,
+            listFiles: { _, _ in throw URLError(.notConnectedToInternet) },
+            snapshot: { globs, revision in
+                await seen.record("\(globs)@\(revision)")
+                return root
+            }
+        )
+        return (folder, await seen.revisions)
+    }
+
+    @Test func pinnedFileListsCoverTheCoreModels() {
+        #expect(Set(ModelPins.whisperKitFiles.keys) == Set(WhisperModelFetch.catalogFolders.keys))
+        for (variant, files) in ModelPins.whisperKitFiles {
+            #expect(Set(files).count == files.count, "\(variant) lists a file twice")
+            for model in ["AudioEncoder.mlmodelc", "TextDecoder.mlmodelc", "MelSpectrogram.mlmodelc"] {
+                #expect(files.contains("\(model)/weights/weight.bin"), "\(variant) is missing \(model)")
+                #expect(files.contains("\(model)/model.mil"), "\(variant) is missing \(model)")
+            }
+            #expect(files.contains("config.json"))
+        }
+        #expect(ModelPins.whisperKitFiles[WhisperEngine.turboVariant]?.count == 24)
+        #expect(ModelPins.whisperKitFiles[WhisperEngine.smallEnVariant]?.count == 19)
+    }
+
+    @Test func aCompleteCacheAtThePinLoadsWithNoRequest() async throws {
+        for (variant, folder) in Self.catalogFolders {
+            let (root, _) = try makeCache(variant: variant)
+            defer { try? FileManager.default.removeItem(at: root) }
+            let resolved = try await WhisperModelFetch.download(
+                variant: variant,
+                cacheRoot: root,
+                listFiles: { _, _ in throw URLError(.notConnectedToInternet) },
+                snapshot: { _, _ in throw URLError(.notConnectedToInternet) }
+            )
+            #expect(resolved == root.appending(path: folder))
+        }
+    }
+
+    @Test func aMissingFileGoesToThePinnedSnapshot() async throws {
+        let (root, folder) = try makeCache(variant: WhisperEngine.smallEnVariant)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.removeItem(at: root.appending(path: folder).appending(path: "TextDecoder.mlmodelc/weights/weight.bin"))
+        let result = try await resolve(variant: WhisperEngine.smallEnVariant, root: root)
+        #expect(result.snapshots == ["\(["\(folder)/*"])@\(ModelPins.whisperKit.revision)"])
+        #expect(result.folder == root.appending(path: folder))
+    }
+
+    @Test func aSidecarFromAnotherCommitGoesToThePinnedSnapshot() async throws {
+        let (root, folder) = try makeCache(variant: WhisperEngine.smallEnVariant)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try "\(String(repeating: "c", count: 40))\netag\n1791818233.9\n".write(
+            to: Self.sidecar(root: root, folder: folder, file: "config.json"), atomically: true, encoding: .utf8)
+        #expect(try await resolve(variant: WhisperEngine.smallEnVariant, root: root).snapshots.count == 1)
+    }
+
+    @Test func aCacheFromAnOlderPinGoesToThePinnedSnapshot() async throws {
+        let (root, _) = try makeCache(variant: WhisperEngine.turboVariant, revision: String(repeating: "c", count: 40))
+        defer { try? FileManager.default.removeItem(at: root) }
+        #expect(try await resolve(variant: WhisperEngine.turboVariant, root: root).snapshots.count == 1)
+    }
+
+    @Test func aMissingSidecarGoesToThePinnedSnapshot() async throws {
+        let (root, folder) = try makeCache(variant: WhisperEngine.smallEnVariant)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.removeItem(at: Self.sidecar(root: root, folder: folder, file: "AudioEncoder.mlmodelc/model.mil"))
+        #expect(try await resolve(variant: WhisperEngine.smallEnVariant, root: root).snapshots.count == 1)
+    }
+
+    @Test func anEmptyCacheGoesToThePinnedSnapshot() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("whisper-cache-\(UUID().uuidString)", isDirectory: true)
+        #expect(try await resolve(variant: WhisperEngine.turboVariant, root: root).snapshots.count == 1)
+    }
+
     @Test func otherVariantsStillNeedTheListing() async {
         await #expect(throws: URLError.self) {
             _ = try await WhisperModelFetch.download(
