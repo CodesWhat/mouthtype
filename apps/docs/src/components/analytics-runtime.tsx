@@ -8,6 +8,7 @@ import {
   createPostHogOptions,
   ctaIdForHref,
   isAllowedCta,
+  isProductionHost,
   POSTHOG_PROJECT_KEY,
 } from "@/lib/analytics-contract";
 import { ANALYTICS_ROUTES } from "@/lib/analytics-routes.generated";
@@ -16,9 +17,11 @@ import { BASE_PATH } from "@/lib/site-config";
 
 let started = false;
 
-// DNT and Global Privacy Control both switch measurement off before anything loads.
+// Only the production host is measured, and DNT and Global Privacy Control both switch
+// measurement off there. Either way nothing is initialized.
 function start(): boolean {
   if (started) return true;
+  if (!isProductionHost(location.hostname)) return false;
   if (
     navigator.doNotTrack === "1" ||
     (navigator as { globalPrivacyControl?: boolean }).globalPrivacyControl === true

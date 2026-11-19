@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { registerHooks } from "node:module";
 import { test } from "node:test";
 
 import {
@@ -6,10 +7,26 @@ import {
   createPostHogOptions,
   ctaIdForHref,
   isAllowedCta,
+  isProductionHost,
   POSTHOG_PROJECT_KEY,
   sanitizeEvent,
 } from "../src/analytics/contract.js";
 import { createVitalsBuffer, installVitalsFlush } from "../src/analytics/vitals.js";
+
+// client.js imports posthog-js by a path only the bundler resolves. Node gets a recorder instead,
+// which also shows whether init or capture was ever called.
+const POSTHOG_STUB =
+  "data:text/javascript,export default {calls:[],init(){this.calls.push('init')},capture(){this.calls.push('capture')}}";
+registerHooks({
+  resolve(specifier, context, nextResolve) {
+    if (specifier === "posthog-js/dist/module.slim") {
+      return { url: POSTHOG_STUB, shortCircuit: true };
+    }
+    return nextResolve(specifier, context);
+  },
+});
+const { default: posthog } = await import(POSTHOG_STUB);
+const { startAnalytics } = await import("../src/analytics/client.js");
 
 function envelope(event, extra = {}, top = {}) {
   return {
@@ -246,6 +263,48 @@ test("before_send drops every event under DNT or GPC, and passes otherwise", () 
   const allowed = createPostHogOptions({ doNotTrack: "0", globalPrivacyControl: false }).before_send(clean);
   assert.equal(allowed.event, "$pageview");
   assert.equal(createPostHogOptions(undefined).before_send(clean).event, "$pageview");
+});
+
+test("only the production site host counts as production", () => {
+  assert.equal(isProductionHost("mouthtype.app"), true);
+  for (const host of [
+    "127.0.0.1",
+    "localhost",
+    "mouthtype-git-dev-codeswhat.vercel.app",
+    "www.mouthtype.app",
+    "docs.mouthtype.app",
+    "mouthtype.app.evil.com",
+    "xmouthtype.app",
+    "mouthtype.app:4177",
+    "MOUTHTYPE.APP.",
+    "",
+    undefined,
+    null,
+  ]) {
+    assert.equal(isProductionHost(host), false, String(host));
+  }
+});
+
+test("startAnalytics does nothing off the production host", () => {
+  // Any listener, document or navigator access would mean setup had begun.
+  const untouched = (name) => ({
+    get() {
+      throw new Error(`${name} was read on a non-production host`);
+    },
+  });
+  for (const hostname of ["127.0.0.1", "localhost", "mouthtype-git-dev-codeswhat.vercel.app", ""]) {
+    const win = Object.defineProperties(
+      { location: { hostname, origin: `http://${hostname}` } },
+      {
+        navigator: untouched("navigator"),
+        document: untouched("document"),
+        addEventListener: untouched("addEventListener"),
+      },
+    );
+    assert.equal(startAnalytics(win), false, hostname);
+  }
+  assert.equal(startAnalytics({ navigator: {} }), false, "no location at all");
+  assert.deepEqual(posthog.calls, [], "posthog.init and capture were never called");
 });
 
 test("installVitalsFlush sends buffered CLS and INP once across visibilitychange and pagehide", () => {

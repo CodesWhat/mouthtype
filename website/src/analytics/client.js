@@ -5,6 +5,7 @@ import {
   ctaIdForHref,
   isAllowedCta,
   isOptedOut,
+  isProductionHost,
   POSTHOG_PROJECT_KEY,
 } from "./contract.js";
 import { createVitalsBuffer, installVitalsFlush } from "./vitals.js";
@@ -37,6 +38,8 @@ function installCtaTracking(doc, origin) {
 }
 
 export function startAnalytics(win = window) {
+  // Only the production host is measured; anywhere else nothing is initialized or listened for.
+  if (!isProductionHost(win.location?.hostname)) return false;
   if (isOptedOut(win.navigator)) return false;
   // Vitals are only sent while the page is going away. PostHog's own unload handler may already
   // have drained its queue by then, so they go out by beacon, and our listeners are registered

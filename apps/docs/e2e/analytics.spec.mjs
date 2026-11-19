@@ -2,17 +2,21 @@ import { gunzipSync } from "node:zlib";
 import { expect, test } from "@playwright/test";
 
 const INGESTION = "https://e.codeswhat.com";
-const SELF = "http://127.0.0.1:4178";
+// Analytics only start on the production host, so the built pages are loaded under that origin
+// and every request for it is answered by the local server.
+const SELF = "https://docs.mouthtype.app";
+const LOCAL = "http://127.0.0.1:4178";
 const GUIDE = "/dictating/";
 
 // posthog-js drops events from automated browsers (headless user agent, navigator.webdriver), so
 // present an ordinary desktop Chrome. Ingestion is answered locally; nothing reaches the network.
 test.use({
+  baseURL: SELF,
   userAgent:
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
 });
 
-test.beforeEach(async ({ page, context }) => {
+test.beforeEach(async ({ page, context, browserName }) => {
   await page.addInitScript(() => {
     Object.defineProperty(navigator, "webdriver", { get: () => false });
     Object.defineProperty(navigator, "userAgentData", {
@@ -31,6 +35,19 @@ test.beforeEach(async ({ page, context }) => {
   });
   await context.route("https://mouthtype.app/**", (route) =>
     route.fulfill({ status: 200, contentType: "text/html", body: "site" }),
+  );
+  await context.route(
+    (url) => url.origin === SELF,
+    async (route) => {
+      const url = route.request().url().replace(SELF, LOCAL);
+      const response = await route.fetch({ url });
+      if (browserName !== "firefox") return route.fulfill({ response });
+      // Firefox reloads a fulfilled document in a new process when it carries COOP, and that
+      // second load has no referrer. Nothing here depends on COOP, so Firefox goes without it.
+      const headers = { ...response.headers() };
+      delete headers["cross-origin-opener-policy"];
+      return route.fulfill({ response, headers });
+    },
   );
   page.sent = sent;
 });
@@ -107,6 +124,35 @@ test("the Download link reports the download CTA", async ({ page }) => {
   const ctas = await waitFor(page, "cta activated");
   expect(ctas.map((event) => event.properties.cta_id)).toEqual(["download"]);
   expect(ctas[0].properties).toMatchObject({ site: "mouthtype", surface: "docs", path: "/" });
+});
+
+test("the local origin sends nothing, even after a CTA click and a pagehide", async ({
+  page,
+  context,
+}) => {
+  const ingestion = [];
+  context.on("request", (request) => {
+    if (request.url().startsWith(INGESTION)) ingestion.push(request.url());
+  });
+  await page.goto(`${LOCAL}/`);
+  await page.waitForLoadState("networkidle");
+  await page.evaluate(() => {
+    document.addEventListener("click", (event) => event.preventDefault());
+  });
+  await page
+    .locator('a[href="https://mouthtype.app/download"]')
+    .locator("visible=true")
+    .first()
+    .click();
+  await page.evaluate(() => {
+    Object.defineProperty(document, "visibilityState", { get: () => "hidden" });
+    document.dispatchEvent(new Event("visibilitychange"));
+    window.dispatchEvent(new Event("pagehide"));
+  });
+  await page.waitForTimeout(1000);
+  expect(new URL(page.url()).origin).toBe(LOCAL);
+  expect(ingestion).toEqual([]);
+  expect(page.sent).toEqual([]);
 });
 
 test("a Global Privacy Control signal turns analytics off", async ({ page }) => {

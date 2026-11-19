@@ -1,14 +1,35 @@
 import { gunzipSync } from "node:zlib";
 import { expect, INGESTION_ORIGIN, test } from "./fixtures.js";
 
+// Analytics only start on the production host, so the built pages are loaded under that origin
+// and every request for it is answered by the local preview server.
+const SELF = "https://mouthtype.app";
+const LOCAL = "http://127.0.0.1:4177";
+
 // posthog-js drops events from automated browsers (headless user agent, navigator.webdriver), so
 // present an ordinary desktop Chrome.
 test.use({
+  baseURL: SELF,
   userAgent:
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
 });
 
-test.beforeEach(async ({ page }) => {
+test.beforeEach(async ({ page, context, browserName }) => {
+  await context.route(
+    (url) => url.origin === SELF,
+    async (route) => {
+      const url = route.request().url().replace(SELF, LOCAL);
+      // Firefox reports a Host header, and vite preview refuses a host it does not know.
+      const { host: _host, ...requestHeaders } = route.request().headers();
+      const response = await route.fetch({ url, headers: requestHeaders });
+      if (browserName !== "firefox") return route.fulfill({ response });
+      // Firefox reloads a fulfilled document in a new process when it carries COOP, and that
+      // second load has no referrer. The header is asserted in unit/static-site.test.mjs.
+      const headers = { ...response.headers() };
+      delete headers["cross-origin-opener-policy"];
+      return route.fulfill({ response, headers });
+    },
+  );
   await page.addInitScript(() => {
     Object.defineProperty(navigator, "webdriver", { get: () => false });
     Object.defineProperty(navigator, "userAgentData", {
@@ -17,7 +38,6 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
-const SELF = "http://127.0.0.1:4177";
 const PAGES = [
   ["/", "/"],
   ["/start/", "/start"],
@@ -122,6 +142,33 @@ test("stores no cookie and no web storage", async ({ page, analytics }) => {
     cookie: document.cookie,
   }));
   expect(stored).toEqual({ local: 0, session: 0, cookie: "" });
+});
+
+test("the local origin sends nothing, even after a CTA click and a pagehide", async ({
+  page,
+  analytics,
+  context,
+}) => {
+  const ingestion = [];
+  context.on("request", (request) => {
+    if (request.url().startsWith(INGESTION_ORIGIN)) ingestion.push(request.url());
+  });
+  await stayOnDownloadPage(page);
+  await page.goto(`${LOCAL}/download/`);
+  await page.waitForLoadState("networkidle");
+  await page.evaluate(() => {
+    document.addEventListener("click", (event) => event.preventDefault());
+  });
+  await page.locator("[data-download]").click();
+  await page.evaluate(() => {
+    Object.defineProperty(document, "visibilityState", { get: () => "hidden" });
+    document.dispatchEvent(new Event("visibilitychange"));
+    window.dispatchEvent(new Event("pagehide"));
+  });
+  await page.waitForTimeout(1000);
+  expect(new URL(page.url()).origin).toBe(LOCAL);
+  expect(ingestion).toEqual([]);
+  expect(analytics).toEqual([]);
 });
 
 test("a Global Privacy Control signal turns analytics off", async ({ page, analytics }) => {
