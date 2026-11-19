@@ -183,6 +183,12 @@ public final class TextInserter {
     /// Automatic pastes wait for the preceding clipboard lease; long pastes also wait between parts.
     /// The read-back runs after this returns and never posts a paste again.
     public func deliver(_ text: String, startFocus: FocusSnapshot?) async -> DeliveryResult {
+        var result = await performDelivery(text, startFocus: startFocus)
+        result.startTargetKnown = startFocus?.element != nil
+        return result
+    }
+
+    private func performDelivery(_ text: String, startFocus: FocusSnapshot?) async -> DeliveryResult {
         guard !text.isEmpty else {
             return DeliveryResult(method: .none, outcome: .unknown, focusMoved: false, target: nil, finalText: "")
         }
@@ -561,6 +567,8 @@ public final class TextInserter {
     func armReturn(after result: DeliveryResult) {
         guard result.method == .paste, result.outcome == .unknown else { return skipReturn("the delivery was not a clean paste") }
         guard !result.finalText.isEmpty else { return skipReturn("nothing was delivered") }
+        guard !result.focusMoved else { return skipReturn("focus moved since the take started") }
+        guard result.startTargetKnown else { return skipReturn("the starting field was unknown") }
         guard let target = result.target, let pid = target.pid, pid > 0, let bundleID = target.bundleID else {
             return skipReturn("the paste target is unknown")
         }

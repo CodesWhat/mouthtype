@@ -7,7 +7,7 @@ Mouthtype is a single-user local dictation app, plus experimental Linux source a
 | Area | Control and evidence | Limit |
 | --- | --- | --- |
 | Local data | [Audio retention](AUDIO-RETENTION.md) limits completed audio while preserving recoverable takes. Data is stored in the user's Application Support directory. | Text history is indefinite. Mouthtype doesn't encrypt its database, recordings or backups. |
-| Destination safety | [Insertion code](../Sources/MouthtypeMac/Insertion/) rechecks captured app/field state, refuses secure destinations and retains text for recovery. [Tests](../Tests/MouthtypeMacTests/TextInserterTests.swift) cover denied and changed destinations. | Accessibility behavior differs across apps. Clipboard reads don't prove insertion, and a partial paste may need manual repair. |
+| Destination safety | [Insertion code](../Sources/MouthtypeMac/Insertion/) rechecks focus at delivery, refuses secure destinations, retains text for recovery and skips automatic Return when focus moved since the take started or the starting field was unknown. [Tests](../Tests/MouthtypeMacTests/TextInserterTests.swift) cover denied destinations and focus moves. | Accessibility behavior differs across apps. Clipboard reads don't prove insertion, and a partial paste may need manual repair. |
 | Editor hints | [Editor hints](SETTINGS.md) are off by default, run only in VS Code, Cursor, Xcode and supported terminals, and read the window title, the existing cursor-text window and git-tracked file names of one project. [Tests](../Tests/MouthtypeMacTests/EditorHintsTests.swift) cover the off state and that names stay out of stored history. | File names can be sensitive. They go only to the local recognizer, in memory for one dictation, and are never written or logged. A wrong tab or stale title can supply another project's names. |
 | Names on screen | [Names on screen](SETTINGS.md) is on by default, but only acts when Boost saved words (off by default) is on. It reads up to 2000 characters of the focused text field and the window title, never a secure field or terminal, within the same 150 ms bound, and sets `AXManualAccessibility` once per Electron app. [Tests](../Tests/MouthtypeMacTests/ContextNamesGathererTests.swift) cover name extraction, secure-field exclusion, the deadline and the once-per-app flag. | Names from a message you were reading can be sensitive. They go only to the local recognizer, in memory for one dictation, and are never written or logged. The Electron flag makes that app build its Accessibility tree, which can cost it some CPU. |
 | Imported audio | [File transcription](FILE-TRANSCRIPTION.md) accepts one bounded supported file, preserves the original and requires explicit Copy or Save. | Decoding and inference use platform and dependency code. Resource bounds aren't proof that every parser defect is prevented. |
@@ -71,7 +71,7 @@ This section ties Mouthtype's security requirements to its threat model, design 
 Mouthtype is meant to:
 
 - keep recordings and transcripts on the user's Mac, with no audio sent over the network;
-- deliver text only to the destination the user dictated into, and never into a secure field;
+- never deliver text into a secure field, and never press Return automatically after focus moved since the take started or when the starting field was unknown;
 - fetch only pinned speech and cleanup models, and install only updates signed with the project's Sparkle key;
 - request the narrowest macOS permissions that make dictation work; and
 - ship builds that are signed, notarized and traceable to a reviewed release.
@@ -91,7 +91,7 @@ The user is the only legitimate principal. Relevant threats are a malicious or m
 
 - **Local first.** Transcription and the Fast and Thorough cleanup paths run on-device. The only network use in the app targets is model download, update checks and website icons in the Style lists. None carries audio or transcripts.
 - **Least privilege.** One entitlement, microphone input. Accessibility and input-monitoring access are requested for the features that need them and nothing else. [build-app.sh](../scripts/build-app.sh) signs with the hardened runtime. Editor hints are off by default and read only the minimum from supported editors.
-- **Fail safe.** When the destination changes or can't be verified, text isn't pasted. It's retained for recovery instead. A secure field gets neither: nothing is pasted and nothing is kept.
+- **Fail safe.** When the destination can't be verified, text isn't pasted. It's retained for recovery instead. A secure field gets neither: nothing is pasted and nothing is kept. If focus moved during the take, the text still pastes at the current focus, but automatic Return is skipped, as it is when the starting field was unknown.
 - **Data minimization.** [Audio retention](AUDIO-RETENTION.md) caps completed audio by age and size. Editor hint file names stay in memory for one dictation.
 - **Supply-chain integrity.** Lockfiles, exact model commits, SHA-pinned Actions, signed and notarized releases, and a signed update feed.
 - **Open review.** Source is public under GPL-3.0, with a private reporting channel in [SECURITY.md](../SECURITY.md).
@@ -101,7 +101,7 @@ The user is the only legitimate principal. Relevant threats are a malicious or m
 | Weakness class | Countermeasure | Evidence |
 | --- | --- | --- |
 | Sensitive data exposure | No audio upload, bounded retention, editor hint names never persisted or logged, redacted secret scanning in CI. | [AUDIO-RETENTION.md](AUDIO-RETENTION.md), [EditorHintsTests](../Tests/MouthtypeMacTests/EditorHintsTests.swift), [security.yml](../.github/workflows/security.yml) |
-| Input into the wrong target | Focus snapshot recheck, secure-field refusal, recoverable retained text. | [Delivery.swift](../Sources/MouthtypeMac/Insertion/Delivery.swift), [TextInserterTests](../Tests/MouthtypeMacTests/TextInserterTests.swift) |
+| Input into the wrong target | Focus snapshot recheck, secure-field refusal, no automatic Return after a focus move or from an unknown starting field, recoverable retained text. | [Delivery.swift](../Sources/MouthtypeMac/Insertion/Delivery.swift), [TextInserterTests](../Tests/MouthtypeMacTests/TextInserterTests.swift) |
 | Untrusted input parsing | Single bounded file, original preserved, results need explicit Copy or Save. Git file listings are capped at a byte limit. | [FILE-TRANSCRIPTION.md](FILE-TRANSCRIPTION.md), [ProjectFiles.swift](../Sources/MouthtypeCore/ProjectFiles.swift) |
 | Tampered models or updates | Exact Hugging Face commit pins, bundled manifest check for offline cache adoption, EdDSA-signed feed required. | [ModelPins.swift](../Sources/MouthtypeCore/ModelPins.swift), [Info.plist](../packaging/Info.plist) |
 | Vulnerable dependencies | Lockfiles, weekly Dependabot, npm audit at high severity. | [dependabot.yml](../.github/dependabot.yml), [security.yml](../.github/workflows/security.yml) |
