@@ -55,31 +55,21 @@ public enum VoiceEditGuard {
         return .accepted(trimmed)
     }
 
-    /// Opening phrases of a refusal or apology, grouped by what they say. A faithful edit of a selection that opens one way
-    /// opens in the same group.
-    private static let declineFamilies: [[String]] = [
-        ["i'm sorry", "i am sorry", "sorry,"],
-        ["i can't", "i cannot", "i can not", "i'm unable", "i am unable", "i won't", "i'm not able"],
-        ["as an ai"],
-        ["unfortunately", "sadly", "regrettably"],
-    ]
+    /// Phrases only a model refusing the request says, wherever they fall in the output: AI framing, a first-person
+    /// refusal to help or comply, and a first-person refusal to edit the text. An apology, a regret opening or an ordinary
+    /// inability statement ("I can't attend on Friday.") is not one, since an edit can ask for exactly that.
+    private static let refusalMarkers = [
+        #"\bas an ai\b"#,
+        #"\blanguage model\b"#,
+        #"\bi(?:'m| am)? (?:INABILITY) (?:comply|fulfill|do (?:that|this)|(?:help|assist)(?: you)?(?: with (?:that|this|it|your request)|\s*[.,!]|$))"#,
+        #"(?:INABILITY) (?:help|assist) with (?:that|this)"#,
+        #"\bi(?:'m| am)? (?:INABILITY) (?:edit|rewrite|rephrase|reword|revise|change|modify) (?:this|that|it|the (?:text|selection))\b"#,
+    ].joined(separator: "|").replacingOccurrences(of: "INABILITY", with: #"can't|cannot|can not|won't|will not|unable to|not able to"#)
 
-    /// Phrases only a model refusing the request says, wherever they fall in the output.
-    private static let refusalMarkers =
-        #"as an ai|language model|(?:can't|cannot|can not|unable to|won't) (?:help|assist|comply|fulfill|do that|do this)|help with that|assist with that"#
-
-    /// The opening group of `text`, with typographic apostrophes straightened.
-    private static func declineFamily(of text: String) -> Int? {
-        let lower = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased().replacingOccurrences(of: "\u{2019}", with: "'")
-        return declineFamilies.firstIndex { $0.contains { lower.hasPrefix($0) } }
-    }
-
-    /// An output that opens with an apology or refusal is a decline, unless the selection opens the same way and the output
-    /// carries no refusal marker the selection lacks, which makes it a faithful edit of that selection.
+    /// An output is a decline when it carries the unsupported-request sentinel or a refusal marker the selection lacks.
+    /// How the output opens doesn't decide it: "make this more apologetic" yields an edit that opens with an apology.
     private static func declines(_ text: String, selection: String) -> Bool {
         if text.contains(VoiceEditPrompt.unsupportedSentinel) { return true }
-        guard let family = declineFamily(of: text) else { return false }
-        guard declineFamily(of: selection) == family else { return true }
         let normalized = { (value: String) in value.lowercased().replacingOccurrences(of: "\u{2019}", with: "'") }
         let markers = try? NSRegularExpression(pattern: refusalMarkers)
         let outputText = normalized(text)
