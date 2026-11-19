@@ -38,14 +38,18 @@ public final class TextInserter {
         /// The real key and click count right after the paste, and when the paste went out.
         var input: UInt64
         var pastedAt: ContinuousClock.Instant
+        /// The clipboard lease of this paste. A receipt counts for this Return only while the lease is still current.
+        var lease: Int
     }
     /// How long after the paste chord a Return may still go out.
     static let returnWindow: TimeInterval = 2
-    /// How long after the paste an unconfirmed send (a terminal) waits before its Return.
+    /// The least an unconfirmed send (a terminal) waits after the paste before its Return.
     static let unconfirmedSendDelay: TimeInterval = 0.25
+    /// How often an unconfirmed send checks whether the terminal has read the paste.
+    static let unconfirmedSendPoll: TimeInterval = 0.025
     /// The pending unconfirmed send, so a new recording or delivery can cancel it. Tests await it.
     private(set) var unconfirmedSend: Task<Void, Never>?
-    private var pasteStamp: (generation: Int, input: UInt64?, at: ContinuousClock.Instant)?
+    private var pasteStamp: (generation: Int, lease: Int, input: UInt64?, at: ContinuousClock.Instant)?
     private var armedReturn: ArmedReturn?
     /// The newest read-back verdict, so a send armed after it arrived still sees it.
     private var lastVerdict: PasteVerification?
@@ -371,7 +375,8 @@ public final class TextInserter {
                 )
             }
             let afterInput = inputGeneration()
-            pasteStamp = (generation, afterInput, self.now())
+            let lease = clipboard.pasteGeneration
+            pasteStamp = (generation, lease, afterInput, self.now())
             if let pid = now.pid, let last = spaced.last {
                 lastPaste = LastPaste(
                     pid: pid, bundleID: now.bundleID, element: now.element, finalCharacter: last, date: self.now(),
@@ -379,7 +384,7 @@ public final class TextInserter {
                 )
             }
             startVerification(
-                generation: generation, pasted: spaced, target: now, lease: clipboard.pasteGeneration,
+                generation: generation, pasted: spaced, target: now, lease: lease,
                 baseline: fieldBefore.map {
                     PasteVerifier.Baseline(
                         reading: $0, input: afterInput,
@@ -582,7 +587,7 @@ public final class TextInserter {
             return skipReturn("user input can't be tracked")
         }
         let armed = ArmedReturn(
-            generation: generation, pid: pid, bundleID: bundleID, element: element, input: input, pastedAt: stamp.at)
+            generation: generation, pid: pid, bundleID: bundleID, element: element, input: input, pastedAt: stamp.at, lease: stamp.lease)
         guard PasteTargetPolicy.confirmsPaste(bundleID: bundleID) else { return armUnconfirmedSend(armed) }
         armedReturn = armed
         if let verdict = lastVerdict, verdict.id == generation { returnAfterVerdict(verdict) }
@@ -599,21 +604,50 @@ public final class TextInserter {
         unconfirmedSend = nil
     }
 
-    /// A terminal can't confirm the paste, so its Return goes out a beat after the paste instead of after a verdict.
+    /// A terminal can't confirm the paste, so its Return waits for the terminal to read the paste instead of a verdict:
+    /// a receipt on this paste's own clipboard lease, then the settle so the terminal finishes inserting, and never
+    /// sooner than `unconfirmedSendDelay`. A slow terminal or remote session that hasn't read the paste yet would get
+    /// the Return before the text. No receipt inside `returnWindow`, or a newer lease, sends nothing.
     /// Never stored in `armedReturn`, so a verdict can't send it a second time.
     private func armUnconfirmedSend(_ armed: ArmedReturn) {
         cancelUnconfirmedSend()
         unconfirmedSend = Task { [weak self] in
             guard let self else { return }
-            let remaining = Self.unconfirmedSendDelay - Self.seconds(self.now() - armed.pastedAt)
-            if remaining > 0 { do { try await self.sleep(remaining) } catch { return } }
+            // The clipboard keeps receipts for the current lease only, so each look checks the lease first. A read
+            // before the chord (a clipboard manager's) is not a receipt and never releases the Return.
+            let polls = Int((Self.returnWindow / Self.unconfirmedSendPoll).rounded(.up))
+            var read = false
+            for _ in 0...polls {
+                guard !Task.isCancelled, self.deliveryGeneration == armed.generation else {
+                    return self.skipReturn("the take was cancelled or replaced")
+                }
+                guard self.clipboard.pasteGeneration == armed.lease else {
+                    return self.skipReturn("a newer paste took the clipboard before the terminal read this one")
+                }
+                if self.clipboard.firstReceiptMs != nil { read = true; break }
+                guard Self.seconds(self.now() - armed.pastedAt) < Self.returnWindow else { break }
+                do { try await self.sleep(Self.unconfirmedSendPoll) } catch { return }
+            }
+            guard read else {
+                return self.skipReturn(
+                    self.clipboard.pasteGeneration == armed.lease && self.clipboard.hadEarlyRead
+                        ? "the clipboard was read before the paste, so the terminal's read can't be seen"
+                        : "the terminal never read the paste")
+            }
+            let elapsed = Self.seconds(self.now() - armed.pastedAt)
+            let wait = max(Self.unconfirmedSendDelay - elapsed, PasteboardSession.receiptSettle)
+            guard elapsed + wait <= Self.returnWindow else { return self.skipReturn("the terminal read the paste too late to send") }
+            do { try await self.sleep(wait) } catch { return }
             guard !Task.isCancelled, self.deliveryGeneration == armed.generation else {
                 return self.skipReturn("the take was cancelled or replaced")
+            }
+            guard self.clipboard.pasteGeneration == armed.lease else {
+                return self.skipReturn("a newer paste took the clipboard before the Return went out")
             }
             self.unconfirmedSend = nil
             if let reason = self.returnBlocker(armed) { return self.skipReturn(reason) }
             guard self.clipboard.pressReturn(targetPID: armed.pid) else { return self.skipReturn("the Return event could not be posted") }
-            Log.app.info("send after insert: pressed Return without confirmation")
+            Log.app.info("send after insert: pressed Return after the terminal read the paste")
         }
     }
 
