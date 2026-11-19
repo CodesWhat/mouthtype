@@ -167,8 +167,8 @@ private let paragraph =
             judge("Sorry, we won't be there on Tuesday.", selection: "We won't be there on Tuesday.", instruction: "soften it")
                 == .accepted("Sorry, we won't be there on Tuesday."))
         #expect(
-            judge("I am sorry for the delay in replying.", selection: "This reply is late.", instruction: "apologize for it")
-                == .accepted("I am sorry for the delay in replying."))
+            judge("I am sorry that this reply is late.", selection: "This reply is late.", instruction: "apologize for it")
+                == .accepted("I am sorry that this reply is late."))
         #expect(
             judge("Unfortunately, the launch slipped to March.", selection: "The launch slipped to March.", instruction: "sound more regretful")
                 == .accepted("Unfortunately, the launch slipped to March."))
@@ -204,6 +204,48 @@ private let paragraph =
         #expect(
             judge("We can't make the meeting. UNSUPPORTED_EDIT_REQUEST", selection: selection, instruction: instruction)
                 == .refused(.modelDeclined))
+    }
+
+    @Test func aRefusalThatNamesNoEditVerbIsADecline() {
+        let refusals = [
+            "I can't provide that.", "I can't answer that.", "I can't write that.", "I can't rewrite your text.",
+            "Sorry, I'm unable to process your request.", "Sorry, I can\u{2018}t rewrite this.", "Sorry, I can\u{02BC}t rewrite this.",
+            "Sorry, I can\u{FF07}t rewrite this.", "I cannot generate the following text.",
+        ]
+        for refusal in refusals {
+            #expect(judge(refusal, selection: "Please handle the request.", instruction: "make it friendlier") == .refused(.modelDeclined), "\(refusal)")
+        }
+    }
+
+    @Test func anOpeningApologyOrRefusalThatDropsTheSelectionIsADecline() {
+        let unrelated = [
+            "I'm sorry, that's outside what's possible here.", "Unfortunately, no.", "I can't go along with it.",
+            "I'm afraid that isn't possible.", "My apologies, nothing to offer here.",
+        ]
+        for output in unrelated {
+            #expect(judge(output) == .refused(.modelDeclined), "\(output)")
+        }
+        // One content word is too little to measure, so the opening alone doesn't decline.
+        #expect(judge("Sorry, no.", selection: "Nope.", instruction: "make it polite") == .accepted("Sorry, no."))
+    }
+
+    @Test func aMarkerTheSelectionAlreadyHasIsNotIntroduced() {
+        #expect(
+            judge("I'm unable to assist.", selection: "I'm unable to assist with that request.", instruction: "shorten this")
+                == .accepted("I'm unable to assist."))
+        #expect(
+            judge("As an AI, I don't have personal opinions.", selection: "She works as an airline pilot.", instruction: "rephrase it")
+                == .refused(.modelDeclined))
+    }
+
+    @Test func ordinarySentencesAboutHelpingAreNotRefusals() {
+        #expect(
+            judge("We can't help with this issue.", selection: "We have no fix for this issue yet.", instruction: "say it plainly")
+                == .accepted("We can't help with this issue."))
+        #expect(
+            judge(
+                "I'm sorry, I can't help with that this week.", selection: "Decline Sam's request to help with the launch this week.",
+                instruction: "write the reply") == .accepted("I'm sorry, I can't help with that this week."))
     }
 
     @Test func chatterAndPreambleAreRefused() {
