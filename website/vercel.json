@@ -11,6 +11,8 @@
         "Content-Security-Policy": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; connect-src 'self' https://e.codeswhat.com; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'none'",
         "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
         "Referrer-Policy": "strict-origin-when-cross-origin",
+        "Strict-Transport-Security": "max-age=63072000",
+        "Cross-Origin-Opener-Policy": "same-origin",
         "X-Content-Type-Options": "nosniff",
         "X-Frame-Options": "DENY"
       },
