@@ -9,6 +9,7 @@ import {
   createSanitizer,
   ctaIdForHref,
   isAllowedCta,
+  isProductionHost,
   POSTHOG_PROJECT_KEY,
 } from "../src/lib/analytics-contract.ts";
 import { ANALYTICS_ROUTES } from "../src/lib/analytics-routes.generated.ts";
@@ -257,6 +258,26 @@ test("before_send drops every event under DNT or GPC, and passes otherwise", () 
   }).before_send(clean);
   assert.equal(allowed.event, "$pageview");
   assert.equal(createPostHogOptions(ROUTES, "", undefined).before_send(clean).event, "$pageview");
+});
+
+test("only the production docs host counts as production", () => {
+  assert.equal(isProductionHost("docs.mouthtype.app"), true);
+  for (const host of [
+    "127.0.0.1",
+    "localhost",
+    "mouthtype-docs-git-dev-codeswhat.vercel.app",
+    "mouthtype.app",
+    "docs.mouthtype.app.evil.com",
+    "xdocs.mouthtype.app",
+    "preview.docs.mouthtype.app",
+    "docs.mouthtype.app:4178",
+    "DOCS.MOUTHTYPE.APP.",
+    "",
+    undefined,
+    null,
+  ]) {
+    assert.equal(isProductionHost(host), false, String(host));
+  }
 });
 
 test("installVitalsFlush sends buffered CLS and INP once across visibilitychange and pagehide", () => {

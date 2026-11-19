@@ -19,6 +19,10 @@ const DIRECT_REFERRING_DOMAIN = "$direct";
 const HOSTNAME_PATTERN =
   /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*(:\d{1,5})?$/iu;
 
+// Measurement runs on the production site only. Local previews, CI runs and Vercel preview
+// deployments serve the same build, and must not report into the production project.
+const PRODUCTION_HOSTS: ReadonlySet<string> = new Set(["docs.mouthtype.app"]);
+
 const CTA_IDS: ReadonlySet<string> = new Set(["download", "source_download", "github_repository"]);
 
 export const WEB_VITAL_NAMES = ["CLS", "FCP", "INP", "LCP"] as const;
@@ -171,6 +175,11 @@ export function createSanitizer(routes: ReadonlySet<string>, basePath = "") {
     }
     return output;
   };
+}
+
+/** True only for an exact production hostname (`location.hostname`, so no port). */
+export function isProductionHost(hostname: unknown): boolean {
+  return typeof hostname === "string" && PRODUCTION_HOSTS.has(hostname);
 }
 
 /**
