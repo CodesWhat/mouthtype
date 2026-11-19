@@ -151,7 +151,7 @@ test("the local origin sends nothing, even after a CTA click and a pagehide", as
 }) => {
   const ingestion = [];
   context.on("request", (request) => {
-    if (request.url().startsWith(INGESTION_ORIGIN)) ingestion.push(request.url());
+    if (new URL(request.url()).origin === new URL(INGESTION_ORIGIN).origin) ingestion.push(request.url());
   });
   await stayOnDownloadPage(page);
   await page.goto(`${LOCAL}/download/`);

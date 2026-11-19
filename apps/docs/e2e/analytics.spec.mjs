@@ -132,7 +132,7 @@ test("the local origin sends nothing, even after a CTA click and a pagehide", as
 }) => {
   const ingestion = [];
   context.on("request", (request) => {
-    if (request.url().startsWith(INGESTION)) ingestion.push(request.url());
+    if (new URL(request.url()).origin === INGESTION) ingestion.push(request.url());
   });
   await page.goto(`${LOCAL}/`);
   await page.waitForLoadState("networkidle");
