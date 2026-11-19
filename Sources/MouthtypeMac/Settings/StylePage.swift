@@ -486,6 +486,9 @@ struct StyleMemberIcon: View {
         "Slack": 0x4A154B, "Microsoft Teams": 0x5059C9, "Mail": 0x1E6FD9, "Outlook": 0x0F6CBD,
     ]
 
+    /// Only sites the user added get an icon request. Built-in sites keep the globe, so opening the page contacts nobody they didn't list.
+    static func fetchesFavicon(for member: StyleMember) -> Bool { member.kind == .site && !member.isBuiltIn }
+
     var body: some View {
         Group {
             if member.kind == .site {
@@ -507,7 +510,7 @@ struct StyleMemberIcon: View {
         .accessibilityHidden(true)
         .task(id: member.keys) {
             if member.kind == .site, let domain = member.keys.first {
-                guard favicon == nil else { return }
+                guard Self.fetchesFavicon(for: member), favicon == nil else { return }
                 favicon = siteFavicons.cachedImage(for: domain)
                 if favicon == nil { favicon = await siteFavicons.image(for: domain) }
                 return

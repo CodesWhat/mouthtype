@@ -14,7 +14,7 @@ enum FaviconLinks {
     private static let targetSize = 64
 
     /// Candidate icon URLs for `base`, best first: sizes nearest 64px lead, a scalable icon counts as 64, and an icon with no declared size
-    /// counts as 32. Only https links on the site's own host (or a sibling subdomain of it) are kept.
+    /// counts as 32. Only https links on the site's own host (or a subdomain of it) are kept.
     static func candidates(html: String, base: URL) -> [URL] {
         guard let baseHost = base.host?.lowercased() else { return [] }
         var ranked: [(url: URL, score: Int, order: Int)] = []
@@ -25,7 +25,7 @@ enum FaviconLinks {
             guard rel.contains("icon") || rel.contains("apple-touch-icon") || rel.contains("apple-touch-icon-precomposed") else { continue }
             guard let href = attributes["href"]?.trimmingCharacters(in: .whitespacesAndNewlines), !href.isEmpty,
                 let url = URL(string: href, relativeTo: base)?.absoluteURL,
-                url.scheme?.lowercased() == "https", let host = url.host?.lowercased(), sameSite(host, baseHost),
+                url.scheme?.lowercased() == "https", let host = url.host?.lowercased(), isHostOrSubdomain(host, of: baseHost),
                 seen.insert(url.absoluteString).inserted
             else { continue }
             ranked.append((url, score(sizes: attributes["sizes"], type: attributes["type"], path: url.path), order))
@@ -33,10 +33,13 @@ enum FaviconLinks {
         return ranked.sorted { ($0.score, $0.order) < ($1.score, $1.order) }.map(\.url)
     }
 
-    static func sameSite(_ host: String, _ other: String) -> Bool {
-        if host == other { return true }
-        func root(_ value: String) -> String { value.split(separator: ".").suffix(2).joined(separator: ".") }
-        return root(host) == root(other)
+    /// True when `host` is `base` or a subdomain of it. Exact labels only, so `a.co.uk` and `b.co.uk` are different sites. A leading `www.`
+    /// on `base` is ignored, since `www.example.com` and `example.com` are the same site.
+    static func isHostOrSubdomain(_ host: String, of base: String) -> Bool {
+        let host = host.lowercased()
+        var base = base.lowercased()
+        if base.hasPrefix("www.") { base.removeFirst(4) }
+        return host == base || host.hasSuffix("." + base)
     }
 
     private static func score(sizes: String?, type: String?, path: String) -> Int {
@@ -176,7 +179,7 @@ actor SiteFaviconStore {
 
     // MARK: Network
 
-    /// Ephemeral session (no cookies or credential store), 5 second timeout, plain User-Agent, at most 5 https redirects, body capped.
+    /// Ephemeral session (no cookies or credential store), 5 second timeout, plain User-Agent, at most 5 https redirects that stay on the requested host or its subdomains, body capped.
     @Sendable static func liveFetch(_ url: URL) async throws -> FaviconResponse {
         // A test that reaches here forgot to inject a store. Fail loudly instead of hitting the network and the real cache.
         precondition(!runningUnderTests, "SiteFaviconStore.liveFetch ran under a test. Inject a store with a temp directory and a fake fetch.")
@@ -201,7 +204,13 @@ actor SiteFaviconStore {
         return FaviconResponse(data: data, url: http.url ?? url, truncated: truncated)
     }
 
-    private final class RedirectLimit: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
+    /// A redirect is followed only over https and only to the requested host or a subdomain of it.
+    static func allowsRedirect(from requested: URL?, to target: URL?) -> Bool {
+        guard let requestedHost = requested?.host?.lowercased(), let targetHost = target?.host?.lowercased(), target?.scheme?.lowercased() == "https" else { return false }
+        return FaviconLinks.isHostOrSubdomain(targetHost, of: requestedHost)
+    }
+
+    final class RedirectLimit: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
         private var count = 0
 
         func urlSession(
@@ -209,7 +218,7 @@ actor SiteFaviconStore {
             completionHandler: @escaping (URLRequest?) -> Void
         ) {
             count += 1
-            completionHandler(count <= 5 && request.url?.scheme == "https" ? request : nil)
+            completionHandler(count <= 5 && SiteFaviconStore.allowsRedirect(from: task.originalRequest?.url, to: request.url) ? request : nil)
         }
     }
 }

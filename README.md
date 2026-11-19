@@ -166,7 +166,7 @@ Audio, transcripts, settings, spellings and phrases stay on this Mac. The defaul
 
 Microphone access records a take. Accessibility access handles the global shortcut, examines the destination and inserts text. Cleanup can read a small amount of nearby text for formatting and spelling hints, excluding secure fields. Phrase rules can explicitly insert the clipboard's text. These are powerful permissions; grant them only to a build you trust.
 
-Model downloads and optional update checks use the network. Dictation and cleanup run locally. The [security policy](SECURITY.md) and [security controls and limits](https://docs.mouthtype.app/reference/security/) describe reporting, distribution integrity and the boundaries of those claims.
+Model downloads, optional update checks, and an icon request to each website you add to a Style list (only to that site) use the network. Dictation and cleanup run locally. The [security policy](SECURITY.md) and [security controls and limits](https://docs.mouthtype.app/reference/security/) describe reporting, distribution integrity and the boundaries of those claims.
 
 <hr>
 
