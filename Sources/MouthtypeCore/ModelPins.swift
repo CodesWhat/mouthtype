@@ -81,12 +81,25 @@ enum WhisperModelFetch {
     typealias ListFiles = @Sendable (_ globs: [String], _ revision: String) async throws -> [String]
     typealias Snapshot = @Sendable (_ globs: [String], _ revision: String) async throws -> URL
 
+    /// The folder each catalog variant lives in at the pinned commit of `argmaxinc/whisperkit-coreml`. These are what the
+    /// generic lookup below resolves to there.
+    static let catalogFolders: [String: String] = [
+        WhisperEngine.turboVariant: "openai_whisper-large-v3-v20240930_turbo",
+        WhisperEngine.smallEnVariant: "openai_whisper-small.en",
+    ]
+
     static func download(
         variant: String,
         revision: String = ModelPins.whisperKit.revision,
         listFiles: ListFiles,
         snapshot: Snapshot
     ) async throws -> URL {
+        // A catalog variant's folder is known, so it skips the listing. The listing is a network request that throws
+        // offline, which kept a cached model from reaching the cache validation `snapshot` does without a connection.
+        if let folder = catalogFolders[variant] {
+            let root = try await snapshot(["\(folder)/*"], revision)
+            return root.appending(path: folder)
+        }
         var searchPath = "*\(variant)/*"
         var folders = try await topLevelFolders(listFiles([searchPath], revision))
         if folders.count != 1 {
