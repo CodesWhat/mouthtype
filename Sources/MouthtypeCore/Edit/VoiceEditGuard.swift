@@ -55,40 +55,102 @@ public enum VoiceEditGuard {
         return .accepted(trimmed)
     }
 
-    /// Opening phrases of a refusal or apology, grouped by what they say. A faithful edit of a selection that opens one way
-    /// opens in the same group.
-    private static let declineFamilies: [[String]] = [
-        ["i'm sorry", "i am sorry", "sorry,"],
-        ["i can't", "i cannot", "i can not", "i'm unable", "i am unable", "i won't", "i'm not able"],
-        ["as an ai"],
-        ["unfortunately", "sadly", "regrettably"],
-    ]
+    /// Ways a model says it can't or won't. Spliced into `refusalMarkers`.
+    private static let inability = #"(?:can't|cannot|can not|won't|will not|unable to|not able to)"#
 
-    /// Phrases only a model refusing the request says, wherever they fall in the output.
-    private static let refusalMarkers =
-        #"as an ai|language model|(?:can't|cannot|can not|unable to|won't) (?:help|assist|comply|fulfill|do that|do this)|help with that|assist with that"#
+    /// Where a refusal phrase has to stop to count: at punctuation or the end of the text. "I can't help with that this
+    /// week." carries on, so it's a sentence and not a refusal. A lookahead keeps the punctuation out of the match.
+    private static let phraseEnd = #"(?=\s*[.,!?]|\s*$)"#
 
-    /// The opening group of `text`, with typographic apostrophes straightened.
-    private static func declineFamily(of text: String) -> Int? {
-        let lower = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased().replacingOccurrences(of: "\u{2019}", with: "'")
-        return declineFamilies.firstIndex { $0.contains { lower.hasPrefix($0) } }
+    /// Phrases only a model refusing the request says, wherever they fall in the output: AI framing, a first-person
+    /// refusal to help or comply, the same with the subject dropped at a sentence start, and a first-person refusal to
+    /// act on the text or the request, and a flat "that isn't possible". One pattern per marker, so the selection can be
+    /// checked for the same marker. No pattern lets `\s*` follow a boundary that matches at every newline: that rescans
+    /// a long run of blank lines from each one and goes quadratic.
+    private static let refusalMarkers: [NSRegularExpression] = [
+        #"\bas an ai\b"#,
+        #"\blanguage model\b"#,
+        #"\bi(?:'m| am)? INABILITY (?:(?:comply|fulfill|do (?:that|this))\b|(?:help|assist)(?: you)?(?: with (?:that|this|it|(?:your|that|the) request))?END)"#,
+        #"(?:^|[.!?,;:]\s*|[\r\n][^\S\r\n]*)INABILITY (?:help|assist)(?: you)?(?: with (?:that|this|it))?END"#,
+        #"\bi(?:'m| am)? INABILITY (?:edit|rewrite|rephrase|reword|revise|change|modify|provide|answer|write|generate|create|process|complete) (?:(?:this|that|it)END|(?:the|your|that|this)(?: following)? (?:text|selection|request)\b)"#,
+        #"\b(?:that|this|it|(?:your|the|that|this) request) (?:isn't|is not|wasn't|was not) (?:possibleEND|something i can (?:do|help with)\b)"#,
+    ].compactMap {
+        try? NSRegularExpression(pattern: $0.replacingOccurrences(of: "INABILITY", with: inability).replacingOccurrences(of: "END", with: phraseEnd))
     }
 
-    /// An output that opens with an apology or refusal is a decline, unless the selection opens the same way and the output
-    /// carries no refusal marker the selection lacks, which makes it a faithful edit of that selection.
+    /// Opening phrases of an apology, a refusal or a regret, grouped by what they say. A faithful edit of a selection that
+    /// opens one way opens in the same group.
+    private static let declineFamilies: [[String]] = [
+        ["i'm sorry", "i am sorry", "sorry", "i apologize", "i apologise", "my apologies", "apologies"],
+        [
+            "i can't", "i cannot", "i can not", "i'm unable", "i am unable", "i won't", "i will not", "i'm not able",
+            "i am not able",
+        ],
+        ["unfortunately", "sadly", "regrettably", "i regret", "i'm afraid", "i am afraid"],
+    ]
+
+    /// Words too common to show that an output kept the selection's content.
+    private static let stopwords: Set<String> = [
+        "the", "and", "for", "but", "not", "that", "this", "with", "from", "you", "your", "are", "was", "were", "can",
+        "will", "have", "has", "had", "its", "our", "they", "them",
+    ]
+
+    /// The share of the selection's content words an opening apology or refusal has to keep to count as an edit of it.
+    private static let minimumKeptShare = 0.3
+
+    /// Lowercased and trimmed, with typographic and modifier apostrophes straightened.
+    private static func normalized(_ text: String) -> String {
+        var lower = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        for apostrophe in ["\u{2018}", "\u{2019}", "\u{02BC}", "\u{FF07}"] {
+            lower = lower.replacingOccurrences(of: apostrophe, with: "'")
+        }
+        return lower
+    }
+
+    /// The opening group of already normalized `text`.
+    private static func declineFamily(of text: String) -> Int? {
+        declineFamilies.firstIndex { $0.contains { text.hasPrefix($0) } }
+    }
+
+    /// Runs of letters and digits in already normalized `text`.
+    private static func words(in text: String) -> Set<String> {
+        Set(text.split(whereSeparator: { !$0.isLetter && !$0.isNumber }).map(String.init))
+    }
+
+    /// How many of the selection's content words the output kept. A word counts as kept when the output has it, or has a
+    /// word of four or more characters that it starts or that starts it, or one sharing its first five characters, so
+    /// "reply" is kept by "replying" and "cancel" by "canceled". A synonym keeps nothing.
+    private static func keptCount(of content: Set<String>, in output: Set<String>) -> Int {
+        let long = output.filter { $0.count >= 4 }
+        var stems = Set<Substring>()
+        for word in long {
+            for length in 4...word.count { stems.insert(word.prefix(length)) }
+        }
+        return content.count { word in
+            if output.contains(word) { return true }
+            guard word.count >= 4 else { return false }
+            if stems.contains(Substring(word)) || (word.count >= 5 && stems.contains(word.prefix(5))) { return true }
+            return (4..<word.count).contains { long.contains(String(word.prefix($0))) }
+        }
+    }
+
+    /// An output is a decline when it carries the unsupported-request sentinel, when it introduces a refusal marker the
+    /// selection has no match for, or when it newly opens with an apology, refusal or regret and keeps little of what the
+    /// selection said. The opening alone doesn't decide it: "make this more apologetic" yields an edit that opens with an
+    /// apology and still says what the selection said.
     private static func declines(_ text: String, selection: String) -> Bool {
         if text.contains(VoiceEditPrompt.unsupportedSentinel) { return true }
-        guard let family = declineFamily(of: text) else { return false }
-        guard declineFamily(of: selection) == family else { return true }
-        let normalized = { (value: String) in value.lowercased().replacingOccurrences(of: "\u{2019}", with: "'") }
-        let markers = try? NSRegularExpression(pattern: refusalMarkers)
         let outputText = normalized(text)
         let sourceText = normalized(selection)
-        let found = markers?.matches(in: outputText, range: NSRange(outputText.startIndex..., in: outputText)) ?? []
-        return found.contains { match in
-            guard let range = Range(match.range, in: outputText) else { return true }
-            return !sourceText.contains(outputText[range])
+        let matches = { (marker: NSRegularExpression, value: String) in
+            marker.firstMatch(in: value, range: NSRange(value.startIndex..., in: value)) != nil
         }
+        if refusalMarkers.contains(where: { matches($0, outputText) && !matches($0, sourceText) }) { return true }
+        guard let family = declineFamily(of: outputText), declineFamily(of: sourceText) != family else { return false }
+        let content = words(in: sourceText).filter { $0.count >= 3 && !stopwords.contains($0) }
+        guard content.count >= 2 else { return false }
+        let kept = keptCount(of: content, in: words(in: outputText))
+        return Double(kept) / Double(content.count) < minimumKeptShare
     }
 
     /// Framing that talks about the edit. Matched only at the start, so "Here is" inside a rewritten sentence passes, and
