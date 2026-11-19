@@ -356,14 +356,14 @@ private final class HeldStoreOpen: Sendable {
 
     func open(_ activity: StoreOpenActivity) -> StoreOpenOutcome {
         let onMain = Thread.isMainThread
-        if quarantines { activity.setQuarantining(true) }
+        let quarantining = quarantines && activity.beginQuarantine()
         state.withLock {
             $0.calls += 1
             $0.ranOnMainThread = onMain
         }
-        if quarantines {
+        if quarantining {
             if quarantineGate.wait(timeout: .now() + patience) == .timedOut { state.withLock { $0.timedOut = true } }
-            activity.setQuarantining(false)
+            activity.endQuarantine()
         }
         if gate.wait(timeout: .now() + patience) == .timedOut { state.withLock { $0.timedOut = true } }
         return outcome

@@ -407,7 +407,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         guard quitWaitingForStore == nil else { return }
         let deadline = Task { [weak self] in
             try? await Task.sleep(for: self?.storeQuitDeadline ?? Self.defaultStoreQuitDeadline)
-            while !Task.isCancelled, self?.storeOpenActivity.isQuarantining == true {
+            // Committing and starting a quarantine exclude each other, so the opener can't begin moving files after this.
+            while !Task.isCancelled, self?.storeOpenActivity.commitQuit() == false {
                 try? await Task.sleep(for: .milliseconds(20))
             }
             guard !Task.isCancelled else { return }
@@ -422,7 +423,10 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         guard let held = quitWaitingForStore else { return }
         quitWaitingForStore = nil
         held.deadline.cancel()
-        if beginTermination(sender: held.sender, waitForStore: waitForStore) == .terminateCancel { replyToTermination(held.sender, false) }
+        if beginTermination(sender: held.sender, waitForStore: waitForStore) == .terminateCancel {
+            storeOpenActivity.withdrawQuit()
+            replyToTermination(held.sender, false)
+        }
     }
 
     private func completeLaunch(arguments: [String], menuBar: MenuBarController) {

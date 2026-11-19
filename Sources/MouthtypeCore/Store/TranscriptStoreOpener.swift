@@ -30,16 +30,47 @@ public struct StoreOpenOutcome: Sendable {
 }
 
 /// What an open is doing that a quit must not cut short. The open runs off the main thread; the app reads this from the main one.
+///
+/// A quarantine renames the damaged database, its -wal and -shm and the audio folder one by one, and exiting part way would
+/// split them. Everything else an open does is a read or a transaction SQLite rolls back. So the quarantine and a quit
+/// that won't wait any longer exclude each other: whichever takes the state first wins, under one lock.
 public final class StoreOpenActivity: Sendable {
-    private let quarantining = Mutex(false)
+    public enum State: Sendable, Equatable {
+        case opening, quarantining, quitCommitted
+    }
+
+    private let current = Mutex(State.opening)
 
     public init() {}
 
-    /// True while the damaged database, its -wal and -shm and the audio folder are being renamed aside. Exiting part way
-    /// would split them; everything else an open does is a read or a transaction SQLite rolls back.
-    public var isQuarantining: Bool { quarantining.withLock { $0 } }
+    public var state: State { current.withLock { $0 } }
 
-    public func setQuarantining(_ active: Bool) { quarantining.withLock { $0 = active } }
+    /// The opener asks before moving any file. False means the app has committed to quitting and nothing may be moved.
+    public func beginQuarantine() -> Bool {
+        current.withLock {
+            guard $0 == .opening else { return false }
+            $0 = .quarantining
+            return true
+        }
+    }
+
+    public func endQuarantine() {
+        current.withLock { if $0 == .quarantining { $0 = .opening } }
+    }
+
+    /// The app asks before answering a quit without the store. False means a quarantine is running; ask again once it's done.
+    public func commitQuit() -> Bool {
+        current.withLock {
+            guard $0 != .quarantining else { return false }
+            $0 = .quitCommitted
+            return true
+        }
+    }
+
+    /// For a committed quit that was then cancelled, so a later open step may quarantine again.
+    public func withdrawQuit() {
+        current.withLock { if $0 == .quitCommitted { $0 = .opening } }
+    }
 }
 
 public enum TranscriptStoreOpener {
@@ -69,9 +100,12 @@ public enum TranscriptStoreOpener {
         if isDamaged(lastError) {
             let audio = audioDirectory ?? url.deletingLastPathComponent().appendingPathComponent("audio", isDirectory: true)
             let moved: Quarantined
-            activity?.setQuarantining(true)
+            // The app is on its way out: leave every file where it is. The next launch finds the damage again.
+            guard activity?.beginQuarantine() ?? true else {
+                return StoreOpenOutcome(failure: "Mouthtype quit before the damaged file could be set aside")
+            }
             let quarantined = quarantine(url, audio: audio, at: now(), move: mover)
-            activity?.setQuarantining(false)
+            activity?.endQuarantine()
             switch quarantined {
             case .success(let result): moved = result
             case .failure(let failure):
