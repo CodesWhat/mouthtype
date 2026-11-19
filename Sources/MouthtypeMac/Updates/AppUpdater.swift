@@ -32,6 +32,7 @@ enum UpdateLaunchPolicy {
     func mayCheckForUpdates() throws
     func postponeInstallation(_ install: @escaping () -> Void) -> Bool
     func updateAvailable()
+    func installWillProceed()
     func updateWillRelaunch()
     func updateFinished(error: Error?)
 }
@@ -78,7 +79,7 @@ enum UpdateLaunchPolicy {
     var statusText: String {
         guard isAvailable else { return "Updates are available in installed Mouthtype releases." }
         if blocksNewWork { return "Installing the update. Mouthtype will reopen when it is ready." }
-        if installDeferred { return "The update is ready. It installs the next time you quit Mouthtype." }
+        if installDeferred { return "The update is ready. It installs the next time you quit Mouthtype, which then reopens." }
         if pendingInstall != nil { return "Waiting for dictation, recovery and file transcription to finish before installing." }
         if currentActivity != .idle { return "Updates wait until dictation, recovery and file transcription are finished." }
         if hasUpdate { return "An update is available. Review it when you are ready." }
@@ -172,6 +173,14 @@ enum UpdateLaunchPolicy {
         hasUpdate = true
         refreshActivity()
         refreshDriver()
+    }
+
+    /// Sparkle asks this on every install attempt. A retry after a cancelled quit skips its postpone and will-relaunch
+    /// callbacks, so this is where the block comes back and a quit that lands on busy work is cancelled again.
+    func installWillProceed() {
+        guard installDeferred else { return }
+        installDeferred = false
+        blocksNewWork = true
     }
 
     func updateFinished(error: Error?) {

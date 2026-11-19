@@ -300,6 +300,18 @@ import os
         #expect(delegate.appUpdater.allowsTermination)
     }
 
+    @Test func aRetriedInstallCannotQuitThroughBusyWork() {
+        let delegate = AppDelegate()
+        var activity = UpdateActivity.idle
+        delegate.appUpdater = AppUpdater(driver: nil, activity: { activity })
+        delegate.appUpdater.updateWillRelaunch()
+        delegate.appUpdater.installWasDeferred()
+        activity = .fileTranscription
+        delegate.appUpdater.installWillProceed()
+        #expect(delegate.applicationShouldTerminate(NSApplication.shared) == .terminateCancel)
+        #expect(!delegate.appUpdater.blocksNewWork && delegate.appUpdater.installDeferred)
+    }
+
     @Test func aHeldQuitCancelledDuringAnUpdateInstallUnblocksNewWork() async {
         let delegate = AppDelegate()
         var replies: [Bool] = []

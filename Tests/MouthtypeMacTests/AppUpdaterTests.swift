@@ -17,6 +17,8 @@ import Testing
         var startError: Error?
         func start() throws { starts += 1; if let startError { throw startError } }
         func checkForUpdates() { checks += 1 }
+        /// Sparkle's retried install: only the should-relaunch question reaches the delegate before the quit is sent.
+        func retryInstall() { delegate?.installWillProceed() }
     }
 
     @Test func normalConfiguredAppLaunchIsTheOnlyEligibleStartup() {
@@ -167,7 +169,7 @@ import Testing
         updater.refreshActivity()
         // Nothing holds the next quit, which is what lets Sparkle's waiting installer finish.
         #expect(updater.allowsTermination && updater.installDeferred)
-        #expect(updater.statusText == "The update is ready. It installs the next time you quit Mouthtype.")
+        #expect(updater.statusText == "The update is ready. It installs the next time you quit Mouthtype, which then reopens.")
         let section = UpdateAvailableMenuSection(updater: updater)
         let item = try #require(section.items.first)
         #expect(item.title == "Update Available…" && item.isEnabled)
@@ -176,6 +178,30 @@ import Testing
         #expect(driver.checks == 1 && updater.hasUpdate && updater.installDeferred)
         updater.updateFinished(error: nil)
         #expect(!updater.installDeferred && !updater.hasUpdate && !updater.blocksNewWork)
+    }
+
+    @Test func aRetriedInstallHoldsTheQuitWhileWorkIsUnderway() {
+        let activity = Activity(), driver = Driver()
+        let updater = AppUpdater(driver: driver, activity: { activity.value })
+        updater.start()
+        // The first attempt asks too, before anything is deferred, and changes nothing.
+        driver.retryInstall()
+        #expect(!updater.blocksNewWork && !updater.installDeferred)
+        #expect(!updater.postponeInstallation {})
+        updater.updateWillRelaunch()
+        updater.installWasDeferred()
+        activity.value = .fileTranscription
+        updater.refreshActivity()
+        #expect(updater.allowsTermination)
+        driver.retryInstall()
+        #expect(updater.blocksNewWork && !updater.allowsTermination && !updater.installDeferred && updater.hasUpdate)
+        // The quit is refused, which defers the install again and leaves the transcription running.
+        updater.installWasDeferred()
+        #expect(!updater.blocksNewWork && updater.installDeferred && updater.hasUpdate)
+        activity.value = .idle
+        updater.refreshActivity()
+        driver.retryInstall()
+        #expect(updater.blocksNewWork && updater.allowsTermination)
     }
 
     @Test func aCancelledQuitWithNoInstallUnderwayChangesNothing() {
