@@ -78,10 +78,23 @@ enum PasteVerifier {
         {
             return true
         }
+        // Text that reads exactly as it did is never evidence, whatever the caret did: an app can ignore the paste and
+        // still collapse the selection itself.
+        guard value != beforeValue else { return false }
         // Pasting over a selection that already held the text gains nothing; the field reading exactly as the paste
         // would leave it is the evidence then.
         if let expected = replacing(before.selection, in: beforeValue, with: pasted) {
-            if key.isEmpty ? expected == value : compact(expected) == compact(value) { return true }
+            if key.isEmpty ? expected == value : compact(expected) == compact(value) {
+                // When the paste changes only whitespace, the text alone says little. The caret has to show it
+                // happened too: collapsed at the end of what replaced the selection, moved from where the selection
+                // was, with no input. The end comes from the field's own text, since a field may drop or rewrite
+                // whitespace.
+                let unchanged = key.isEmpty ? expected == beforeValue : compact(expected) == compact(beforeValue)
+                guard unchanged else { return true }
+                guard quiet, let was = before.selection, let caret = now.selection, caret != was else { return false }
+                let replaced = (value as NSString).length - ((beforeValue as NSString).length - was.length)
+                return caret.length == 0 && caret.location == was.location + replaced
+            }
         }
         // A field that rewrites characters (quotes, dashes) still took the text if what it gained is nearly the text.
         guard quiet, let gained = inserted(before: beforeValue, now: value, selection: before.selection) else { return false }

@@ -155,14 +155,66 @@ import Testing
         #expect(!V.confirms(obs(other), baseline: baseline, pasted: "\nline one\nline two"))
     }
 
-    @Test func pastingOverASelectionThatHeldTheSameTextConfirms() {
+    @Test func pastingOverASelectionThatHeldTheSameTextIsNotConfirmedByTheCaretAlone() {
         let selected = V.Baseline(reading: FieldReading(value: "Hello world", length: 11, selection: NSRange(location: 6, length: 5)), input: 7)
+        // The text reads exactly as before. A real paste leaves it like this, but so does an app that ignores the paste
+        // and collapses the selection itself, so it stays unknown and no Return goes out.
         let same = FieldReading(value: "Hello world", length: 11, selection: NSRange(location: 11, length: 0))
-        #expect(V.confirms(obs(same), baseline: selected, pasted: "world"))
+        #expect(!V.confirms(obs(same), baseline: selected, pasted: "world"))
+        #expect(V.judge(baseline: selected, pasted: "world", observations: [obs(same), obs(same), obs(same)], expected: 3) == .unknown)
         // The previous clipboard landing over the selection instead is a change of the same size, and not the paste.
         let other = FieldReading(value: "Hello hunter2", length: 13, selection: NSRange(location: 13, length: 0))
         #expect(!V.confirms(obs(other), baseline: selected, pasted: "world"))
         #expect(V.judge(baseline: selected, pasted: "world", observations: [obs(other), obs(other), obs(other)], expected: 3) == .unknown)
+    }
+
+    @Test func anUnchangedFieldOverASelectionThatHeldTheSameTextIsNotConfirmed() {
+        let selected = V.Baseline(reading: FieldReading(value: "hello", length: 5, selection: NSRange(location: 0, length: 5)), input: 7)
+        let ignored = obs(selected.reading)
+        #expect(!V.confirms(ignored, baseline: selected, pasted: "hello"))
+        // Nothing at all changed, so the usual rule for an untouched field applies.
+        #expect(V.judge(baseline: selected, pasted: "hello", observations: [ignored, ignored, ignored], expected: 3) == .notLanded)
+        // The caret collapsed after the text used to confirm. It no longer does: the text is exactly what it was, and
+        // an app that ignored the paste can move the caret there on its own.
+        let landed = FieldReading(value: "hello", length: 5, selection: NSRange(location: 5, length: 0))
+        #expect(!V.confirms(obs(landed), baseline: selected, pasted: "hello"))
+        #expect(V.judge(baseline: selected, pasted: "hello", observations: [obs(landed), obs(landed), obs(landed)], expected: 3) == .unknown)
+        #expect(!V.confirms(obs(landed, input: 8), baseline: selected, pasted: "hello"))
+        #expect(!V.confirms(obs(landed, same: false), baseline: selected, pasted: "hello"))
+        for selection in [NSRange(location: 0, length: 0), NSRange(location: 3, length: 0), NSRange(location: 1, length: 4)] {
+            let elsewhere = FieldReading(value: "hello", length: 5, selection: selection)
+            #expect(!V.confirms(obs(elsewhere), baseline: selected, pasted: "hello"))
+        }
+    }
+
+    @Test func anIgnoredPasteThatOnlyCollapsesTheSelectionIsNotConfirmed() {
+        // "hello " is selected and "hello" pasted. The app ignores it but drops the selection to the end.
+        let selected = V.Baseline(reading: FieldReading(value: "hello ", length: 6, selection: NSRange(location: 0, length: 6)), input: 7)
+        let collapsed = FieldReading(value: "hello ", length: 6, selection: NSRange(location: 6, length: 0))
+        #expect(!V.confirms(obs(collapsed), baseline: selected, pasted: "hello"))
+        #expect(V.judge(baseline: selected, pasted: "hello", observations: [obs(collapsed), obs(collapsed), obs(collapsed)], expected: 3) == .unknown)
+        #expect(!V.confirms(obs(selected.reading), baseline: selected, pasted: "hello"))
+    }
+
+    @Test func aPasteThatOnlyChangesWhitespaceConfirmsByItsCaret() {
+        // A single-line field drops the newline: the text differs from before only in whitespace, and the caret ends at
+        // 10 though the pasted text is 11 long.
+        let selected = V.Baseline(reading: FieldReading(value: "hello world", length: 11, selection: NSRange(location: 0, length: 11)), input: 7)
+        let landed = FieldReading(value: "helloworld", length: 10, selection: NSRange(location: 10, length: 0))
+        #expect(V.confirms(obs(landed), baseline: selected, pasted: "hello\nworld"))
+        #expect(V.judge(baseline: selected, pasted: "hello\nworld", observations: [obs(landed)], expected: 3) == .confirmed)
+        #expect(!V.confirms(obs(landed, input: 8), baseline: selected, pasted: "hello\nworld"))
+        let elsewhere = FieldReading(value: "helloworld", length: 10, selection: NSRange(location: 4, length: 0))
+        #expect(!V.confirms(obs(elsewhere), baseline: selected, pasted: "hello\nworld"))
+        // The same paste over a field that already read "helloworld" leaves the text exactly as it was, so it can't confirm.
+        let exact = V.Baseline(reading: FieldReading(value: "helloworld", length: 10, selection: NSRange(location: 0, length: 10)), input: 7)
+        #expect(!V.confirms(obs(landed), baseline: exact, pasted: "hello\nworld"))
+        #expect(!V.confirms(obs(exact.reading), baseline: exact, pasted: "hello\nworld"))
+    }
+
+    @Test func aCaretAlreadyWhereAnEmptyPasteWouldLeaveItProvesNothing() {
+        let collapsed = V.Baseline(reading: FieldReading(value: "hello", length: 5, selection: NSRange(location: 5, length: 0)), input: 7)
+        #expect(!V.confirms(obs(collapsed.reading), baseline: collapsed, pasted: ""))
     }
 
     @Test func aFieldThatSwapsQuotesStillConfirmsByWhatItGained() {
