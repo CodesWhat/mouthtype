@@ -10,7 +10,7 @@ import Testing
         let errors: [CaptureError] = [
             .microphoneDenied, .microphonePending, .noInputDevice,
             .invalidInputFormat(sampleRate: 0, channels: 0),
-            .engineStartFailed(Boom()), .routeChanged, .notRecording,
+            .engineStartFailed(Boom()), .routeChanged, .notRecording, .busy(.dictation),
         ]
         for error in errors {
             #expect(!error.userMessage.isEmpty)
@@ -42,8 +42,9 @@ import Testing
 
     @Test func stopWithoutStartThrowsAndCancelWhenIdleIsSafe() async {
         let capture = AudioCapture()
-        await #expect(throws: CaptureError.self) { try await capture.stop() }
-        await capture.cancel()
+        let lease = CaptureLease(owner: .dictation)
+        await #expect(throws: CaptureError.self) { try await capture.stop(lease) }
+        await capture.cancel(lease)
         #expect(capture.reading == .silence)
     }
 

@@ -16,8 +16,11 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         diagnostics: diagnostics, engine: engineHost, microphone: micCapture.preparation, cleanup: cleanerHost, testTake: setupTestTake,
         onBoostSavedWordsChanged: { [weak self] _ in self?.refreshVocabularyBias() })
     private lazy var setupTestTake = SetupTestTake(
-        capture: micCapture, engine: HostEngine(host: engineHost), readLevel: { [micCapture] in micCapture.capture.reading.db },
-        canStart: { [weak self] in self?.dictation.map { $0.phase == .idle } ?? true })
+        capture: micCapture.owned(by: .setupTest), engine: HostEngine(host: engineHost), readLevel: { [micCapture] in micCapture.capture.reading.db },
+        canStart: { [weak self] in
+            guard let self else { return true }
+            return (self.dictation.map { $0.phase == .idle } ?? true) && !self.microphoneHeld(byOtherThan: .setupTest)
+        })
     private lazy var setupWindow = SetupWindow(
         model: setupModel,
         actions: SetupActions(
@@ -64,12 +67,12 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         \.builtVoiceEditModel,
         VoiceEditCoordinator(
             editor: achievementCounting.counting(AccessibilitySelectionEditor(), as: .voiceEdits),
-            recorder: VoiceInstructionRecorder(capture: micCapture, engine: HostEngine(host: engineHost)),
+            recorder: VoiceInstructionRecorder(capture: micCapture.owned(by: .voiceEdit), engine: HostEngine(host: engineHost)),
             engine: cleanerHost,
             busy: { [weak self] in
                 guard let self else { return true }
                 return self.isTerminating || self.dictation?.phase != .idle || self.fileTranscriptionModel.isBusy || self.recovery?.isRecovering == true
-                    || self.appUpdater.blocksNewWork || self.selectionCleanupModel.hasPreview
+                    || self.appUpdater.blocksNewWork || self.selectionCleanupModel.hasPreview || self.microphoneHeld(byOtherThan: .voiceEdit)
             },
             secureContext: { AccessibilityFocusReader().isSecureInputEnabled || AccessibilityFocusReader().snapshotApplication().isSecure },
             modelUnavailableReason: { [weak self] in self?.cleanerHost.transformUnavailableReason },
@@ -487,7 +490,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         dictation.canStartRecording = { [weak self] in
             guard self?.isTerminating != true, self?.recovery?.isRecovering != true,
                 self?.appUpdater.blocksNewWork != true, self?.fileTranscriptionModel.isBusy != true,
-                self?.voiceEditModel.phase.holdsMicrophone != true
+                self?.voiceEditModel.phase.holdsMicrophone != true, self?.microphoneHeld(byOtherThan: .dictation) != true
             else { return false }
             self?.builtSettingsWindow?.model.home.stopPlayback()
             return true
@@ -1046,6 +1049,12 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                 _ = await prepareCapture()
             }
         }
+    }
+
+    /// True while a consumer other than `owner` is recording from the shared microphone. Dictation, the setup test
+    /// take and voice edit all ask this before they start.
+    private func microphoneHeld(byOtherThan owner: CaptureOwner) -> Bool {
+        micCapture.holder.map { $0 != owner } ?? false
     }
 
     private func microphoneSelectionChanged() {

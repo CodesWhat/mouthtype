@@ -202,6 +202,7 @@ enum VoiceEditPhase: Equatable {
             try await recorder.start()
         } catch {
             guard id == generation else { return }
+            if case CaptureError.busy = error { return end(.refused(.busy)) }
             return end((error as? VoiceInstructionRecorder.Failure) == .engineNotReady ? .speechNotReady : .recordingFailed)
         }
         // `end()` and `cancel()` bump the generation, so a flow that finished while `start()` was still pending lands here.

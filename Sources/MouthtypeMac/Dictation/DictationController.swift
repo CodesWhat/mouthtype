@@ -269,7 +269,7 @@ final class DictationController {
             return
         }
         guard canStartRecording() else {
-            pill.showMessage(PillMessage("Mouthtype is busy", detail: "Try again in a moment"), duration: 2.5)
+            pill.showMessage(Self.busyMessage, duration: 2.5)
             return
         }
         switch phase {
@@ -977,6 +977,8 @@ final class DictationController {
         "Microphone access needed", detail: "Allow it in System Settings", isError: true
     )
 
+    static let busyMessage = PillMessage("Mouthtype is busy", detail: "Try again in a moment")
+
     static func pillMessage(for error: Error) -> PillMessage {
         guard let error = error as? CaptureError else {
             return PillMessage("Transcription failed", detail: "Try again", isError: true)
@@ -991,6 +993,7 @@ final class DictationController {
             return PillMessage("Check microphone choice", detail: "Choose an input in Mouthtype Settings", isError: true)
         case .routeChanged: return PillMessage("Microphone changed", detail: "Try again", isError: true)
         case .engineStartFailed, .notRecording: return PillMessage("Couldn't record", detail: "Try again", isError: true)
+        case .busy: return busyMessage
         }
     }
 

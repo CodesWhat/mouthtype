@@ -60,11 +60,13 @@ import Observation
         min(max((db - meterFloorDb) / -meterFloorDb, 0), 1)
     }
 
+    static let busyMessage = "Mouthtype is busy with a dictation. Try again in a moment."
+
     /// Starts a take. Does nothing while one runs or while a dictation holds the microphone.
     func start() {
         guard !isBusy else { return }
         guard canStart() else {
-            state = .failed("Mouthtype is busy with a dictation. Try again in a moment.")
+            state = .failed(Self.busyMessage)
             return
         }
         stopRequested = false
@@ -96,6 +98,9 @@ import Observation
     private func run(language: DictationLanguageRequest) async {
         do {
             try await capture.start(keyDownAtNanos: HostClock.now())
+        } catch CaptureError.busy {
+            state = .failed(Self.busyMessage)
+            return
         } catch {
             state = .failed(error.localizedDescription)
             return
