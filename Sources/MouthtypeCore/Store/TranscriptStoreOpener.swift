@@ -2,7 +2,7 @@ import Foundation
 import GRDB
 
 /// What opening the history database came to. `store` is nil only when `failure` is set.
-public struct StoreOpenOutcome {
+public struct StoreOpenOutcome: Sendable {
     public var store: TranscriptStore?
     /// Where a damaged database was moved when it had to be replaced.
     public var quarantinedTo: URL?

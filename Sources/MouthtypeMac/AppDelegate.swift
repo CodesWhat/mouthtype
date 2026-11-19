@@ -368,10 +368,44 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         DispatchQueue.main.async { MainActor.assumeIsolated { finish(menuBar) } }
     }
 
+    /// Opens history. Launch runs it off the main thread; tests swap in one they can hold shut.
+    var openStore: @Sendable () -> StoreOpenOutcome = { TranscriptStoreOpener.open() }
+    /// True from the handoff until the outcome is back on the main actor.
+    private(set) var storeOpenInFlight = false
+    private var quitWaitingForStore: NSApplication?
+
+    /// Runs `openStore` on a background queue and hands its outcome to `finish` on the main actor, exactly once. The open
+    /// checks the whole search index and may retry, rebuild or quarantine, so its cost grows with history; the main thread
+    /// stays free meanwhile. The instance lease taken in beginOwnedLaunch is held throughout.
+    func openStoreOffMain(then finish: @escaping @MainActor (StoreOpenOutcome) -> Void) {
+        let open = openStore
+        storeOpenInFlight = true
+        Task {
+            let outcome = await withCheckedContinuation { (done: CheckedContinuation<StoreOpenOutcome, Never>) in
+                DispatchQueue.global(qos: .userInitiated).async { done.resume(returning: open()) }
+            }
+            storeOpenInFlight = false
+            finish(outcome)
+            resumeQuitWaitingForStore()
+        }
+    }
+
+    /// Runs a quit that arrived during the open, after launch has continued, through the same path as any other quit.
+    private func resumeQuitWaitingForStore() {
+        guard let sender = quitWaitingForStore else { return }
+        quitWaitingForStore = nil
+        if beginTermination(sender: sender) == .terminateCancel { replyToTermination(sender, false) }
+    }
+
     private func completeLaunch(arguments: [String], menuBar: MenuBarController) {
         // Undo a Fn remap a previous run died with before anything reads the keyboard.
         _ = fnRemap.restoreIfStale()
-        let opened = TranscriptStoreOpener.open()
+        // Nothing that reads history exists yet: no pill, hotkey, menu sections or recovery. URLs queue until finishLaunch,
+        // a quit waits in beginTermination, and a Home window built early shows no takes until finishLaunch re-wires it.
+        openStoreOffMain { [self] opened in continueLaunch(arguments: arguments, menuBar: menuBar, opened: opened) }
+    }
+
+    private func continueLaunch(arguments: [String], menuBar: MenuBarController, opened: StoreOpenOutcome) {
         let store = opened.store
         reportStoreOpen(opened)
         let archive = AudioArchive(supportDirectory: TranscriptStore.defaultURL().deletingLastPathComponent())
@@ -613,6 +647,12 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func beginTermination(sender: NSApplication) -> NSApplication.TerminateReply {
+        // Exiting part way through the open could leave a damaged database and its audio half quarantined, so the quit
+        // waits for the outcome. Launch then continues as it always did before a quit was handled, and the quit follows.
+        if storeOpenInFlight {
+            quitWaitingForStore = sender
+            return .terminateLater
+        }
         guard Self.mayQuit(allowsTermination: appUpdater.allowsTermination, resolveDraft: { signalShutdown ? saveDraftsForSignal() : (builtSettingsWindow?.resolveDraftForQuit() ?? true) }) else {
             return .terminateCancel
         }

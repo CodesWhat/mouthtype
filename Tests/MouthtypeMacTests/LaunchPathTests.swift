@@ -2,6 +2,7 @@ import AppKit
 import Foundation
 import MouthtypeCore
 import Testing
+import os
 @testable import MouthtypeMac
 
 @MainActor @Suite(.timeLimit(.minutes(1))) struct LaunchPathTests {
@@ -137,6 +138,78 @@ import Testing
         #expect(replies == [true])
     }
 
+    @Test func theStoreOpensOffTheMainActorAndLaunchContinuesOnceWithIt() async throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("launch-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let store = try TranscriptStore(url: dir.appendingPathComponent("history.sqlite"))
+        let held = HeldStoreOpen(outcome: StoreOpenOutcome(store: store))
+        let delegate = AppDelegate()
+        delegate.openStore = { held.open() }
+        var outcomes: [StoreOpenOutcome] = []
+        delegate.openStoreOffMain { outcomes.append($0) }
+        // Back on the main actor with the open still held shut.
+        #expect(outcomes.isEmpty)
+        #expect(delegate.storeOpenInFlight)
+        for _ in 0..<1000 where !held.started { try? await Task.sleep(for: .milliseconds(5)) }
+        #expect(held.started)
+        #expect(!held.ranOnMainThread)
+        // Main-actor work goes on meanwhile: a URL queues and a window built early has no store yet.
+        delegate.application(NSApp, open: url())
+        #expect(delegate.pendingOpenCount == 1)
+        #expect(delegate.settingsWindow.model.home.store == nil)
+        #expect(!delegate.launchComplete)
+        #expect(outcomes.isEmpty)
+        held.release()
+        for _ in 0..<1000 where outcomes.isEmpty { try? await Task.sleep(for: .milliseconds(5)) }
+        // Give a second delivery the same chance to land.
+        try? await Task.sleep(for: .milliseconds(50))
+        #expect(outcomes.count == 1)
+        #expect(outcomes.first?.store === store)
+        #expect(outcomes.first?.failure == nil)
+        #expect(!held.timedOut)
+        #expect(held.calls == 1)
+        #expect(!delegate.storeOpenInFlight)
+    }
+
+    @Test func aFailedOpenStillContinuesLaunchOnceWithNoStore() async {
+        let held = HeldStoreOpen(outcome: StoreOpenOutcome(failure: "disk I/O error"))
+        let delegate = AppDelegate()
+        delegate.openStore = { held.open() }
+        var outcomes: [StoreOpenOutcome] = []
+        delegate.openStoreOffMain { outcomes.append($0) }
+        #expect(outcomes.isEmpty)
+        held.release()
+        for _ in 0..<1000 where outcomes.isEmpty { try? await Task.sleep(for: .milliseconds(5)) }
+        try? await Task.sleep(for: .milliseconds(50))
+        #expect(outcomes.count == 1)
+        #expect(outcomes.first?.store == nil)
+        #expect(outcomes.first?.failure == "disk I/O error")
+        #expect(!held.timedOut)
+        #expect(!held.ranOnMainThread)
+    }
+
+    @Test func aQuitDuringTheOpenWaitsForItThenRepliesOnceAfterLaunchContinues() async {
+        let held = HeldStoreOpen(outcome: StoreOpenOutcome())
+        let delegate = AppDelegate()
+        delegate.openStore = { held.open() }
+        var events: [String] = []
+        delegate.openStoreOffMain { _ in events.append("launch") }
+        await withCheckedContinuation { done in
+            delegate.replyToTermination = { _, ready in
+                events.append("reply \(ready)"); done.resume()
+            }
+            #expect(delegate.applicationShouldTerminate(NSApplication.shared) == .terminateLater)
+            // Asked again while it waits: still one reply.
+            #expect(delegate.applicationShouldTerminate(NSApplication.shared) == .terminateLater)
+            #expect(events.isEmpty)
+            held.release()
+        }
+        try? await Task.sleep(for: .milliseconds(50))
+        #expect(events == ["launch", "reply true"])
+        #expect(!held.timedOut)
+    }
+
     @Test func burstsOfRefreshRequestsRunOnce() async {
         let (defaults, cleanup) = defaults()
         defer { cleanup() }
@@ -171,6 +244,43 @@ import Testing
         _ = FontFamilyCache.families()
         #expect(FontFamilyCache.loads == start + 2)
     }
+}
+
+/// A store open the test holds shut. It gives up after `patience`, so a launch that runs it on the main thread fails
+/// its expectations instead of hanging the suite.
+private final class HeldStoreOpen: Sendable {
+    private struct State {
+        var calls = 0
+        var ranOnMainThread = false
+        var timedOut = false
+    }
+
+    private let gate = DispatchSemaphore(value: 0)
+    private let state = OSAllocatedUnfairLock(initialState: State())
+    private let outcome: StoreOpenOutcome
+    private let patience: DispatchTimeInterval
+
+    init(outcome: StoreOpenOutcome, patience: DispatchTimeInterval = .seconds(2)) {
+        self.outcome = outcome
+        self.patience = patience
+    }
+
+    var started: Bool { state.withLock { $0.calls > 0 } }
+    var calls: Int { state.withLock { $0.calls } }
+    var ranOnMainThread: Bool { state.withLock { $0.ranOnMainThread } }
+    var timedOut: Bool { state.withLock { $0.timedOut } }
+
+    func open() -> StoreOpenOutcome {
+        let onMain = Thread.isMainThread
+        state.withLock {
+            $0.calls += 1
+            $0.ranOnMainThread = onMain
+        }
+        if gate.wait(timeout: .now() + patience) == .timedOut { state.withLock { $0.timedOut = true } }
+        return outcome
+    }
+
+    func release() { gate.signal() }
 }
 
 @Suite struct PhrasesHealthTests {

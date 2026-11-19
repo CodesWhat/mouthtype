@@ -545,16 +545,18 @@ public final class TranscriptStore: Sendable {
         return TakesObservation(cancellable)
     }
 
+    /// Walks the chronological index newest first and stops at the first usable row, so the cost doesn't grow with history.
+    /// Left to itself the planner picks the status index and sorts every inserted row.
+    static let lastTranscriptSQL = """
+        SELECT final_text FROM dictation INDEXED BY dictation_started_at
+        WHERE status = ? AND final_text IS NOT NULL AND TRIM(final_text) != ''
+            AND COALESCE(is_secure, 0) = 0
+        ORDER BY started_at DESC LIMIT 1
+        """
+
     public func lastTranscript() throws -> String? {
         try pool.read { db in
-            try String.fetchOne(
-                db,
-                sql: """
-                    SELECT final_text FROM dictation
-                    WHERE status = ? AND final_text IS NOT NULL AND TRIM(final_text) != ''
-                        AND COALESCE(is_secure, 0) = 0
-                    ORDER BY started_at DESC LIMIT 1
-                    """, arguments: [DictationStatus.inserted])
+            try String.fetchOne(db, sql: Self.lastTranscriptSQL, arguments: [DictationStatus.inserted])
         }
     }
 
