@@ -64,13 +64,16 @@ public enum VoiceEditGuard {
 
     /// Phrases only a model refusing the request says, wherever they fall in the output: AI framing, a first-person
     /// refusal to help or comply, the same with the subject dropped at a sentence start, and a first-person refusal to
-    /// act on the text or the request. One pattern per marker, so the selection can be checked for the same marker.
+    /// act on the text or the request, and a flat "that isn't possible". One pattern per marker, so the selection can be
+    /// checked for the same marker. No pattern lets `\s*` follow a boundary that matches at every newline: that rescans
+    /// a long run of blank lines from each one and goes quadratic.
     private static let refusalMarkers: [NSRegularExpression] = [
         #"\bas an ai\b"#,
         #"\blanguage model\b"#,
         #"\bi(?:'m| am)? INABILITY (?:(?:comply|fulfill|do (?:that|this))\b|(?:help|assist)(?: you)?(?: with (?:that|this|it|(?:your|that|the) request))?END)"#,
-        #"(?:^|[.!?,;:\n]\s*)INABILITY (?:help|assist)(?: you)?(?: with (?:that|this|it))?END"#,
+        #"(?:^|[.!?,;:]\s*|[\r\n][^\S\r\n]*)INABILITY (?:help|assist)(?: you)?(?: with (?:that|this|it))?END"#,
         #"\bi(?:'m| am)? INABILITY (?:edit|rewrite|rephrase|reword|revise|change|modify|provide|answer|write|generate|create|process|complete) (?:(?:this|that|it)END|(?:the|your|that|this)(?: following)? (?:text|selection|request)\b)"#,
+        #"\b(?:that|this|it|(?:your|the|that|this) request) (?:isn't|is not|wasn't|was not) (?:possibleEND|something i can (?:do|help with)\b)"#,
     ].compactMap {
         try? NSRegularExpression(pattern: $0.replacingOccurrences(of: "INABILITY", with: inability).replacingOccurrences(of: "END", with: phraseEnd))
     }
@@ -114,6 +117,23 @@ public enum VoiceEditGuard {
         Set(text.split(whereSeparator: { !$0.isLetter && !$0.isNumber }).map(String.init))
     }
 
+    /// How many of the selection's content words the output kept. A word counts as kept when the output has it, or has a
+    /// word of four or more characters that it starts or that starts it, or one sharing its first five characters, so
+    /// "reply" is kept by "replying" and "cancel" by "canceled". A synonym keeps nothing.
+    private static func keptCount(of content: Set<String>, in output: Set<String>) -> Int {
+        let long = output.filter { $0.count >= 4 }
+        var stems = Set<Substring>()
+        for word in long {
+            for length in 4...word.count { stems.insert(word.prefix(length)) }
+        }
+        return content.count { word in
+            if output.contains(word) { return true }
+            guard word.count >= 4 else { return false }
+            if stems.contains(Substring(word)) || (word.count >= 5 && stems.contains(word.prefix(5))) { return true }
+            return (4..<word.count).contains { long.contains(String(word.prefix($0))) }
+        }
+    }
+
     /// An output is a decline when it carries the unsupported-request sentinel, when it introduces a refusal marker the
     /// selection has no match for, or when it newly opens with an apology, refusal or regret and keeps little of what the
     /// selection said. The opening alone doesn't decide it: "make this more apologetic" yields an edit that opens with an
@@ -129,7 +149,7 @@ public enum VoiceEditGuard {
         guard let family = declineFamily(of: outputText), declineFamily(of: sourceText) != family else { return false }
         let content = words(in: sourceText).filter { $0.count >= 3 && !stopwords.contains($0) }
         guard content.count >= 2 else { return false }
-        let kept = content.intersection(words(in: outputText)).count
+        let kept = keptCount(of: content, in: words(in: outputText))
         return Double(kept) / Double(content.count) < minimumKeptShare
     }
 

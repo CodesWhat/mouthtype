@@ -167,8 +167,8 @@ private let paragraph =
             judge("Sorry, we won't be there on Tuesday.", selection: "We won't be there on Tuesday.", instruction: "soften it")
                 == .accepted("Sorry, we won't be there on Tuesday."))
         #expect(
-            judge("I am sorry that this reply is late.", selection: "This reply is late.", instruction: "apologize for it")
-                == .accepted("I am sorry that this reply is late."))
+            judge("I am sorry for the delay in replying.", selection: "This reply is late.", instruction: "apologize for it")
+                == .accepted("I am sorry for the delay in replying."))
         #expect(
             judge("Unfortunately, the launch slipped to March.", selection: "The launch slipped to March.", instruction: "sound more regretful")
                 == .accepted("Unfortunately, the launch slipped to March."))
@@ -246,6 +246,47 @@ private let paragraph =
             judge(
                 "I'm sorry, I can't help with that this week.", selection: "Decline Sam's request to help with the launch this week.",
                 instruction: "write the reply") == .accepted("I'm sorry, I can't help with that this week."))
+    }
+
+    @Test func anImpossibilityRefusalIsADeclineUnlessTheSelectionSaysItToo() {
+        let selection = "Please handle the request."
+        for refusal in ["I'm sorry, that request isn't possible.", "Sorry, your request is not something I can help with.", "I'm not able to do that."] {
+            #expect(judge(refusal, selection: selection) == .refused(.modelDeclined), "\(refusal)")
+        }
+        #expect(
+            judge("I'm sorry, that request isn't possible.", selection: "Tell them that isn't possible.", instruction: "write the reply")
+                == .accepted("I'm sorry, that request isn't possible."))
+        #expect(
+            judge("It isn't possible to meet on Friday.", selection: "Friday is out for the meeting.", instruction: "rephrase it")
+                == .accepted("It isn't possible to meet on Friday."))
+    }
+
+    @Test func inflectedWordsCountAsKeptAndSynonymsDoNot() {
+        #expect(
+            judge("Sorry, we canceled the meeting.", selection: "Meeting cancel notice.", instruction: "make it a sentence")
+                == .accepted("Sorry, we canceled the meeting."))
+        // Known limit: an apologetic rewrite that swaps every content word for a synonym keeps nothing the guard can
+        // see, so it's declined like a refusal.
+        #expect(
+            judge("Unfortunately, the appointment is off.", selection: "Meeting canceled.", instruction: "make this more apologetic")
+                == .refused(.modelDeclined))
+    }
+
+    @Test func anApologyInAnotherLanguageOpensWithNoFamily() {
+        #expect(
+            judge("Lo siento, gracias por la actualización.", selection: "Thanks for the update.")
+                == .accepted("Lo siento, gracias por la actualización."))
+    }
+
+    @Test func thousandsOfBlankLinesAreJudgedQuickly() {
+        let blank = String(repeating: "\n", count: 20_000)
+        let selection = "We can't make the meeting.\(blank)See you next week."
+        let output = "Sorry, we can't make the meeting.\(blank)See you next week."
+        var verdict = VoiceEditVerdict.refused(.emptyOutput)
+        let elapsed = ContinuousClock().measure { verdict = judge(output, selection: selection, instruction: "make this more apologetic") }
+        // Past the editor's size cap, which is checked after the decline rules have run over the whole text.
+        #expect(verdict == .refused(.tooLong))
+        #expect(elapsed < .milliseconds(500), "judged in \(elapsed)")
     }
 
     @Test func chatterAndPreambleAreRefused() {
