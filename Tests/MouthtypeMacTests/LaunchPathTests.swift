@@ -288,6 +288,8 @@ import os
         for _ in 0..<400 where delegate.storeOpenInFlight { try? await Task.sleep(for: .milliseconds(5)) }
         try? await Task.sleep(for: .milliseconds(50))
         #expect(box.replies == [true])
+    }
+
     @Test func aQuitCancelledDuringAnUpdateInstallUnblocksNewWork() {
         let delegate = AppDelegate()
         var activity = UpdateActivity.recovering
