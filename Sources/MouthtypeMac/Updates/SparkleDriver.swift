@@ -47,6 +47,10 @@ import Sparkle
         if !handleShowingUpdate { delegate?.updateAvailable() }
     }
 
+    func updaterShouldRelaunchApplication(_ updater: SPUUpdater) -> Bool {
+        delegate?.installWillProceed()
+        return true
+    }
     func updaterWillRelaunchApplication(_ updater: SPUUpdater) { delegate?.updateWillRelaunch() }
 
     func updater(_ updater: SPUUpdater, didFinishUpdateCycleFor updateCheck: SPUUpdateCheck, error: Error?) {

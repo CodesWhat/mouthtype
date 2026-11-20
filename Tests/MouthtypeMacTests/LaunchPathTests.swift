@@ -290,6 +290,47 @@ import os
         #expect(box.replies == [true])
     }
 
+    @Test func aQuitCancelledDuringAnUpdateInstallUnblocksNewWork() {
+        let delegate = AppDelegate()
+        var activity = UpdateActivity.recovering
+        delegate.appUpdater = AppUpdater(driver: nil, activity: { activity })
+        delegate.appUpdater.updateWillRelaunch()
+        #expect(delegate.appUpdater.blocksNewWork && !delegate.appUpdater.allowsTermination)
+        #expect(delegate.applicationShouldTerminate(NSApplication.shared) == .terminateCancel)
+        #expect(!delegate.appUpdater.blocksNewWork && delegate.appUpdater.installDeferred)
+        activity = .idle
+        #expect(delegate.appUpdater.allowsTermination)
+    }
+
+    @Test func aRetriedInstallCannotQuitThroughBusyWork() {
+        let delegate = AppDelegate()
+        var activity = UpdateActivity.idle
+        delegate.appUpdater = AppUpdater(driver: nil, activity: { activity })
+        delegate.appUpdater.updateWillRelaunch()
+        delegate.appUpdater.installWasDeferred()
+        activity = .fileTranscription
+        delegate.appUpdater.installWillProceed()
+        #expect(delegate.applicationShouldTerminate(NSApplication.shared) == .terminateCancel)
+        #expect(!delegate.appUpdater.blocksNewWork && delegate.appUpdater.installDeferred)
+    }
+
+    @Test func aHeldQuitCancelledDuringAnUpdateInstallUnblocksNewWork() async {
+        let delegate = AppDelegate()
+        var replies: [Bool] = []
+        delegate.appUpdater = AppUpdater(driver: nil, activity: { .recovering })
+        delegate.application(NSApplication.shared, open: url())
+        #expect(delegate.applicationShouldTerminate(NSApplication.shared) == .terminateLater)
+        delegate.appUpdater.updateWillRelaunch()
+        await withCheckedContinuation { done in
+            delegate.replyToTermination = { _, ready in
+                replies.append(ready); done.resume()
+            }
+            delegate.abandonLaunch(reason: "test")
+        }
+        #expect(replies == [false])
+        #expect(!delegate.appUpdater.blocksNewWork && delegate.appUpdater.installDeferred)
+    }
+
     @Test func burstsOfRefreshRequestsRunOnce() async {
         let (defaults, cleanup) = defaults()
         defer { cleanup() }

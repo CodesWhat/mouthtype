@@ -32,6 +32,7 @@ enum UpdateLaunchPolicy {
     func mayCheckForUpdates() throws
     func postponeInstallation(_ install: @escaping () -> Void) -> Bool
     func updateAvailable()
+    func installWillProceed()
     func updateWillRelaunch()
     func updateFinished(error: Error?)
 }
@@ -55,6 +56,8 @@ enum UpdateLaunchPolicy {
     private var driverCanCheck = false
     private var currentActivity = UpdateActivity.starting
     private(set) var blocksNewWork = false
+    /// The quit Sparkle asked for was cancelled. Its installer keeps waiting and finishes the update on the next quit.
+    private(set) var installDeferred = false
     private(set) var hasUpdate = false
     private(set) var automaticallyChecksForUpdates = false
     private(set) var errorMessage: String?
@@ -76,6 +79,7 @@ enum UpdateLaunchPolicy {
     var statusText: String {
         guard isAvailable else { return "Updates are available in installed Mouthtype releases." }
         if blocksNewWork { return "Installing the update. Mouthtype will reopen when it is ready." }
+        if installDeferred { return "The update is ready. It installs the next time you quit Mouthtype, which then reopens." }
         if pendingInstall != nil { return "Waiting for dictation, recovery and file transcription to finish before installing." }
         if currentActivity != .idle { return "Updates wait until dictation, recovery and file transcription are finished." }
         if hasUpdate { return "An update is available. Review it when you are ready." }
@@ -132,7 +136,7 @@ enum UpdateLaunchPolicy {
         if !started { startDriver() }
         guard started, driverCanCheck else { return }
         errorMessage = nil
-        hasUpdate = false
+        hasUpdate = installDeferred
         driver?.checkForUpdates()
         refreshDriver()
     }
@@ -160,9 +164,29 @@ enum UpdateLaunchPolicy {
     func updateAvailable() { hasUpdate = true; refreshActivity() }
     func updateWillRelaunch() { blocksNewWork = true }
 
+    /// The quit for an install was cancelled, so nothing is about to relaunch. Sparkle sends no finish on that path:
+    /// new work is admitted again and the update stays on offer until the next quit installs it.
+    func installWasDeferred() {
+        guard blocksNewWork else { return }
+        blocksNewWork = false
+        installDeferred = true
+        hasUpdate = true
+        refreshActivity()
+        refreshDriver()
+    }
+
+    /// Sparkle asks this on every install attempt. A retry after a cancelled quit skips its postpone and will-relaunch
+    /// callbacks, so this is where the block comes back and a quit that lands on busy work is cancelled again.
+    func installWillProceed() {
+        guard installDeferred else { return }
+        installDeferred = false
+        blocksNewWork = true
+    }
+
     func updateFinished(error: Error?) {
         pendingInstall = nil
         blocksNewWork = false
+        installDeferred = false
         hasUpdate = false
         if let error = error as NSError?, error.domain != "MouthtypeUpdates" { errorMessage = error.localizedDescription } else { errorMessage = nil }
         refreshDriver()
