@@ -103,6 +103,50 @@ import Testing
         #expect(try store.lastTranscript() == "Keep this text")
     }
 
+    @Test func lastTranscriptWalksTheChronologicalIndexWithoutSorting() throws {
+        let (store, dir) = try makeStore()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        for n in 0..<50 {
+            let id = try store.begin(DictationStart(startedAt: Self.noon.addingTimeInterval(Double(n))))
+            try store.recordInsertion(id, InsertionRecord(finalText: "take \(n)"))
+        }
+        let plan = try store.pool.read { db in
+            try Row.fetchAll(db, sql: "EXPLAIN QUERY PLAN " + TranscriptStore.lastTranscriptSQL, arguments: [DictationStatus.inserted])
+                .map { $0["detail"] as String }.joined(separator: " | ")
+        }
+        #expect(plan.contains("USING INDEX dictation_started_at"), "plan: \(plan)")
+        #expect(!plan.contains("USE TEMP B-TREE FOR ORDER BY"), "plan: \(plan)")
+        #expect(try store.lastTranscript() == "take 49")
+    }
+
+    @Test func lastTranscriptPassesNewerFailedBlankAndSecureRowsToReachTheLatestUsableOne() throws {
+        let (store, dir) = try makeStore()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let older = try store.begin(DictationStart(startedAt: Self.noon))
+        try store.recordInsertion(older, InsertionRecord(finalText: "older usable"))
+        let latest = try store.begin(DictationStart(startedAt: Self.noon.addingTimeInterval(10)))
+        try store.recordInsertion(latest, InsertionRecord(finalText: "latest usable"))
+        // Everything below is newer than the row that should win.
+        let failed = try store.begin(DictationStart(startedAt: Self.noon.addingTimeInterval(20)))
+        try store.recordInsertion(failed, InsertionRecord(finalText: "failed text"))
+        try store.finish(failed, status: .failed, errorMessage: "paste failed")
+        let blank = try store.begin(DictationStart(startedAt: Self.noon.addingTimeInterval(30)))
+        try store.recordInsertion(blank, InsertionRecord(finalText: "   "))
+        let empty = try store.begin(DictationStart(startedAt: Self.noon.addingTimeInterval(40)))
+        try store.recordInsertion(empty, InsertionRecord(finalText: ""))
+        let secure = try store.begin(DictationStart(startedAt: Self.noon.addingTimeInterval(50)))
+        try store.recordInsertion(secure, InsertionRecord(finalText: "secret", target: DictationTarget(isSecure: true)))
+        let unfinished = try store.begin(DictationStart(startedAt: Self.noon.addingTimeInterval(60)))
+        _ = unfinished
+        try store.pool.read { db in
+            let failedStatus = try String.fetchOne(db, sql: "SELECT status FROM dictation WHERE id = ?", arguments: [failed])
+            #expect(failedStatus == DictationStatus.failed.rawValue)
+            let failedText = try String.fetchOne(db, sql: "SELECT final_text FROM dictation WHERE id = ?", arguments: [failed])
+            #expect(failedText == "failed text")
+        }
+        #expect(try store.lastTranscript() == "latest usable")
+    }
+
     @Test func recentTakesFiltersInSqlAndHonoursTheLimit() throws {
         let (store, dir) = try makeStore()
         defer { try? FileManager.default.removeItem(at: dir) }
