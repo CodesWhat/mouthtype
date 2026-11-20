@@ -1,6 +1,7 @@
 import FluidAudio
 import Foundation
 import Testing
+import WhisperKit
 @testable import MouthtypeCore
 
 @Suite struct ModelPinsTests {
@@ -31,11 +32,11 @@ import Testing
     @Test func whisperDownloadPassesThePinnedRevisionToListAndSnapshot() async throws {
         let seen = Seen()
         let folder = try await WhisperModelFetch.download(
-            variant: "small.en",
+            variant: "base.en",
             listFiles: { globs, revision in
                 await seen.record(revision)
-                #expect(globs == ["*small.en/*"])
-                return ["openai_whisper-small.en/config.json", "openai_whisper-small.en/AudioEncoder.mlmodelc/model.mil"]
+                #expect(globs == ["*base.en/*"])
+                return ["openai_whisper-base.en/config.json", "openai_whisper-base.en/AudioEncoder.mlmodelc/model.mil"]
             },
             snapshot: { _, revision in
                 await seen.record(revision)
@@ -43,7 +44,7 @@ import Testing
             }
         )
         #expect(await seen.revisions == [ModelPins.whisperKit.revision, ModelPins.whisperKit.revision])
-        #expect(folder.lastPathComponent == "openai_whisper-small.en")
+        #expect(folder.lastPathComponent == "openai_whisper-base.en")
     }
 
     @Test func whisperDisambiguatesWithTheOpenAIPrefixAtTheSameRevision() async throws {
@@ -69,6 +70,195 @@ import Testing
             _ = try await WhisperModelFetch.download(
                 variant: "x",
                 listFiles: { _, _ in ["a_x/1", "b_x/2"] },
+                snapshot: { _, _ in URL(fileURLWithPath: "/tmp") }
+            )
+        }
+    }
+
+    private static let catalogFolders: [(variant: String, folder: String)] = [
+        (WhisperEngine.turboVariant, "openai_whisper-large-v3-v20240930_turbo"),
+        (WhisperEngine.smallEnVariant, "openai_whisper-small.en"),
+    ]
+
+    @Test func catalogVariantsMapToTheirExactFolders() {
+        #expect(WhisperModelFetch.catalogFolders.count == Self.catalogFolders.count)
+        for (variant, folder) in Self.catalogFolders {
+            #expect(WhisperModelFetch.catalogFolders[variant] == folder)
+        }
+    }
+
+    @Test func catalogVariantsResolveWithoutAListingWhenItThrows() async throws {
+        for (variant, folder) in Self.catalogFolders {
+            let seen = Seen()
+            let root = URL(fileURLWithPath: "/tmp/models/argmaxinc/whisperkit-coreml")
+            let resolved = try await WhisperModelFetch.download(
+                variant: variant,
+                listFiles: { _, _ in throw URLError(.notConnectedToInternet) },
+                snapshot: { globs, revision in
+                    await seen.record("\(globs)@\(revision)")
+                    return root
+                }
+            )
+            #expect(resolved == root.appending(path: folder))
+            #expect(await seen.revisions == ["\(["\(folder)/*"])@\(ModelPins.whisperKit.revision)"])
+        }
+    }
+
+    @Test func catalogVariantsPropagateASnapshotFailure() async {
+        for (variant, _) in Self.catalogFolders {
+            let listed = Seen()
+            await #expect(throws: URLError.self) {
+                _ = try await WhisperModelFetch.download(
+                    variant: variant,
+                    listFiles: { _, _ in
+                        await listed.record("listed")
+                        return []
+                    },
+                    snapshot: { _, _ in throw URLError(.notConnectedToInternet) }
+                )
+            }
+            #expect(await listed.revisions.isEmpty)
+        }
+    }
+
+    /// A model folder with Hub's per-file sidecars, in the format `HubApi.writeDownloadMetadata` writes.
+    private func makeCache(variant: String, revision: String = ModelPins.whisperKit.revision) throws -> (root: URL, folder: String) {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("whisper-cache-\(UUID().uuidString)", isDirectory: true)
+        return (root, try Self.writeCache(root: root, variant: variant, revision: revision))
+    }
+
+    @discardableResult
+    private static func writeCache(root: URL, variant: String, revision: String = ModelPins.whisperKit.revision) throws -> String {
+        let folder = try #require(WhisperModelFetch.catalogFolders[variant])
+        for file in try #require(ModelPins.whisperKitFiles[variant]) {
+            let url = root.appending(path: folder).appending(path: file)
+            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try Data("x".utf8).write(to: url)
+            let sidecar = Self.sidecar(root: root, folder: folder, file: file)
+            try FileManager.default.createDirectory(at: sidecar.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try "\(revision)\n4b37ac79e4370895417e0c9a1b125c39f3943a09\n1791818233.918445\n".write(to: sidecar, atomically: true, encoding: .utf8)
+        }
+        return folder
+    }
+
+    private static func sidecar(root: URL, folder: String, file: String) -> URL {
+        root.appending(path: ".cache/huggingface/download").appending(path: folder).appending(path: file + ".metadata")
+    }
+
+    /// Resolves `variant` against `root` and reports whether the pinned snapshot had to run. The snapshot stands in for a
+    /// real download: it leaves every file and sidecar at the pin.
+    private func resolve(variant: String, root: URL) async throws -> (folder: URL, snapshots: [String]) {
+        let seen = Seen()
+        let folder = try await WhisperModelFetch.download(
+            variant: variant,
+            cacheRoot: root,
+            listFiles: { _, _ in throw URLError(.notConnectedToInternet) },
+            snapshot: { globs, revision in
+                await seen.record("\(globs)@\(revision)")
+                try Self.writeCache(root: root, variant: variant, revision: revision)
+                return root
+            }
+        )
+        return (folder, await seen.revisions)
+    }
+
+    @Test func pinnedFileListsCoverTheCoreModels() {
+        #expect(Set(ModelPins.whisperKitFiles.keys) == Set(WhisperModelFetch.catalogFolders.keys))
+        for (variant, files) in ModelPins.whisperKitFiles {
+            #expect(Set(files).count == files.count, "\(variant) lists a file twice")
+            for model in ["AudioEncoder.mlmodelc", "TextDecoder.mlmodelc", "MelSpectrogram.mlmodelc"] {
+                #expect(files.contains("\(model)/weights/weight.bin"), "\(variant) is missing \(model)")
+                #expect(files.contains("\(model)/model.mil"), "\(variant) is missing \(model)")
+            }
+            #expect(files.contains("config.json"))
+        }
+        #expect(ModelPins.whisperKitFiles[WhisperEngine.turboVariant]?.count == 24)
+        #expect(ModelPins.whisperKitFiles[WhisperEngine.smallEnVariant]?.count == 19)
+    }
+
+    @Test func aCompleteCacheAtThePinLoadsWithNoRequest() async throws {
+        for (variant, folder) in Self.catalogFolders {
+            let (root, _) = try makeCache(variant: variant)
+            defer { try? FileManager.default.removeItem(at: root) }
+            let resolved = try await WhisperModelFetch.download(
+                variant: variant,
+                cacheRoot: root,
+                listFiles: { _, _ in throw URLError(.notConnectedToInternet) },
+                snapshot: { _, _ in throw URLError(.notConnectedToInternet) }
+            )
+            #expect(resolved == root.appending(path: folder))
+        }
+    }
+
+    @Test func aMissingFileGoesToThePinnedSnapshot() async throws {
+        let (root, folder) = try makeCache(variant: WhisperEngine.smallEnVariant)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.removeItem(at: root.appending(path: folder).appending(path: "TextDecoder.mlmodelc/weights/weight.bin"))
+        let result = try await resolve(variant: WhisperEngine.smallEnVariant, root: root)
+        #expect(result.snapshots == ["\(["\(folder)/*"])@\(ModelPins.whisperKit.revision)"])
+        #expect(result.folder == root.appending(path: folder))
+    }
+
+    @Test func aSidecarFromAnotherCommitGoesToThePinnedSnapshot() async throws {
+        let (root, folder) = try makeCache(variant: WhisperEngine.smallEnVariant)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try "\(String(repeating: "c", count: 40))\netag\n1791818233.9\n".write(
+            to: Self.sidecar(root: root, folder: folder, file: "config.json"), atomically: true, encoding: .utf8)
+        #expect(try await resolve(variant: WhisperEngine.smallEnVariant, root: root).snapshots.count == 1)
+    }
+
+    @Test func aCacheFromAnOlderPinGoesToThePinnedSnapshot() async throws {
+        let (root, _) = try makeCache(variant: WhisperEngine.turboVariant, revision: String(repeating: "c", count: 40))
+        defer { try? FileManager.default.removeItem(at: root) }
+        #expect(try await resolve(variant: WhisperEngine.turboVariant, root: root).snapshots.count == 1)
+    }
+
+    @Test func anOlderCacheTheSnapshotAcceptsOfflineIsNotLoaded() async throws {
+        for (variant, _) in Self.catalogFolders {
+            let (root, _) = try makeCache(variant: variant, revision: String(repeating: "c", count: 40))
+            defer { try? FileManager.default.removeItem(at: root) }
+            await #expect(throws: WhisperError.self) {
+                _ = try await WhisperModelFetch.download(
+                    variant: variant,
+                    cacheRoot: root,
+                    listFiles: { _, _ in throw URLError(.notConnectedToInternet) },
+                    snapshot: { _, _ in root }
+                )
+            }
+        }
+    }
+
+    @Test func aSnapshotThatLeavesAFileMissingIsNotLoaded() async throws {
+        let (root, folder) = try makeCache(variant: WhisperEngine.smallEnVariant)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.removeItem(at: root.appending(path: folder).appending(path: "config.json"))
+        await #expect(throws: WhisperError.self) {
+            _ = try await WhisperModelFetch.download(
+                variant: WhisperEngine.smallEnVariant,
+                cacheRoot: root,
+                listFiles: { _, _ in [] },
+                snapshot: { _, _ in root }
+            )
+        }
+    }
+
+    @Test func aMissingSidecarGoesToThePinnedSnapshot() async throws {
+        let (root, folder) = try makeCache(variant: WhisperEngine.smallEnVariant)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.removeItem(at: Self.sidecar(root: root, folder: folder, file: "AudioEncoder.mlmodelc/model.mil"))
+        #expect(try await resolve(variant: WhisperEngine.smallEnVariant, root: root).snapshots.count == 1)
+    }
+
+    @Test func anEmptyCacheGoesToThePinnedSnapshot() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("whisper-cache-\(UUID().uuidString)", isDirectory: true)
+        #expect(try await resolve(variant: WhisperEngine.turboVariant, root: root).snapshots.count == 1)
+    }
+
+    @Test func otherVariantsStillNeedTheListing() async {
+        await #expect(throws: URLError.self) {
+            _ = try await WhisperModelFetch.download(
+                variant: "base.en",
+                listFiles: { _, _ in throw URLError(.notConnectedToInternet) },
                 snapshot: { _, _ in URL(fileURLWithPath: "/tmp") }
             )
         }
@@ -147,6 +337,15 @@ import Testing
                 return bytes[file]!
             })
         #expect(await seen.revisions.isEmpty)
+    }
+
+    @Test func aVerifiedCacheLoadsOffline() async throws {
+        let (pin, bytes) = pin()
+        let root = makeRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let cached = try await WhisperTokenizerFetch.prepare(pin: pin, root: root, fetch: { _, _, file in bytes[file]! })
+        let offline = try await WhisperTokenizerFetch.prepare(pin: pin, root: root, fetch: { _, _, _ in throw URLError(.notConnectedToInternet) })
+        #expect(offline == cached)
     }
 
     @Test func anAlteredCachedFileIsReplacedFromThePinnedCommit() async throws {

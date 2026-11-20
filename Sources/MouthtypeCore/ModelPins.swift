@@ -54,6 +54,45 @@ public enum ModelPins {
         WhisperEngine.smallEnVariant: whisperTokenizerSmallEn,
     ]
 
+    /// Every file in a catalog variant's folder at the `whisperKit` pin, relative to that folder. This is what a snapshot of
+    /// `<folder>/*` downloads: Hub matches with `fnmatch` and no flags, so `*` crosses `/` and takes the nested `.mlmodelc`
+    /// contents too. To regenerate after a pin bump, list the files under each folder from
+    /// https://huggingface.co/api/models/argmaxinc/whisperkit-coreml/tree/<revision>/<folder>?recursive=true and update the
+    /// lists with the revision.
+    static let whisperKitFiles: [String: [String]] = [
+        WhisperEngine.turboVariant: whisperKitCommonFiles
+            + [
+                "TextDecoderContextPrefill.mlmodelc/analytics/coremldata.bin",
+                "TextDecoderContextPrefill.mlmodelc/coremldata.bin",
+                "TextDecoderContextPrefill.mlmodelc/metadata.json",
+                "TextDecoderContextPrefill.mlmodelc/model.mil",
+                "TextDecoderContextPrefill.mlmodelc/weights/weight.bin",
+            ],
+        WhisperEngine.smallEnVariant: whisperKitCommonFiles,
+    ]
+
+    private static let whisperKitCommonFiles = [
+        "AudioEncoder.mlmodelc/analytics/coremldata.bin",
+        "AudioEncoder.mlmodelc/coremldata.bin",
+        "AudioEncoder.mlmodelc/metadata.json",
+        "AudioEncoder.mlmodelc/model.mil",
+        "AudioEncoder.mlmodelc/model.mlmodel",
+        "AudioEncoder.mlmodelc/weights/weight.bin",
+        "MelSpectrogram.mlmodelc/analytics/coremldata.bin",
+        "MelSpectrogram.mlmodelc/coremldata.bin",
+        "MelSpectrogram.mlmodelc/metadata.json",
+        "MelSpectrogram.mlmodelc/model.mil",
+        "MelSpectrogram.mlmodelc/weights/weight.bin",
+        "TextDecoder.mlmodelc/analytics/coremldata.bin",
+        "TextDecoder.mlmodelc/coremldata.bin",
+        "TextDecoder.mlmodelc/metadata.json",
+        "TextDecoder.mlmodelc/model.mil",
+        "TextDecoder.mlmodelc/model.mlmodel",
+        "TextDecoder.mlmodelc/weights/weight.bin",
+        "config.json",
+        "generation_config.json",
+    ]
+
     public static let all: [Pin] = [parakeetV3, parakeetV2, ctc110m, sileroVAD, whisperKit]
 
     /// FluidAudio takes revisions only through the process-wide `ModelRegistry.revisionOverrides`, keyed by repo path.
@@ -81,12 +120,41 @@ enum WhisperModelFetch {
     typealias ListFiles = @Sendable (_ globs: [String], _ revision: String) async throws -> [String]
     typealias Snapshot = @Sendable (_ globs: [String], _ revision: String) async throws -> URL
 
+    /// The folder each catalog variant lives in at the pinned commit of `argmaxinc/whisperkit-coreml`. These are what the
+    /// generic lookup below resolves to there.
+    static let catalogFolders: [String: String] = [
+        WhisperEngine.turboVariant: "openai_whisper-large-v3-v20240930_turbo",
+        WhisperEngine.smallEnVariant: "openai_whisper-small.en",
+    ]
+
     static func download(
         variant: String,
         revision: String = ModelPins.whisperKit.revision,
+        cacheRoot: URL? = nil,
         listFiles: ListFiles,
         snapshot: Snapshot
     ) async throws -> URL {
+        // A catalog variant's folder and files are known, so a complete cache at the pin loads with no request. Hub's
+        // snapshot can't be relied on for that: it validates locally only once its path monitor reports no connection, and
+        // that check doesn't compare the cached commit with the requested one.
+        if let folder = catalogFolders[variant] {
+            var pinnedCache: (@Sendable () -> URL?)?
+            if let cacheRoot, revision == ModelPins.whisperKit.revision, let files = ModelPins.whisperKitFiles[variant] {
+                pinnedCache = { cachedFolder(root: cacheRoot, folder: folder, files: files, revision: revision) }
+            }
+            if let cached = pinnedCache?() { return cached }
+            // Anything missing or from another commit goes to the pinned snapshot, which downloads or repairs it. It skips
+            // the listing, a separate request the exact folder doesn't need.
+            let root = try await snapshot(["\(folder)/*"], revision)
+            // A real download leaves every sidecar at the pin. Offline, the snapshot accepts a cache from any commit, so
+            // one that still doesn't match is an older model and isn't loaded as the pinned one.
+            if let pinnedCache, pinnedCache() == nil {
+                throw WhisperError.modelsUnavailable(
+                    "The cached Whisper model \(folder) doesn't match the pinned revision \(revision). Connect to the internet to update it."
+                )
+            }
+            return root.appending(path: folder)
+        }
         var searchPath = "*\(variant)/*"
         var folders = try await topLevelFolders(listFiles([searchPath], revision))
         if folders.count != 1 {
@@ -102,6 +170,24 @@ enum WhisperModelFetch {
         return root.appending(path: folder)
     }
 
+    /// `<root>/<folder>` when every file in `files` is there and Hub's sidecar for it records `revision`. Hub writes one per
+    /// downloaded file at `<root>/.cache/huggingface/download/<path>.metadata`: the commit, the etag and a timestamp, one per
+    /// line. It records no size, and contents aren't re-hashed here, since that would read gigabytes on every launch.
+    static func cachedFolder(root: URL, folder: String, files: [String], revision: String) -> URL? {
+        guard !files.isEmpty else { return nil }
+        let fm = FileManager.default
+        let modelFolder = root.appending(path: folder)
+        let sidecars = root.appending(path: ".cache/huggingface/download").appending(path: folder)
+        for file in files {
+            var isDirectory: ObjCBool = false
+            guard fm.fileExists(atPath: modelFolder.appending(path: file).path, isDirectory: &isDirectory), !isDirectory.boolValue,
+                let sidecar = try? String(contentsOf: sidecars.appending(path: file + ".metadata"), encoding: .utf8),
+                sidecar.components(separatedBy: .newlines).first?.trimmingCharacters(in: .whitespaces) == revision
+            else { return nil }
+        }
+        return modelFolder
+    }
+
     private static func topLevelFolders(_ files: [String]) -> Set<String> {
         Set(files.compactMap { $0.components(separatedBy: "/").first })
     }
@@ -111,6 +197,7 @@ enum WhisperModelFetch {
         let repo = HubApiWrapper.Repo(id: ModelPins.whisperKit.repo, type: .models)
         return try await download(
             variant: variant,
+            cacheRoot: hub.localRepoLocation(repo),
             listFiles: { globs, revision in try await hub.getFilenames(from: repo, revision: revision, matching: globs) },
             snapshot: { globs, revision in try await hub.snapshot(from: repo, revision: revision, matching: globs) }
         )
