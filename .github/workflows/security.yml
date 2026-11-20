@@ -2,6 +2,8 @@ name: Security checks
 
 on:
   pull_request:
+    # labeled/unlabeled re-run the Package.resolved guard, which reads the downgrade and dependencies labels.
+    types: [opened, synchronize, reopened, labeled, unlabeled]
   push:
     branches: [main, 'dev/**']
   schedule:
@@ -51,6 +53,13 @@ jobs:
           zizmor --no-progress .github/workflows
       - name: Run release helper checks
         run: python3 -W error::ResourceWarning -m unittest discover -s Tests/ReleaseTests -p 'test_*.py'
+      - name: Check Package.resolved pins only move forward in dependency changes
+        if: github.event_name == 'pull_request'
+        env:
+          PACKAGE_RESOLVED_BASE: ${{ github.event.pull_request.base.sha }}
+          PACKAGE_RESOLVED_BRANCH: ${{ github.head_ref }}
+          PACKAGE_RESOLVED_LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
+        run: python3 scripts/check-package-resolved.py
 
   swift-format:
     runs-on: ubuntu-24.04
