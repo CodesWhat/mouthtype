@@ -11,6 +11,8 @@ private final class ScriptedModel: SmartModel, @unchecked Sendable {
     var steps: [ModelDownloadProgress] = []
     var failure: Error?
     var gate: DownloadGate?
+    /// Off, the download throws `failure` even when cancelled, the way the Hub client surfaces its URLSession error.
+    var checksCancellation = true
     private let lock = NSLock()
     private var downloaded: Bool
     private(set) var downloads = 0
@@ -31,7 +33,7 @@ private final class ScriptedModel: SmartModel, @unchecked Sendable {
         lock.withLock { downloads += 1 }
         for step in steps { report(step) }
         await gate?.wait()
-        try Task.checkCancellation()
+        if checksCancellation { try Task.checkCancellation() }
         if let failure { throw failure }
         lock.withLock { downloaded = true }
     }
@@ -218,6 +220,47 @@ private actor ScriptedEngine: PreparationReporting {
         #expect(selection.cleanupModels()[0].status == .available)
         #expect(fast.discards == 1)
         #expect(!fast.isDownloaded)
+    }
+
+    @Test func aCancelThatSurfacesAsAURLErrorStillCleansUpAndReturnsTheRowToAvailable() async {
+        // swift-huggingface cancels its URLSession task, so the download throws URLError.cancelled, not CancellationError.
+        let gate = DownloadGate()
+        let fast = ScriptedModel(id: "superwhisper-s1-mini", sizeMB: 1447)
+        fast.steps = [ModelDownloadProgress(hubCompletedUnits: 300_000_000, hubTotalUnits: 1_447_000_000)]
+        fast.gate = gate
+        fast.checksCancellation = false
+        fast.failure = URLError(.cancelled)
+        let selection = selection(fast: fast, thorough: ScriptedModel(id: "gemma-4-e4b-it-4bit", sizeMB: 5150))
+        selection.downloadCleanupModel(.light)
+        await waitUntil { if case .downloading = selection.cleanupModels()[0].status { true } else { false } }
+        selection.cancelCleanupDownload(.light)
+        await gate.release()
+        await waitUntil { selection.cleanupModels()[0].status == .available }
+        #expect(selection.cleanupModels()[0].status == .available)
+        #expect(fast.discards == 1)
+        #expect(!fast.isDownloaded)
+    }
+
+    @Test func aNetworkFailureIsStillAFailureAndKeepsWhatWasDownloaded() async {
+        let fast = ScriptedModel(id: "superwhisper-s1-mini", sizeMB: 1447)
+        fast.failure = URLError(.notConnectedToInternet)
+        let selection = selection(fast: fast, thorough: ScriptedModel(id: "gemma-4-e4b-it-4bit", sizeMB: 5150))
+        selection.downloadCleanupModel(.light)
+        await waitUntil { if case .failed = selection.cleanupModels()[0].status { true } else { false } }
+        guard case .failed = selection.cleanupModels()[0].status else { Issue.record("not failed"); return }
+        #expect(fast.discards == 0, "a failed download resumes from its partial files")
+    }
+
+    @Test func aTransferTheSystemCancelledIsAFailureNotAUserCancel() async {
+        // Nobody pressed cancel, so the partial files stay for the retry.
+        let fast = ScriptedModel(id: "superwhisper-s1-mini", sizeMB: 1447)
+        fast.checksCancellation = false
+        fast.failure = URLError(.cancelled)
+        let selection = selection(fast: fast, thorough: ScriptedModel(id: "gemma-4-e4b-it-4bit", sizeMB: 5150))
+        selection.downloadCleanupModel(.light)
+        await waitUntil { if case .failed = selection.cleanupModels()[0].status { true } else { false } }
+        guard case .failed = selection.cleanupModels()[0].status else { Issue.record("not failed"); return }
+        #expect(fast.discards == 0)
     }
 
     @Test func aModelAlreadyOnDiskIsDone() {
