@@ -194,7 +194,8 @@ public actor AudioCapture {
                 firstSound = firstFrame &+ UInt64(Double(frame) / pcm.format.sampleRate * 1_000_000_000)
             }
             buffer.noteInput(firstFrameAt: firstFrame, firstSoundAt: firstSound)
-            let converted = converters.convert(pcm) { chunk in
+            // A format change flushes the previous converter first, so its tail lands ahead of this buffer.
+            let converted = converters.convert(pcm, tail: { buffer.appendTail($0) }) { chunk in
                 buffer.append(chunk, inputFrames: Int(pcm.frameLength), at: now)
                 onLevel?(chunk)
             }
