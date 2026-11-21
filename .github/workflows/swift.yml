@@ -39,22 +39,31 @@ jobs:
             echo "swift=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          changed=$(git diff --name-only --no-renames "$BASE_SHA...$HEAD_SHA")
-          echo "$changed"
-          if echo "$changed" | grep -Eq '^(Sources/|Tests/|design/|packaging/|scripts/|Package\.swift$|Package\.resolved$|\.swift-format$|\.github/workflows/swift\.yml$)'; then
-            echo "swift=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "swift=false" >> "$GITHUB_OUTPUT"
-          fi
+          # Paths are read NUL-delimited from a file and never echoed raw: git quotes non-ASCII names in its default output,
+          # and a file named like a workflow command (::add-mask::true) would be run by the runner if printed.
+          git diff -z --name-only --no-renames "$BASE_SHA...$HEAD_SHA" > "$RUNNER_TEMP/changed"
+          pattern='^(Sources/|Tests/|design/|packaging/|scripts/|Package\.swift$|Package@swift-.*\.swift$|Package\.resolved$|\.swift-format$|\.github/workflows/swift\.yml$)'
+          swift=false
+          while IFS= read -r -d '' file; do
+            if [[ "$file" =~ $pattern ]]; then
+              swift=true
+            fi
+          done < "$RUNNER_TEMP/changed"
+          marker=$(uuidgen)
+          echo "::stop-commands::$marker"
+          tr '\0' '\n' < "$RUNNER_TEMP/changed"
+          echo "::$marker::"
+          echo "swift=$swift" >> "$GITHUB_OUTPUT"
 
   # build and test are required checks, and the macOS queue is the slow part of CI. A workflow-level paths filter would
   # leave both checks missing and block merges, so gate at job level instead: a skipped job with the same name still
   # satisfies the required check.
   build:
     needs: changes
-    # If change detection itself fails, build anyway rather than report a skipped (passing) check. !cancelled() rather
-    # than always(), so a run superseded by a newer push gives its macOS runner back.
-    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.swift == 'true') }}
+    # Skip only on an explicit false. If change detection fails, or its output is missing or masked, build anyway rather
+    # than report a skipped (passing) check. !cancelled() rather than always(), so a run superseded by a newer push
+    # gives its macOS runner back.
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.swift != 'false') }}
     # The code uses Xcode 27 SDK APIs (for example the FoundationModels samplingMode label), and macos-26 only ships Xcode 26.6.
     runs-on: xcode-27
     timeout-minutes: 60
@@ -124,7 +133,7 @@ jobs:
   # Headless tests and offscreen Settings renders run on PRs and after merge. Desktop tests run locally.
   test:
     needs: changes
-    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.swift == 'true') }}
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.swift != 'false') }}
     permissions:
       contents: read
     # The code uses Xcode 27 SDK APIs (for example the FoundationModels samplingMode label), and macos-26 only ships Xcode 26.6.

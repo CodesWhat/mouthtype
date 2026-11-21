@@ -47,13 +47,21 @@ jobs:
             echo "swift=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          changed=$(git diff --name-only --no-renames "$BASE_SHA...$HEAD_SHA")
-          echo "$changed"
-          if echo "$changed" | grep -Eq '^(Sources/|Package\.swift$|Package\.resolved$|\.github/workflows/codeql\.yml$)'; then
-            echo "swift=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "swift=false" >> "$GITHUB_OUTPUT"
-          fi
+          # Paths are read NUL-delimited from a file and never echoed raw: git quotes non-ASCII names in its default output,
+          # and a file named like a workflow command (::add-mask::true) would be run by the runner if printed.
+          git diff -z --name-only --no-renames "$BASE_SHA...$HEAD_SHA" > "$RUNNER_TEMP/changed"
+          pattern='^(Sources/|Package\.swift$|Package@swift-.*\.swift$|Package\.resolved$|\.github/workflows/codeql\.yml$)'
+          swift=false
+          while IFS= read -r -d '' file; do
+            if [[ "$file" =~ $pattern ]]; then
+              swift=true
+            fi
+          done < "$RUNNER_TEMP/changed"
+          marker=$(uuidgen)
+          echo "::stop-commands::$marker"
+          tr '\0' '\n' < "$RUNNER_TEMP/changed"
+          echo "::$marker::"
+          echo "swift=$swift" >> "$GITHUB_OUTPUT"
 
   analyze:
     name: Analyze (${{ matrix.language }})
@@ -100,8 +108,9 @@ jobs:
   analyze-swift:
     name: Analyze (swift)
     needs: changes
-    # If change detection itself fails, scan anyway rather than report a skipped (passing) check.
-    if: always() && (needs.changes.result != 'success' || needs.changes.outputs.swift == 'true')
+    # Skip only on an explicit false. If change detection fails, or its output is missing or masked, scan anyway rather
+    # than report a skipped (passing) check.
+    if: always() && (needs.changes.result != 'success' || needs.changes.outputs.swift != 'false')
     # CodeQL runs natively on Intel, with 14 GB RAM instead of the ARM runner's 7 GB.
     runs-on: macos-26-intel
     timeout-minutes: 180
