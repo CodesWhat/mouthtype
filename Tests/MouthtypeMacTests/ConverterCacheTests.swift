@@ -43,13 +43,31 @@ import Testing
         return pcm
     }
 
-    /// Half a second at 48 kHz, half a second at 44.1 kHz, then half a second at 48 kHz again, in 10 ms buffers:
-    /// a Bluetooth mic renegotiating its rate and coming back. Each segment has its own level.
+    /// Half a second at 48 kHz, half a second at 44.1 kHz, then half a second at 48 kHz again: a Bluetooth mic
+    /// renegotiating its rate and coming back. Each segment has its own level.
+    private static let take: [(level: Float, rate: Double)] = [(0.25, 48_000), (0.5, 44_100), (0.75, 48_000)]
+
+    /// Feeds one segment of the take in 10 ms buffers.
+    private func feedSegment(_ index: Int, _ feed: (AVAudioPCMBuffer) -> Void) throws {
+        let (value, rate) = Self.take[index]
+        let pcm = try level(value, sampleRate: rate, frames: AVAudioFrameCount(rate / 100))
+        for _ in 0..<50 { feed(pcm) }
+    }
+
     private func feedTakeAcrossFormatChanges(_ feed: (AVAudioPCMBuffer) -> Void) throws {
-        for (value, rate) in [(Float(0.25), 48_000.0), (0.5, 44_100), (0.75, 48_000)] {
-            let pcm = try level(value, sampleRate: rate, frames: AVAudioFrameCount(rate / 100))
-            for _ in 0..<50 { feed(pcm) }
+        for index in Self.take.indices { try feedSegment(index, feed) }
+    }
+
+    /// What one segment produces on its own: every buffer through a fresh cache, then drained. This is what the
+    /// same segment has to produce inside a take that changes format around it.
+    private func segmentAlone(_ index: Int) throws -> [Float] {
+        let cache = ConverterCache(targetFormat: AudioCapture.targetFormat)
+        var samples: [Float] = []
+        try feedSegment(index) { pcm in
+            #expect(cache.convert(pcm) { samples.append(contentsOf: $0) })
         }
+        cache.drain { samples.append(contentsOf: $0) }
+        return samples
     }
 
     /// Which segment (1, 2, 3) each sample belongs to, skipping the few samples of filter edge between levels.
@@ -59,17 +77,20 @@ import Testing
         }
     }
 
-    private func expectWholeTakeInOrder(_ samples: [Float]) {
-        // 1.5 s at 16 kHz. Each converter holds back about six samples until it is flushed, so a take that
-        // skipped a flush comes up short by more than this allows.
-        #expect(abs(samples.count - 24_000) <= 4)
+    private func expectWholeTakeInOrder(_ samples: [Float]) throws {
+        let alone = try Self.take.indices.map { try segmentAlone($0) }
         let labels = segments(samples)
         #expect(zip(labels, labels.dropFirst()).allSatisfy { $0 <= $1 }, "a segment's audio came out after a later segment's")
-        // Each segment is 8,000 samples, less a sample or two of filter edge. One whose converter was not
-        // flushed is missing its end.
-        for segment in 1...3 {
+        // Each segment comes out whole, exactly as it does with no format change around it. A converter that
+        // was not flushed before the switch away from it holds back about six samples, so its segment is short.
+        #expect(samples.count == alone.reduce(0) { $0 + $1.count })
+        for (index, reference) in alone.enumerated() {
+            let segment = index + 1
             let count = labels.count { $0 == segment }
-            #expect(abs(count - 8_000) <= 4, "segment \(segment) has \(count) samples")
+            let expected = segments(reference).count { $0 == segment }
+            #expect(expected > 7_900, "segment \(segment) alone has \(expected) samples")
+            // One sample either way: a neighbouring segment's filter edge can pass through this level at a switch.
+            #expect(abs(count - expected) <= 1, "segment \(segment) has \(count) samples, \(expected) on its own")
         }
         // The end of the first segment is still there right before the second starts.
         let firstOfSecond = samples.firstIndex { abs($0 - 0.5) < 0.05 } ?? 0
@@ -85,7 +106,7 @@ import Testing
         }
         cache.drain { samples.append(contentsOf: $0) }
         #expect(cache.count == 2)
-        expectWholeTakeInOrder(samples)
+        try expectWholeTakeInOrder(samples)
     }
 
     @Test func aFormatChangeTailLandsInTheCaptureBufferInOrder() throws {
@@ -101,7 +122,7 @@ import Testing
         #expect(stats.buffers == 150)
         #expect(stats.inputFrames == 50 * (480 + 441 + 480))
         #expect(stats.conversionFailures == 0)
-        expectWholeTakeInOrder(try buffer.finish())
+        try expectWholeTakeInOrder(try buffer.finish())
     }
 
     @Test func aReturnToAnEarlierFormatStartsFromACleanConverter() throws {
