@@ -52,6 +52,8 @@ jobs:
           git diff -z --name-only --no-renames "$BASE_SHA...$HEAD_SHA" > "$RUNNER_TEMP/changed"
           pattern='^(Sources/|Package\.swift$|Package@swift-.*\.swift$|Package\.resolved$|\.github/workflows/codeql\.yml$)'
           swift=false
+          # Match case-insensitively: the macOS checkout is, so sources/x.swift lands in Sources/ and gets compiled.
+          shopt -s nocasematch
           while IFS= read -r -d '' file; do
             if [[ "$file" =~ $pattern ]]; then
               swift=true
