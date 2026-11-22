@@ -4,6 +4,18 @@ Mouthtype is a single-user local dictation app, plus experimental Linux source a
 
 ## Implemented controls
 
+Swift CodeQL runs on promotion PRs into `main`, pushes to `main`, and a weekly
+snapshot of `dev/v0.8.0`. PRs into the dev branch report a skipped
+`Analyze (swift)` job. Swift findings introduced there can remain undetected
+until the weekly scan or promotion. Promotion analysis must pass before release.
+The weekly dev checkout is uploaded against its actual dev revision. Scheduled
+workflow changes take effect after reaching the default branch.
+
+Manual CodeQL runs can select the standard Intel or ARM runner for measurements.
+Swift builds use Xcode 26.6; ARM tracing requires Rosetta. Diagnostics retain build
+logs, build plans and the finalized database's extracted first-party file list for
+seven days. An extraction check fails if any Swift file under `Sources/` is absent.
+
 | Area | Control and evidence | Limit |
 | --- | --- | --- |
 | Local data | [Audio retention](AUDIO-RETENTION.md) limits completed audio while preserving recoverable takes. Data is stored in the user's Application Support directory. | Text history is indefinite. Mouthtype doesn't encrypt its database, recordings or backups. |
