@@ -39,6 +39,19 @@ class ExtractionTests(unittest.TestCase):
                     )
                     self.assertEqual(output.read_text(), f"swift={expected}\n")
 
+    def test_schedule_and_push_have_separate_concurrency_groups(self):
+        text = (SCRIPT.parents[2] / ".github/workflows/codeql.yml").read_text()
+        group = next(line for line in text.splitlines() if line.startswith("  group:"))
+        self.assertIn("github.event_name", group)
+        self.assertIn("dev/v0.8.0", group)
+
+    def test_non_scheduled_checkout_keeps_event_revision(self):
+        text = (SCRIPT.parents[2] / ".github/workflows/codeql.yml").read_text()
+        swift = text.split("  analyze-swift:", 1)[1]
+        checkout_ref = next(line for line in swift.splitlines() if line.startswith("          ref:"))
+        self.assertIn("|| github.sha", checkout_ref)
+        self.assertIn("dev/v0.8.0", checkout_ref)
+
     def test_requires_every_first_party_file_including_fn_guard(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

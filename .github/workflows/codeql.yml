@@ -23,7 +23,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: codeql-${{ github.ref }}-${{ inputs.swift-runner || 'macos-26-intel' }}
+  group: codeql-${{ github.event_name }}-${{ github.event_name == 'schedule' && 'dev/v0.8.0' || github.ref }}-${{ inputs.swift-runner || 'macos-26-intel' }}
   cancel-in-progress: true
 
 jobs:
@@ -124,7 +124,7 @@ jobs:
           persist-credentials: false
           # Scheduled workflows start on main. Scan the active dev line and
           # explicitly associate its results with that ref below.
-          ref: ${{ github.event_name == 'schedule' && 'dev/v0.8.0' || github.ref }}
+          ref: ${{ github.event_name == 'schedule' && 'dev/v0.8.0' || github.sha }}
 
       - name: Record scanned revision
         id: revision
