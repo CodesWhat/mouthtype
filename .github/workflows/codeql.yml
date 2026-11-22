@@ -222,10 +222,10 @@ jobs:
           cp .build/debug.yaml "$RUNNER_TEMP/codeql-swift-diagnostics/traced-plan.yaml"
 
       - uses: github/codeql-action/analyze@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        id: swift-analysis
         with:
           category: /language:swift
-          ref: ${{ github.event_name == 'schedule' && 'refs/heads/dev/v0.8.0' || github.ref }}
-          sha: ${{ steps.revision.outputs.sha }}
+          upload: never
 
       - name: Verify first-party extraction
         run: |
@@ -238,6 +238,13 @@ jobs:
             > "$RUNNER_TEMP/codeql-swift-diagnostics/extracted-files.csv"
           python3 scripts/codeql/verify-extraction.py \
             "$RUNNER_TEMP/codeql-swift-diagnostics/extracted-files.csv"
+
+      - uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          sarif_file: ${{ steps.swift-analysis.outputs.sarif-output }}
+          category: /language:swift
+          ref: ${{ github.event_name == 'schedule' && 'refs/heads/dev/v0.8.0' || github.ref }}
+          sha: ${{ steps.revision.outputs.sha }}
 
       - name: Preserve Swift build diagnostics
         if: always()

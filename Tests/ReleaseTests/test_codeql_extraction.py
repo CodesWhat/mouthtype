@@ -52,6 +52,17 @@ class ExtractionTests(unittest.TestCase):
         self.assertIn("|| github.sha", checkout_ref)
         self.assertIn("dev/v0.8.0", checkout_ref)
 
+    def test_upload_happens_only_after_extraction_verification(self):
+        text = (SCRIPT.parents[2] / ".github/workflows/codeql.yml").read_text()
+        swift = text.split("  analyze-swift:", 1)[1]
+        analysis, verification = swift.split("      - name: Verify first-party extraction", 1)
+        self.assertIn("upload: never", analysis)
+        self.assertIn("upload-sarif@", verification)
+        self.assertIn("steps.swift-analysis.outputs.sarif-output", verification)
+        self.assertLess(verification.index("python3 scripts/codeql/verify-extraction.py"), verification.index("upload-sarif@"))
+        self.assertIn("sha: ${{ steps.revision.outputs.sha }}", verification)
+        self.assertIn("refs/heads/dev/v0.8.0", verification)
+
     def test_requires_every_first_party_file_including_fn_guard(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
