@@ -21,13 +21,23 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    # One weekly PR for every minor and patch bump. Majors stay out of the group and open one PR each.
+    groups:
+      website-minor-and-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
   - package-ecosystem: npm
     directory: /apps/docs
     target-branch: dev/v0.8.0
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    # A dependency joins the first group that matches it. Minor and patch bumps, React's included, share one weekly PR.
+    # What's left is majors: React's move together, the rest open one PR each.
     groups:
+      docs-minor-and-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
       react:
         patterns: ["react", "react-dom", "@types/react", "@types/react-dom"]
   - package-ecosystem: pip
