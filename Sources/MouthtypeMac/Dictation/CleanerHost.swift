@@ -310,7 +310,10 @@ final class CleanerHost: CleanupModelManaging {
                 state = .unloaded
                 Log.cleaner.info("model \(model.id, privacy: .public) downloaded")
                 levelChanged()
-            } catch is CancellationError {
+            } catch let error where error is CancellationError || Task.isCancelled {
+                // The Hub client stops a transfer by cancelling its URLSession task, so a cancel arrives as
+                // URLError.cancelled and not CancellationError. Only `cancelDownload()` cancels this task, which makes
+                // its flag the record of what the user asked for. A URLError.cancelled without it is a real failure.
                 model.discardPartialDownload()
                 downloadTask = nil
                 downloadProgress = nil
