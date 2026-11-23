@@ -33,3 +33,7 @@ website/playwright-report/
 # docs site (apps/docs)
 apps/docs/node_modules/
 apps/docs/.next/
+
+# qlty runtime state (config stays tracked)
+.qlty/*
+!.qlty/qlty.toml
