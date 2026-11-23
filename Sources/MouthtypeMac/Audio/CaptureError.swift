@@ -22,6 +22,8 @@ enum CaptureError: Error, CustomStringConvertible {
     case routeChanged
     /// `stop()` without a recording in progress.
     case notRecording
+    /// Another consumer is recording; the microphone takes one recording at a time.
+    case busy(CaptureOwner)
 
     var userMessage: String {
         switch self {
@@ -41,6 +43,8 @@ enum CaptureError: Error, CustomStringConvertible {
             return "microphone changed while recording: nothing captured, try again"
         case .notRecording:
             return "no recording in progress"
+        case .busy:
+            return "microphone in use by another Mouthtype recording: try again in a moment"
         }
     }
 

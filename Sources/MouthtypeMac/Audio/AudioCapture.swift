@@ -30,7 +30,9 @@ public actor AudioCapture {
     private let requestPermission: @Sendable () -> Void
     private let converters = ConverterCache(targetFormat: AudioCapture.targetFormat)
     private let buffer = CaptureBuffer()
-    private var recording = false
+    /// The lease recording now, nil when idle.
+    private var holder: CaptureLease?
+    private var recording: Bool { holder != nil }
     private var device = InputDevice(sampleRate: 0, channels: 0)
     private var delivered = InputDevice(sampleRate: 0, channels: 0)
     private var startDelay: TimeInterval = 0
@@ -76,9 +78,10 @@ public actor AudioCapture {
     }
 
     /// `keyDownAtNanos` is host nanoseconds (`HostClock.now()` units, which is what `CGEvent.timestamp` reports).
-    /// Throws `CaptureError`; on a throw nothing is left running.
-    public func start(keyDownAtNanos: UInt64) throws {
-        guard !recording else { return }
+    /// Throws `CaptureError`; on a throw nothing is left running. A start while another lease records throws `.busy`
+    /// and leaves that recording alone.
+    public func start(keyDownAtNanos: UInt64, lease: CaptureLease) throws {
+        if let holder { throw CaptureError.busy(holder.owner) }
         let startedAt = keyDownAtNanos
 
         if let error = MicrophoneAccess.captureError(for: authorization()) {
@@ -107,17 +110,17 @@ public actor AudioCapture {
             _ = try? buffer.finish()
             throw error
         }
-        recording = true
+        holder = lease
         self.device = device
         startDelay = HostClock.seconds(from: startedAt, to: HostClock.now())
     }
 
     /// Stops recording and returns the captured samples. Throws `CaptureError.routeChanged` instead of returning a
-    /// partial capture if the input route changed mid-recording, and `.notRecording` if nothing was started.
-    /// With `salvaging` the partial capture is returned instead.
-    public func stop(salvaging: Bool = false) throws -> CapturedAudio {
-        guard recording else { throw CaptureError.notRecording }
-        recording = false
+    /// partial capture if the input route changed mid-recording, and `.notRecording` if `lease` is not the one
+    /// recording. With `salvaging` the partial capture is returned instead.
+    public func stop(_ lease: CaptureLease, salvaging: Bool = false) throws -> CapturedAudio {
+        guard holder == lease else { throw CaptureError.notRecording }
+        holder = nil
         input.stop()
         meter.reset()
 
@@ -150,24 +153,29 @@ public actor AudioCapture {
         )
     }
 
-    /// What the recording in progress has captured from sample `offset` on. Empty when idle.
-    public func partialSamples(from offset: Int) -> [Float] {
-        recording ? buffer.samples(from: offset) : []
+    /// What `lease`'s recording in progress has captured from sample `offset` on. Empty when it is not recording.
+    public func partialSamples(from offset: Int, lease: CaptureLease) -> [Float] {
+        holder == lease ? buffer.samples(from: offset) : []
     }
 
-    func previewSnapshot(maxSamples: Int) -> PreviewAudio {
-        recording ? buffer.previewSnapshot(maxSamples: min(maxSamples, 128_000)) : PreviewAudio(samples: [], capturedSampleCount: 0)
+    func previewSnapshot(maxSamples: Int, lease: CaptureLease) -> PreviewAudio {
+        holder == lease ? buffer.previewSnapshot(maxSamples: min(maxSamples, 128_000)) : PreviewAudio(samples: [], capturedSampleCount: 0)
     }
 
-    /// Discards a recording in progress. Safe when idle.
-    public func cancel() {
-        if recording {
-            recording = false
-            input.stop()
-            converters.drain { _ in }
-            _ = try? buffer.finish()
+    /// Discards `lease`'s recording in progress and says whether there was one. Safe when idle; another lease's
+    /// recording is left running.
+    @discardableResult public func cancel(_ lease: CaptureLease) -> Bool {
+        guard let holder else {
+            meter.reset()
+            return false
         }
+        guard holder == lease else { return false }
+        self.holder = nil
+        input.stop()
+        converters.drain { _ in }
+        _ = try? buffer.finish()
         meter.reset()
+        return true
     }
 
     /// The body of an input callback: note when the buffer's first sample,
@@ -186,7 +194,8 @@ public actor AudioCapture {
                 firstSound = firstFrame &+ UInt64(Double(frame) / pcm.format.sampleRate * 1_000_000_000)
             }
             buffer.noteInput(firstFrameAt: firstFrame, firstSoundAt: firstSound)
-            let converted = converters.convert(pcm) { chunk in
+            // A format change flushes the previous converter first, so its tail lands ahead of this buffer.
+            let converted = converters.convert(pcm, tail: { buffer.appendTail($0) }) { chunk in
                 buffer.append(chunk, inputFrames: Int(pcm.frameLength), at: now)
                 onLevel?(chunk)
             }

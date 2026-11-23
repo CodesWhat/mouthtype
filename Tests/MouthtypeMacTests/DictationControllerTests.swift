@@ -1599,6 +1599,26 @@ private final class FakeCorrections: CorrectionObserving {
         #expect(rig.preparedTargets.focuses.isEmpty)
     }
 
+    @Test func aStartRefusedBecauseTheMicrophoneIsHeldShowsBusyAndWritesNoRow() async {
+        let rig = Rig()
+        rig.capture.startError = CaptureError.busy(.selfTest)
+        await rig.controller.handle(.pressed(at: keyDown))
+
+        #expect(rig.log.contains("capture.start"))
+        #expect(rig.pill.messages == [DictationController.busyMessage])
+        // No row is opened or finished, and nothing reaches the holder's recording.
+        #expect(rig.store.start == nil && rig.store.finishes.isEmpty)
+        #expect(!rig.log.all.contains { $0.hasPrefix("store.") })
+        #expect(!rig.log.contains("capture.cancel") && !rig.log.contains("sound.error") && !rig.log.contains("pill.recording"))
+        #expect(rig.preparedTargets.focuses.isEmpty && rig.inserter.delivered.isEmpty)
+        #expect(rig.controller.phase == .idle && !rig.controller.isStartReserved)
+
+        // The next press records as usual once the microphone is free.
+        rig.capture.startError = nil
+        await rig.controller.handle(.pressed(at: keyDown))
+        #expect(rig.controller.phase == .recording && rig.log.contains("pill.recording"))
+    }
+
     @Test(arguments: [CaptureError.microphoneDenied, .microphonePending])
     func unpreparedCaptureReportsItsActualPermissionFailure(error: CaptureError) async {
         let rig = Rig()

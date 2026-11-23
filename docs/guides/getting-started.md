@@ -4,7 +4,7 @@ Install Mouthtype, give it the two permissions it needs, and dictate your first 
 
 ## What you need
 
-An Apple Silicon Mac running macOS 26 or later. That's the only supported setup for the current release, 0.12.2.
+An Apple Silicon Mac running macOS 26 or later. That's the only supported setup for the current release, 0.12.3.
 
 ## Install
 

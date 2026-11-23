@@ -63,7 +63,8 @@ struct HotkeyInputMapper {
             if held, sample.kind == .flagsChanged, sample.flags & DictationShortcut.modifierMask & ~shortcut.requiredFlags != 0 {
                 return MappedInput(keyEvent: KeyEvent(key: .heldElsewhere, modifiers: [.fn]), timestampNanos: sample.timestamp)
             }
-            if sample.kind == .keyDown, sample.keyCode != shortcut.keyCode {
+            // A key typed while the shortcut is up would leave the processor dirty and deaf to the press that stops the lock.
+            if sample.kind == .keyDown, sample.keyCode != shortcut.keyCode, held || sample.keyCode == TapPolicy.escapeKeyCode {
                 return MappedInput(keyEvent: KeyEvent(key: Key(code: sample.keyCode), modifiers: held ? [.fn] : []), timestampNanos: sample.timestamp)
             }
             return nil

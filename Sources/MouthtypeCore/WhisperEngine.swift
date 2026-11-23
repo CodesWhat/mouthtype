@@ -40,13 +40,16 @@ public actor WhisperEngine: MeasuredTranscriber, VocabularyBiasing {
         let alreadyPresent = FileManager.default.fileExists(atPath: modelDirectory.appendingPathComponent("AudioEncoder.mlmodelc").path)
 
         var folder = modelDirectory
+        var tokenizerFolder = modelDirectory
         let downloadTime = try await clock.measure {
             folder = try await WhisperModelFetch.download(variant: variant)
+            tokenizerFolder = try await Self.verifiedTokenizerFolder(variant: variant)
         }
         var loaded: WhisperKit?
         let loadTime = try await clock.measure {
             let config = WhisperKitConfig(
                 modelFolder: folder.path,
+                tokenizerFolder: tokenizerFolder,
                 verbose: false,
                 logLevel: .none,
                 load: true,
@@ -60,6 +63,23 @@ public actor WhisperEngine: MeasuredTranscriber, VocabularyBiasing {
             loadSeconds: loadTime.seconds,
             downloaded: !alreadyPresent
         )
+    }
+
+    /// The pinned, digest-checked tokenizer folder for `variant`, proven to parse before WhisperKit sees it. WhisperKit falls
+    /// back to Hugging Face `main` when a local tokenizer fails to load, so a folder that doesn't parse stops here instead.
+    static func verifiedTokenizerFolder(
+        variant: String,
+        pins: [String: ModelPins.TokenizerPin] = ModelPins.whisperTokenizers,
+        root: URL = WhisperTokenizerFetch.defaultRoot,
+        fetch: WhisperTokenizerFetch.FetchFile = WhisperTokenizerFetch.download
+    ) async throws -> URL {
+        let folder = try await WhisperTokenizerFetch.prepare(variant: variant, pins: pins, root: root, fetch: fetch)
+        do {
+            _ = try await AutoTokenizerWrapper.from(modelFolder: folder)
+        } catch {
+            throw WhisperError.tokenizerUnavailable("Pinned tokenizer at \(folder.path) failed to load: \(error)")
+        }
+        return folder
     }
 
     public func setVocabularyBias(_ bias: VocabularyBias?) {

@@ -14,7 +14,58 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      swift: ${{ steps.diff.outputs.swift }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      # Pull requests build and test only when something the package compiles, a test reads, or these jobs run changed.
+      # Tests read design/, packaging/ and scripts/ from the checkout, so those count. Pushes and manual runs always run.
+      - id: diff
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if [ "$EVENT_NAME" != "pull_request" ]; then
+            echo "swift=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # Paths are read NUL-delimited from a file and never echoed raw: git quotes non-ASCII names in its default output,
+          # and a file named like a workflow command (::add-mask::true) would be run by the runner if printed.
+          git diff -z --name-only --no-renames "$BASE_SHA...$HEAD_SHA" > "$RUNNER_TEMP/changed"
+          pattern='^(Sources/|Tests/|design/|packaging/|scripts/|Package\.swift$|Package@swift-.*\.swift$|Package\.resolved$|\.swift-format$|\.github/workflows/swift\.yml$)'
+          swift=false
+          # Match case-insensitively: the macOS checkout is, so sources/x.swift lands in Sources/ and gets compiled.
+          shopt -s nocasematch
+          while IFS= read -r -d '' file; do
+            if [[ "$file" =~ $pattern ]]; then
+              swift=true
+            fi
+          done < "$RUNNER_TEMP/changed"
+          marker=$(uuidgen)
+          echo "::stop-commands::$marker"
+          tr '\0' '\n' < "$RUNNER_TEMP/changed"
+          echo "::$marker::"
+          echo "swift=$swift" >> "$GITHUB_OUTPUT"
+
+  # build and test are required checks, and the macOS queue is the slow part of CI. A workflow-level paths filter would
+  # leave both checks missing and block merges, so gate at job level instead: a skipped job with the same name still
+  # satisfies the required check.
   build:
+    needs: changes
+    # Skip only on an explicit false. If change detection fails, or its output is missing or masked, build anyway rather
+    # than report a skipped (passing) check. !cancelled() rather than always(), so a run superseded by a newer push
+    # gives its macOS runner back.
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.swift != 'false') }}
     # The code uses Xcode 27 SDK APIs (for example the FoundationModels samplingMode label), and macos-26 only ships Xcode 26.6.
     runs-on: xcode-27
     timeout-minutes: 60
@@ -24,9 +75,11 @@ jobs:
           persist-credentials: false
 
       - name: Toolchain
+        id: toolchain
         run: |
           xcodebuild -version
           swift --version
+          echo "xcode=$(xcodebuild -version | awk '/^Build version/ {print $3}')" >> "$GITHUB_OUTPUT"
 
       # mlx-swift compiles Metal shaders, and Xcode ships the Metal toolchain as a separate component.
       - name: Metal toolchain
@@ -36,11 +89,53 @@ jobs:
           fi
           xcrun metal --version
 
+      # SwiftPM dependencies only: source checkouts, their bare clones, the binary xcframeworks (Sparkle, FluidAudio) and
+      # the swift-syntax prebuilts. That is about 1.6 GB on disk and 1.1 GB compressed. Build products stay out: a full
+      # .build is over 4 GB, which would evict everything else from the 10 GB repo cache. So each job still compiles
+      # from scratch, but on a hit it downloads nothing.
+      # The SwiftPM user cache keeps only artifacts and manifests because its repositories copy duplicates .build's.
+      - name: Restore SwiftPM dependencies
+        id: swiftpm
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            .build/artifacts
+            .build/checkouts
+            .build/prebuilts
+            .build/repositories
+            .build/workspace-state.json
+            ~/Library/Caches/org.swift.swiftpm/artifacts
+            ~/Library/Caches/org.swift.swiftpm/manifests
+          key: swiftpm-${{ runner.os }}-${{ runner.arch }}-xcode${{ steps.toolchain.outputs.xcode }}-${{ hashFiles('Package.resolved') }}
+          restore-keys: |
+            swiftpm-${{ runner.os }}-${{ runner.arch }}-xcode${{ steps.toolchain.outputs.xcode }}-
+
+      - name: Resolve dependencies
+        run: swift package resolve
+
+      # Saved from pushes only. A pull request's cache is scoped to that pull request, so saving there would spend the
+      # repo quota on entries no other run can read. The test job restores the same key and never saves.
+      - name: Save SwiftPM dependencies
+        if: ${{ github.event_name != 'pull_request' && steps.swiftpm.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            .build/artifacts
+            .build/checkouts
+            .build/prebuilts
+            .build/repositories
+            .build/workspace-state.json
+            ~/Library/Caches/org.swift.swiftpm/artifacts
+            ~/Library/Caches/org.swift.swiftpm/manifests
+          key: ${{ steps.swiftpm.outputs.cache-primary-key }}
+
       - name: Build (warnings as errors)
         run: swift build -Xswiftc -warnings-as-errors
 
   # Headless tests and offscreen Settings renders run on PRs and after merge. Desktop tests run locally.
   test:
+    needs: changes
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.swift != 'false') }}
     permissions:
       contents: read
     # The code uses Xcode 27 SDK APIs (for example the FoundationModels samplingMode label), and macos-26 only ships Xcode 26.6.
@@ -52,9 +147,11 @@ jobs:
           persist-credentials: false
 
       - name: Toolchain
+        id: toolchain
         run: |
           xcodebuild -version
           swift --version
+          echo "xcode=$(xcodebuild -version | awk '/^Build version/ {print $3}')" >> "$GITHUB_OUTPUT"
 
       # mlx-swift compiles Metal shaders, and Xcode ships the Metal toolchain as a separate component.
       - name: Metal toolchain
@@ -63,6 +160,22 @@ jobs:
             xcodebuild -downloadComponent MetalToolchain
           fi
           xcrun metal --version
+
+      # Same key and paths as the build job, which is the one that saves it.
+      - name: Restore SwiftPM dependencies
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            .build/artifacts
+            .build/checkouts
+            .build/prebuilts
+            .build/repositories
+            .build/workspace-state.json
+            ~/Library/Caches/org.swift.swiftpm/artifacts
+            ~/Library/Caches/org.swift.swiftpm/manifests
+          key: swiftpm-${{ runner.os }}-${{ runner.arch }}-xcode${{ steps.toolchain.outputs.xcode }}-${{ hashFiles('Package.resolved') }}
+          restore-keys: |
+            swiftpm-${{ runner.os }}-${{ runner.arch }}-xcode${{ steps.toolchain.outputs.xcode }}-
 
       # Keyboard navigation and live preview tests activate real windows and need a free desktop. Offscreen renders
       # assert that their windows stay hidden, so they run here alongside the logic tests.

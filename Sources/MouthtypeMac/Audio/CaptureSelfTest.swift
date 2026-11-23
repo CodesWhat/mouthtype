@@ -15,15 +15,16 @@ enum CaptureSelfTest {
     }
 
     static func run(capture: AudioCapture, seconds: Double) async {
+        let lease = CaptureLease(owner: .selfTest)
         do {
-            try await capture.start(keyDownAtNanos: HostClock.now())
+            try await capture.start(keyDownAtNanos: HostClock.now(), lease: lease)
             var maxLevel = LevelReading.floorDb
             let deadline = ContinuousClock.now + .seconds(seconds)
             while ContinuousClock.now < deadline {
                 maxLevel = max(maxLevel, capture.reading.db)
                 try await Task.sleep(for: .milliseconds(16))
             }
-            let audio = try await capture.stop()
+            let audio = try await capture.stop(lease)
 
             let features = AudioFeatures.compute(samples: audio.samples, sampleRate: Int(audio.sampleRate))
             let trimmed = SilenceTrimmer.trim(audio.samples)
@@ -41,7 +42,7 @@ enum CaptureSelfTest {
                 + " headTrimmedMs=\(f(trimmed.headTrimmedMs)) levelMaxDb=\(f(Double(maxLevel), 1)) wav=\(entry.url.path)"
             Log.capture.info("\(line, privacy: .public)")
         } catch {
-            await capture.cancel()
+            await capture.cancel(lease)
             Log.capture.error("selftest failed: \(String(describing: error), privacy: .public)")
         }
     }

@@ -27,6 +27,9 @@ public struct DeliveryResult: Sendable {
     public var method: Method
     public var outcome: Outcome
     public var focusMoved: Bool
+    /// The take started with a known focused element. `focusMoved` can't say the focus stayed put without one, so
+    /// automatic Return needs this too.
+    public var startTargetKnown: Bool = false
     /// Focus at delivery.
     public var target: FocusSnapshot?
     /// What was pasted or copied, with any spacing applied. Empty when nothing was delivered.
@@ -56,7 +59,8 @@ public struct DeliveryResult: Sendable {
     public var storeOutcome: String {
         switch outcome {
         case .unknown, .partialPaste: "unknown"
-        case .secureDiscard: "secure discard"
+        // Secure Input alone blocks the paste: the take is kept, as one that never landed.
+        case .secureDiscard: secureInputBlocked ? "not landed" : "secure discard"
         case .failed: "not landed"
         }
     }

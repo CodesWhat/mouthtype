@@ -1,5 +1,20 @@
-Mouthtype 0.12.2
+Mouthtype 0.12.3
 
+Privacy: a take dictated into a secure field no longer keeps anything. Its text, word timings, edits, search entry and audio are removed. Secure Input being stuck on no longer marks a take as secure. If Mouthtype can't confirm the field is secure, it still won't paste, but the take is kept as one that didn't land, so you can find it in Home and copy it. Takes already marked secure are scrubbed the first time the new version opens your history.
+
+The Whisper models (Japanese, Hindi, Tamil and the other languages that use them) now fetch their tokenizer from a pinned revision and check it against a known hash. A file that doesn't match fails the load instead of falling back to whatever is current. A cached Whisper model also loads without going online, so those languages work after a relaunch with no network. The Style page no longer contacts LinkedIn, Teams, Gmail or Outlook for icons. Only sites you add get an icon fetch.
+
+Press Return after inserting is safer. It skips the Return if you switched apps since the take started. In terminals, it waits until the terminal has read the paste, so a slow terminal or remote session no longer gets Return before the text and sends an empty or partial line. Pasting over a selection that already held the same text no longer counts as a confirmed paste, so no Return follows.
+
+Fixed dictation staying blocked after an update asked Mouthtype to quit and the quit was cancelled. Every shortcut press showed "Mouthtype is busy" until you quit by hand. Mouthtype now keeps "Update Available" in the menu, and Settings says the update installs the next time you quit.
+
+Fixed typing during a hands-free recording with a custom shortcut. The next press of the shortcut now stops the recording instead of being ignored. Only one thing can use the microphone at a time. Pressing the dictation shortcut during the setup test take now shows the busy message instead of mixing the two recordings. If the input format changes mid-take, for example a Bluetooth mic changing its sample rate, the end of the earlier audio is kept in order instead of being lost or coming back late.
+
+Edit Selection by Voice now accepts a rewrite that adds an apology or regret, like "make this more apologetic". It still rejects real refusals from the model. Cancelling a cleanup-model download now counts as a cancel instead of showing "failed", and the partial files are removed.
+
+History opens in the background at launch, so launch is faster with a large history, and Paste Last no longer slows down as history grows. One-line messages in the Matrix pill no longer scroll.
+
+Earlier in 0.12.2:
 Fixed a shortcut problem where Fn / Globe could stop starting dictation because macOS kept reporting the Power key as held. Other keys held while typing still prevent accidental dictation.
 
 Earlier in 0.12.1:

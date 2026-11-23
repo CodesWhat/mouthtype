@@ -37,6 +37,114 @@ import Testing
         _ = try outcome.store?.stats(now: Date())
     }
 
+    @Test func theActivityFlagCoversEveryQuarantineMoveAndNothingElse() throws {
+        let dir = try Self.makeDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let url = dir.appendingPathComponent("mouthtype.sqlite")
+        try Data("junk that is not a database, long enough to look wrong".utf8).write(to: url)
+        try Data("wal".utf8).write(to: URL(fileURLWithPath: url.path + "-wal"))
+        let activity = StoreOpenActivity()
+        var duringMoves: [Bool] = []
+        var duringOpens: [Bool] = []
+        let outcome = TranscriptStoreOpener.open(
+            url: url, activity: activity,
+            opener: {
+                duringOpens.append(activity.state == .quarantining)
+                return try TranscriptStore(url: $0)
+            },
+            mover: {
+                duringMoves.append(activity.state == .quarantining)
+                try FileManager.default.moveItem(at: $0, to: $1)
+            })
+        #expect(outcome.quarantinedTo != nil)
+        #expect(duringMoves.count >= 2)
+        #expect(duringMoves.allSatisfy { $0 })
+        #expect(duringOpens == [false, false])
+        #expect(activity.state == .opening)
+    }
+
+    @Test func aQuitCommittedBeforeTheQuarantineLeavesEveryFileInPlace() throws {
+        let dir = try Self.makeDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let url = dir.appendingPathComponent("mouthtype.sqlite")
+        let junk = Data("junk that is not a database, long enough to look wrong".utf8)
+        try junk.write(to: url)
+        let wal = URL(fileURLWithPath: url.path + "-wal")
+        try Data("wal".utf8).write(to: wal)
+        let audio = dir.appendingPathComponent("audio", isDirectory: true)
+        try FileManager.default.createDirectory(at: audio, withIntermediateDirectories: true)
+        try Data("wav".utf8).write(to: audio.appendingPathComponent("old.wav"))
+        let activity = StoreOpenActivity()
+        var moves = 0
+        var opens = 0
+        let outcome = TranscriptStoreOpener.open(
+            url: url, activity: activity,
+            opener: { _ in
+                opens += 1
+                // The deadline passes while the open is still checking the file, before it finds the damage.
+                #expect(activity.commitQuit())
+                throw DatabaseError(resultCode: .SQLITE_CORRUPT, message: "database disk image is malformed")
+            },
+            mover: {
+                moves += 1
+                try FileManager.default.moveItem(at: $0, to: $1)
+            })
+        #expect(opens == 1)
+        #expect(moves == 0)
+        #expect(outcome.store == nil)
+        #expect(outcome.failure != nil)
+        #expect(outcome.quarantinedTo == nil)
+        #expect(outcome.quarantinedAudioTo == nil)
+        #expect(try Data(contentsOf: url) == junk)
+        #expect(try Data(contentsOf: wal) == Data("wal".utf8))
+        #expect(try Data(contentsOf: audio.appendingPathComponent("old.wav")) == Data("wav".utf8))
+        #expect(try FileManager.default.contentsOfDirectory(atPath: dir.path).sorted() == ["audio", "mouthtype.sqlite", "mouthtype.sqlite-wal"])
+        #expect(activity.state == .quitCommitted)
+    }
+
+    @Test func theQuarantineAndACommittedQuitExcludeEachOtherInEitherOrder() {
+        // Quarantine first: the quit can't commit until it's over.
+        let first = StoreOpenActivity()
+        #expect(first.state == .opening)
+        #expect(first.beginQuarantine())
+        #expect(first.state == .quarantining)
+        #expect(!first.commitQuit())
+        #expect(first.state == .quarantining)
+        #expect(!first.beginQuarantine())
+        first.endQuarantine()
+        #expect(first.state == .opening)
+        #expect(first.commitQuit())
+        #expect(first.state == .quitCommitted)
+
+        // Quit first: no quarantine may start, and a stray end doesn't undo the commit.
+        let second = StoreOpenActivity()
+        #expect(second.commitQuit())
+        #expect(!second.beginQuarantine())
+        second.endQuarantine()
+        #expect(second.state == .quitCommitted)
+        #expect(second.commitQuit())
+        // A cancelled quit hands the state back.
+        second.withdrawQuit()
+        #expect(second.state == .opening)
+        #expect(second.beginQuarantine())
+        second.withdrawQuit()
+        #expect(second.state == .quarantining)
+    }
+
+    @Test func theActivityFlagClearsWhenTheQuarantineFails() throws {
+        let dir = try Self.makeDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let url = dir.appendingPathComponent("mouthtype.sqlite")
+        try Data("junk".utf8).write(to: url)
+        let activity = StoreOpenActivity()
+        let outcome = TranscriptStoreOpener.open(
+            url: url, activity: activity,
+            opener: { _ in throw DatabaseError(resultCode: .SQLITE_NOTADB, message: "file is not a database") },
+            mover: { _, _ in throw CocoaError(.fileWriteNoPermission) })
+        #expect(outcome.failure != nil)
+        #expect(activity.state == .opening)
+    }
+
     @Test func quarantineMovesTheWalAndShmAlongside() throws {
         let dir = try Self.makeDir()
         defer { try? FileManager.default.removeItem(at: dir) }

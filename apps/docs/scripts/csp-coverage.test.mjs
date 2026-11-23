@@ -60,6 +60,13 @@ test("header script-src has no unsafe-inline", () => {
   assert.doesNotMatch(scriptSrc, /unsafe-inline/);
 });
 
+test("only the analytics ingestion host is added to connect-src, in header and meta alike", () => {
+  const expected = "connect-src 'self' https://e.codeswhat.com";
+  assert.equal(directive(headerCsp(), "connect-src"), expected);
+  assert.equal(directive(cspForHTML("<script>1</script>"), "connect-src"), expected);
+  assert.doesNotMatch(directive(cspForHTML(""), "script-src"), /codeswhat/);
+});
+
 test("vercel.json has no per-page CSP rules", () => {
   const perPage = vercelConfig.headers.filter(
     (h) => h.source !== "/(.*)" && h.headers.some((x) => x.key === "Content-Security-Policy"),

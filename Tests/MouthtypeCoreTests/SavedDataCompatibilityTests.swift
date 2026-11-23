@@ -31,10 +31,10 @@ import Testing
         defer { try? FileManager.default.removeItem(at: directory) }
         let copy = directory.appendingPathComponent("snapshot.sqlite")
         try SavedData.copyDatabase(from: URL(fileURLWithPath: path), to: copy)
-        let before = try SavedData.state(copy)
+        let before = try SavedData.state(copy, excludingSecure: true)
         let store = try TranscriptStore(url: copy)
         _ = try store.recent(limit: 1)
-        let after = try SavedData.state(copy)
+        let after = try SavedData.state(copy, excludingSecure: true)
         // The schema is allowed to change: an older snapshot gains whatever migrations it was missing. Values are not.
         #expect(before.rows == after.rows)
         #expect(before.digests == after.digests)

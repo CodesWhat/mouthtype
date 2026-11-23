@@ -224,7 +224,7 @@ enum MatrixPillLayout {
             ? max(m.height, 2 * (maxHeight * scale / 2).rounded(.down) / scale)
             : wanted
         let height = min(wanted, cap)
-        let overflow = max(0, block - (height - 2 * m.messageVerticalPadding))
+        let overflow = wanted > height ? max(0, block - (height - 2 * m.messageVerticalPadding)) : 0
         var lines: [ClassicPillLayout.MessageLine] = []
         var y = -block / 2
         for text in head {

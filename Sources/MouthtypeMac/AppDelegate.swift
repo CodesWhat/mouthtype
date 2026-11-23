@@ -16,8 +16,11 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         diagnostics: diagnostics, engine: engineHost, microphone: micCapture.preparation, cleanup: cleanerHost, testTake: setupTestTake,
         onBoostSavedWordsChanged: { [weak self] _ in self?.refreshVocabularyBias() })
     private lazy var setupTestTake = SetupTestTake(
-        capture: micCapture, engine: HostEngine(host: engineHost), readLevel: { [micCapture] in micCapture.capture.reading.db },
-        canStart: { [weak self] in self?.dictation.map { $0.phase == .idle } ?? true })
+        capture: micCapture.owned(by: .setupTest), engine: HostEngine(host: engineHost), readLevel: { [micCapture] in micCapture.capture.reading.db },
+        canStart: { [weak self] in
+            guard let self else { return true }
+            return (self.dictation.map { $0.phase == .idle } ?? true) && !self.microphoneHeld(byOtherThan: .setupTest)
+        })
     private lazy var setupWindow = SetupWindow(
         model: setupModel,
         actions: SetupActions(
@@ -33,7 +36,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             }, retrySpeech: { [weak self] in self?.engineHost.start() },
             inputSettings: { [weak self] in self?.settingsWindow.present(destination: .settings(.health)) }))
     private let fontChooser = TextFontMenuSection()
-    private lazy var appUpdater: AppUpdater = AppUpdater(
+    lazy var appUpdater: AppUpdater = AppUpdater(
         driver: UpdateLaunchPolicy.allows(
             arguments: CommandLine.arguments, bundleURL: Bundle.main.bundleURL,
             info: Bundle.main.infoDictionary ?? [:]) ? SparkleDriver() : nil,
@@ -64,12 +67,12 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         \.builtVoiceEditModel,
         VoiceEditCoordinator(
             editor: achievementCounting.counting(AccessibilitySelectionEditor(), as: .voiceEdits),
-            recorder: VoiceInstructionRecorder(capture: micCapture, engine: HostEngine(host: engineHost)),
+            recorder: VoiceInstructionRecorder(capture: micCapture.owned(by: .voiceEdit), engine: HostEngine(host: engineHost)),
             engine: cleanerHost,
             busy: { [weak self] in
                 guard let self else { return true }
                 return self.isTerminating || self.dictation?.phase != .idle || self.fileTranscriptionModel.isBusy || self.recovery?.isRecovering == true
-                    || self.appUpdater.blocksNewWork || self.selectionCleanupModel.hasPreview
+                    || self.appUpdater.blocksNewWork || self.selectionCleanupModel.hasPreview || self.microphoneHeld(byOtherThan: .voiceEdit)
             },
             secureContext: { AccessibilityFocusReader().isSecureInputEnabled || AccessibilityFocusReader().snapshotApplication().isSecure },
             modelUnavailableReason: { [weak self] in self?.cleanerHost.transformUnavailableReason },
@@ -368,10 +371,76 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         DispatchQueue.main.async { MainActor.assumeIsolated { finish(menuBar) } }
     }
 
+    /// Opens history. Launch runs it off the main thread; tests swap in one they can hold shut.
+    var openStore: @Sendable (StoreOpenActivity) -> StoreOpenOutcome = { TranscriptStoreOpener.open(activity: $0) }
+    /// True from the handoff until the outcome is back on the main actor.
+    private(set) var storeOpenInFlight = false
+    private let storeOpenActivity = StoreOpenActivity()
+    static let defaultStoreQuitDeadline: Duration = .seconds(10)
+    /// How long a quit waits for the open before going ahead without it.
+    var storeQuitDeadline: Duration = AppDelegate.defaultStoreQuitDeadline
+    private var quitWaitingForStore: (sender: NSApplication, deadline: Task<Void, Never>)?
+
+    /// Runs `openStore` on a background queue and hands its outcome to `finish` on the main actor, exactly once. The open
+    /// checks the whole search index and may retry, rebuild or quarantine, so its cost grows with history; the main thread
+    /// stays free meanwhile. The instance lease taken in beginOwnedLaunch is held throughout.
+    func openStoreOffMain(then finish: @escaping @MainActor (StoreOpenOutcome) -> Void) {
+        let open = openStore
+        let activity = storeOpenActivity
+        storeOpenInFlight = true
+        Task {
+            let outcome = await withCheckedContinuation { (done: CheckedContinuation<StoreOpenOutcome, Never>) in
+                DispatchQueue.global(qos: .userInitiated).async { done.resume(returning: open(activity)) }
+            }
+            storeOpenInFlight = false
+            // A quit that outwaited the open has already been answered; building the app now would start the engine and
+            // the hotkey on the way out.
+            guard !isTerminating else {
+                Log.app.info("history finished opening after the quit went ahead")
+                return
+            }
+            finish(outcome)
+            resumeQuitWaitingForStore(waitForStore: true)
+        }
+    }
+
+    /// Parks a quit until the open is back or `storeQuitDeadline` passes. A stalled open can't keep the app from quitting:
+    /// past the deadline only a quarantine in progress is waited out, because that one moves several files.
+    private func holdQuitForStore(sender: NSApplication) {
+        guard quitWaitingForStore == nil else { return }
+        let deadline = Task { [weak self] in
+            try? await Task.sleep(for: self?.storeQuitDeadline ?? Self.defaultStoreQuitDeadline)
+            // Committing and starting a quarantine exclude each other, so the opener can't begin moving files after this.
+            while !Task.isCancelled, self?.storeOpenActivity.commitQuit() == false {
+                try? await Task.sleep(for: .milliseconds(20))
+            }
+            guard !Task.isCancelled else { return }
+            Log.app.error("history was still opening at the quit deadline; quitting without it")
+            self?.resumeQuitWaitingForStore(waitForStore: false)
+        }
+        quitWaitingForStore = (sender, deadline)
+    }
+
+    /// Runs the parked quit through the same path as any other, exactly once: after launch has continued, or at the deadline.
+    private func resumeQuitWaitingForStore(waitForStore: Bool) {
+        guard let held = quitWaitingForStore else { return }
+        quitWaitingForStore = nil
+        held.deadline.cancel()
+        if beginTermination(sender: held.sender, waitForStore: waitForStore) == .terminateCancel {
+            storeOpenActivity.withdrawQuit()
+            replyToTermination(held.sender, false)
+        }
+    }
+
     private func completeLaunch(arguments: [String], menuBar: MenuBarController) {
         // Undo a Fn remap a previous run died with before anything reads the keyboard.
         _ = fnRemap.restoreIfStale()
-        let opened = TranscriptStoreOpener.open()
+        // Nothing that reads history exists yet: no pill, hotkey, menu sections or recovery. URLs queue until finishLaunch,
+        // a quit waits in beginTermination, and a Home window built early shows no takes until finishLaunch re-wires it.
+        openStoreOffMain { [self] opened in continueLaunch(arguments: arguments, menuBar: menuBar, opened: opened) }
+    }
+
+    private func continueLaunch(arguments: [String], menuBar: MenuBarController, opened: StoreOpenOutcome) {
         let store = opened.store
         reportStoreOpen(opened)
         let archive = AudioArchive(supportDirectory: TranscriptStore.defaultURL().deletingLastPathComponent())
@@ -487,7 +556,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         dictation.canStartRecording = { [weak self] in
             guard self?.isTerminating != true, self?.recovery?.isRecovering != true,
                 self?.appUpdater.blocksNewWork != true, self?.fileTranscriptionModel.isBusy != true,
-                self?.voiceEditModel.phase.holdsMicrophone != true
+                self?.voiceEditModel.phase.holdsMicrophone != true, self?.microphoneHeld(byOtherThan: .dictation) != true
             else { return false }
             self?.builtSettingsWindow?.model.home.stopPlayback()
             return true
@@ -612,8 +681,15 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         return beginTermination(sender: sender)
     }
 
-    private func beginTermination(sender: NSApplication) -> NSApplication.TerminateReply {
+    private func beginTermination(sender: NSApplication, waitForStore: Bool = true) -> NSApplication.TerminateReply {
+        // A quit during the open waits for the outcome, up to storeQuitDeadline. Launch then continues as it always did
+        // before a quit was handled, and the quit follows.
+        if waitForStore, storeOpenInFlight {
+            holdQuitForStore(sender: sender)
+            return .terminateLater
+        }
         guard Self.mayQuit(allowsTermination: appUpdater.allowsTermination, resolveDraft: { signalShutdown ? saveDraftsForSignal() : (builtSettingsWindow?.resolveDraftForQuit() ?? true) }) else {
+            appUpdater.installWasDeferred()
             return .terminateCancel
         }
         isTerminating = true
@@ -625,7 +701,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                 await inserter?.prepareForTermination()
             },
             reply: { [self] ready in
-                if !ready { isTerminating = false }
+                if !ready { isTerminating = false; appUpdater.installWasDeferred() }
                 // The draft the user agreed to discard goes only once the quit is certain; a delayed quit keeps it.
                 if ready, !signalShutdown { builtSettingsWindow?.discardDraftForQuit() }
                 replyToTermination(sender, ready)
@@ -1046,6 +1122,12 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                 _ = await prepareCapture()
             }
         }
+    }
+
+    /// True while a consumer other than `owner` is recording from the shared microphone. Dictation, the setup test
+    /// take and voice edit all ask this before they start.
+    private func microphoneHeld(byOtherThan owner: CaptureOwner) -> Bool {
+        micCapture.holder.map { $0 != owner } ?? false
     }
 
     private func microphoneSelectionChanged() {

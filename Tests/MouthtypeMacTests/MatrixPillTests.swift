@@ -347,6 +347,19 @@ import Testing
         #expect(skin.messageViewport == CGRect(x: 0, y: 0, width: skin.capsuleRect.width, height: skin.capsuleRect.height))
     }
 
+    @Test(arguments: [PillSkinKind.matrix, .minimal], [PillScale.standard, .large])
+    func aOneLineMessageDoesNotScroll(kind: PillSkinKind, scale: PillScale) throws {
+        let skin = try view(kind, scale: scale)
+        if kind == .matrix { skin.applyTypography(Typography(choice: .systema)) }
+        skin.showMessage(PillMessage("Pasted"), overRecording: false)
+        #expect(skin.messageLines.count == 1 && skin.messageSize.height == 30 * scale.factor)
+        #expect(skin.messageScrollDistance == 0)
+        #expect(skin.messageViewport == CGRect(x: 0, y: 0, width: skin.capsuleRect.width, height: skin.capsuleRect.height))
+        let before = skin.messageLineFrames
+        skin.setMessageOffset(-20)
+        #expect(skin.messageLineFrames == before)
+    }
+
     @Test func theUnlitGridIsBuiltOnceAndOnlyMovesWithTheCapsule() throws {
         let skin = try view(.matrix, scale: .large)
         let ghost = skin.meterLayers.ghost

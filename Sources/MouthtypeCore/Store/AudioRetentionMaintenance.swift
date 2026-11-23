@@ -7,6 +7,28 @@ public enum AudioRetentionMaintenance {
     /// between deleting a file and clearing its pointer. Returns the row ids whose audio the policy removed.
     @discardableResult
     public static func prune(archive: AudioArchive, store: TranscriptStore, policy: AudioRetentionPolicy, now: Date) throws -> [String] {
+        // A secure-field take keeps no audio, whatever the policy says. Every secure id counts, pointer or not: a scrub
+        // leaves the pointer until its file is gone, and a crash partial never had one. The archive is listed once and
+        // only ids with a file there are touched. A stored path outside the current archive is deleted too, and its
+        // pointer cleared only once the file is gone, so a failed delete retries on the next sweep.
+        let fm = FileManager.default
+        let secureListing = archive.listedFileNames() ?? []
+        var secure: [String] = []
+        var cleared: [String] = []
+        for take in try store.secureTakes() {
+            let hadArchived =
+                secureListing.contains(archive.url(for: take.id).lastPathComponent)
+                || secureListing.contains(archive.partialURL(for: take.id).lastPathComponent)
+            if hadArchived || take.audioPath != nil { archive.remove(id: take.id) }
+            if hadArchived { secure.append(take.id) }
+            guard let path = take.audioPath else { continue }
+            if fm.fileExists(atPath: path) {
+                try? fm.removeItem(atPath: path)
+                if !secure.contains(take.id) { secure.append(take.id) }
+            }
+            if !fm.fileExists(atPath: path), !fm.fileExists(atPath: archive.url(for: take.id).path) { cleared.append(take.id) }
+        }
+        if !cleared.isEmpty { try store.clearAudio(ids: cleared) }
         let completed = try store.audioRetentionCandidateIDs()
         let removed = try archive.purge(
             olderThan: policy.cutoff(at: now), maxTotalBytes: policy.maximumBytes, eligibleIDs: completed,
@@ -34,6 +56,6 @@ public enum AudioRetentionMaintenance {
             }
         }
         if !missing.isEmpty { try store.clearAudio(ids: Array(missing)) }
-        return removed
+        return removed + secure
     }
 }

@@ -1,0 +1,4 @@
+name: codeswhat/swift-extraction
+version: 0.0.0
+dependencies:
+  codeql/swift-all: '*'

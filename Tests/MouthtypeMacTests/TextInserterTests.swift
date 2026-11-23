@@ -63,8 +63,10 @@ private final class FakePoster: PasteEventPosting {
     /// What the clipboard held when the paste event went out.
     var onPost: (() -> Void)?
     var returns: [pid_t?] = []
+    var onReturn: (() -> Void)?
 
     func postReturn(targetPID: pid_t?) -> Bool {
+        onReturn?()
         returns.append(targetPID)
         return true
     }
@@ -167,6 +169,9 @@ private final class VerifyGate {
     /// so a gate that stays closed would stall a delivery waiting on the previous paste as well.
     var parksOneSleep = false
     var parkedCount: Int { waiters.count }
+    var delayParkedCount: Int { delayWaiters.count }
+    /// Sees every sleep before it's held or passed, so a test can change the world at a chosen moment.
+    var onSleep: ((TimeInterval) -> Void)?
     private var waiters: [CheckedContinuation<Void, Never>] = []
     private var delayWaiters: [CheckedContinuation<Void, Never>] = []
     private static let delays: Set<TimeInterval> = {
@@ -180,7 +185,8 @@ private final class VerifyGate {
     }()
 
     func pass(_ delay: TimeInterval) async {
-        if delay == TextInserter.unconfirmedSendDelay {
+        onSleep?(delay)
+        if delay == TextInserter.unconfirmedSendDelay || delay == TextInserter.unconfirmedSendPoll {
             guard delayClosed else { return }
             await withCheckedContinuation { delayWaiters.append($0) }
             return
@@ -776,6 +782,7 @@ private struct Rig {
         rig.focus.current = FocusSnapshot(pid: 100, role: "AXTextField", isSecure: true, element: element(100))
         let result = await rig.inserter.deliver("x", startFocus: nil)
         #expect(result.outcome == .secureDiscard && !result.secureInputBlocked)
+        #expect(result.target?.isSecure == true && result.storeOutcome == "secure discard")
         #expect(DeliveryCard.forDelivery(result, transcript: "x") == .secure("x"))
     }
 
@@ -786,6 +793,8 @@ private struct Rig {
         let result = await rig.inserter.deliver("x", startFocus: nil)
         let card = DeliveryCard.forDelivery(result, transcript: "x")
         #expect(result.secureInputBlocked)
+        // Stuck Secure Input doesn't mark the take as a secure-field one: it's stored as a take that didn't land.
+        #expect(result.target?.isSecure != true && result.storeOutcome == "not landed")
         #expect(card == .secureInput("x"))
         #expect(card?.actions == [.copy])
     }
@@ -1260,7 +1269,7 @@ private struct Rig {
         rig.focus.isSecureInputEnabled = true
         let result = await rig.inserter.deliver("x", startFocus: nil)
         #expect(result.outcome == .secureDiscard)
-        #expect(result.target?.isSecure == true)
+        #expect(result.secureInputBlocked && result.target?.isSecure != true)
         #expect(rig.pasteboard.writes.isEmpty)
         #expect(rig.poster.posts == 0)
     }
@@ -2409,26 +2418,195 @@ private struct Rig {
     private static let before = FieldReading(value: "Hello", length: 5, selection: NSRange(location: 5, length: 0))
     private static let grown = FieldReading(value: "Hello world", length: 11, selection: NSRange(location: 11, length: 0))
 
-    private func rig(optedIn: Bool = true, bundleID: String? = nil, elementKnown: Bool = true) -> Rig {
+    /// `timed` lets the send's own sleeps run and move the clock, while the read-back stays held.
+    private func rig(optedIn: Bool = true, bundleID: String? = nil, elementKnown: Bool = true, timed: Bool = false) -> Rig {
         let id = bundleID ?? terminal
-        let rig = Rig(sendsReturn: { optedIn && $0 == id }, gated: true)
+        let rig = Rig(sendsReturn: { optedIn && $0 == id }, gated: true, advancesSleepClock: timed)
+        if timed { rig.gate.delayClosed = false }
         rig.focus.current = FocusSnapshot(pid: 100, bundleID: id, role: "AXTextArea", element: elementKnown ? element(100) : nil)
         rig.focus.readings = [Self.before, Self.grown]
         rig.inserter.observeVerification { _ in }
         return rig
     }
 
-    /// Delivers and arms; returns the pending send so a test can await it after changing the world.
-    private func arm(_ rig: Rig) async -> Task<Void, Never>? {
-        let result = await rig.inserter.deliver("world", startFocus: nil)
+    /// Delivers and arms; returns the pending send so a test can await it after changing the world. The terminal
+    /// reads the paste unless `read` is false.
+    private func arm(_ rig: Rig, read: Bool = true) async -> Task<Void, Never>? {
+        let result = await rig.inserter.deliver("world", startFocus: rig.focus.current)
+        if read { rig.pasteboard.read() }
         rig.inserter.armReturn(after: result)
         return rig.inserter.unconfirmedSend
+    }
+
+    private func elapsed(_ rig: Rig, since start: ContinuousClock.Instant) -> TimeInterval {
+        (rig.clock.instant - start) / .seconds(1)
+    }
+
+    @Test func aReceiptAt600msHoldsTheReturnUntilItHasSettled() async {
+        let rig = rig(timed: true)
+        var start = rig.clock.instant
+        var sentAt: TimeInterval?
+        rig.poster.onReturn = { sentAt = elapsed(rig, since: start) }
+        var readAt: TimeInterval?
+        rig.gate.onSleep = { _ in
+            guard readAt == nil, elapsed(rig, since: start) >= 0.6 else { return }
+            readAt = elapsed(rig, since: start)
+            rig.pasteboard.read()
+        }
+        let result = await rig.inserter.deliver("world", startFocus: rig.focus.current)
+        start = rig.clock.instant
+        rig.inserter.armReturn(after: result)
+        await rig.inserter.unconfirmedSend?.value
+        #expect(rig.poster.returns == [100])
+        let read = readAt ?? -1, sent = sentAt ?? -1
+        #expect(read >= 0.6 && read < 0.65)
+        #expect(sent >= read + PasteboardSession.receiptSettle)
+        #expect(sent <= TextInserter.returnWindow)
+        await release(rig, nil)
+        #expect(rig.poster.returns == [100])
+    }
+
+    @Test func aPromptReceiptStillSendsAtTheMinimumDelay() async {
+        let rig = rig(timed: true)
+        var start = rig.clock.instant
+        var sentAt: TimeInterval?
+        rig.poster.onReturn = { sentAt = elapsed(rig, since: start) }
+        let result = await rig.inserter.deliver("world", startFocus: rig.focus.current)
+        start = rig.clock.instant
+        rig.pasteboard.read()
+        rig.inserter.armReturn(after: result)
+        await rig.inserter.unconfirmedSend?.value
+        #expect(rig.poster.returns == [100])
+        #expect(sentAt == TextInserter.unconfirmedSendDelay)
+        await release(rig, nil)
+    }
+
+    @Test func noReceiptInsideTheSendWindowSendsNothing() async {
+        let rig = rig(timed: true)
+        let result = await rig.inserter.deliver("world", startFocus: rig.focus.current)
+        let start = rig.clock.instant
+        rig.inserter.armReturn(after: result)
+        let task = rig.inserter.unconfirmedSend
+        #expect(task != nil)
+        await task?.value
+        // It waited out the window for a read that never came; nothing else stood in the Return's way.
+        #expect(elapsed(rig, since: start) >= TextInserter.returnWindow - 0.001)
+        #expect(rig.poster.returns.isEmpty)
+        await release(rig, nil)
+        #expect(rig.poster.returns.isEmpty)
+    }
+
+    @Test func aReceiptTooLateToSettleInsideTheWindowSendsNothing() async {
+        let rig = rig(timed: true)
+        var start = rig.clock.instant
+        var done = false
+        rig.gate.onSleep = { _ in
+            guard !done, elapsed(rig, since: start) >= TextInserter.returnWindow - 0.1 else { return }
+            done = true
+            rig.pasteboard.read()
+        }
+        let result = await rig.inserter.deliver("world", startFocus: rig.focus.current)
+        start = rig.clock.instant
+        rig.inserter.armReturn(after: result)
+        await rig.inserter.unconfirmedSend?.value
+        #expect(done && rig.poster.returns.isEmpty)
+        await release(rig, nil)
+    }
+
+    @Test(arguments: [false, true]) func aReadBeforeTheChordIsNotAReceiptForTheReturn(readAgainAfterTheChord: Bool) async {
+        let rig = rig(timed: true)
+        let board = rig.pasteboard
+        rig.poster.onPost = { board.read() }
+        let result = await rig.inserter.deliver("world", startFocus: rig.focus.current)
+        if readAgainAfterTheChord { rig.pasteboard.read() }
+        rig.inserter.armReturn(after: result)
+        let task = rig.inserter.unconfirmedSend
+        #expect(task != nil)
+        await task?.value
+        #expect(rig.poster.returns == (readAgainAfterTheChord ? [100] : []))
+        await release(rig, nil)
+    }
+
+    @Test func aReceiptOnANewerLeaseDoesNotReleaseTheOlderReturn() async {
+        let rig = rig()
+        let task = await arm(rig, read: false)
+        #expect(task != nil)
+        await hop(until: { rig.gate.delayParkedCount == 1 })
+        // The older paste was never read and its lease ran out; the newer one is read.
+        rig.pending.run(PasteboardSession.receiptCap)
+        _ = await rig.inserter.deliver("two", startFocus: rig.focus.current)
+        #expect(rig.poster.posts == 2)
+        rig.pasteboard.read()
+        await release(rig, task)
+        #expect(rig.poster.returns.isEmpty)
+    }
+
+    @Test func aClipboardLeaseThatMovedOnWithoutADeliverySendsNothing() async {
+        let rig = rig()
+        // The terminal read the paste, so the send is past its receipt wait and held in its last sleep.
+        let task = await arm(rig)
+        await hop(until: { rig.gate.delayParkedCount == 1 })
+        #expect(rig.gate.delayParkedCount == 1 && rig.poster.returns.isEmpty)
+        // Copy Last takes the clipboard without a new delivery, so only the lease check after the sleep can stop this Return.
+        #expect(rig.inserter.copyLast())
+        await release(rig, task)
+        #expect(rig.poster.returns.isEmpty)
+    }
+
+    private func hop(until condition: () -> Bool) async {
+        for _ in 0..<400 where !condition() {
+            try? await Task.sleep(for: .milliseconds(5))
+            for _ in 0..<20 { await Task.yield() }
+        }
     }
 
     private func release(_ rig: Rig, _ task: Task<Void, Never>?) async {
         rig.gate.open()
         await task?.value
         await rig.inserter.waitForVerification()
+    }
+
+    @Test func focusMovedToAnotherOptedInTerminalSendsNothing() async {
+        let rig = rig()
+        let start = FocusSnapshot(pid: 5, bundleID: "com.example.start", element: element(5))
+        let result = await rig.inserter.deliver("world", startFocus: start)
+        #expect(result.focusMoved)
+        rig.inserter.armReturn(after: result)
+        #expect(rig.inserter.unconfirmedSend == nil)
+        await release(rig, nil)
+        #expect(rig.poster.returns.isEmpty)
+    }
+
+    @Test func focusMovedToAnotherFieldInTheSameTerminalSendsNothing() async {
+        let rig = rig()
+        let start = FocusSnapshot(pid: 100, bundleID: terminal, role: "AXTextArea", element: element(99))
+        let result = await rig.inserter.deliver("world", startFocus: start)
+        #expect(result.focusMoved)
+        rig.inserter.armReturn(after: result)
+        #expect(rig.inserter.unconfirmedSend == nil)
+        await release(rig, nil)
+        #expect(rig.poster.returns.isEmpty)
+    }
+
+    @Test func unmovedFocusInATerminalStillSends() async {
+        let rig = rig()
+        let start = FocusSnapshot(pid: 100, bundleID: terminal, role: "AXTextArea", element: element(100))
+        let result = await rig.inserter.deliver("world", startFocus: start)
+        #expect(!result.focusMoved)
+        rig.pasteboard.read()
+        rig.inserter.armReturn(after: result)
+        await release(rig, rig.inserter.unconfirmedSend)
+        #expect(rig.poster.returns == [100])
+    }
+
+    @Test func unknownStartingFieldSendsNothingInATerminal() async {
+        let rig = rig()
+        let result = await rig.inserter.deliver("world", startFocus: FocusSnapshot(pid: 100, bundleID: terminal))
+        #expect(!result.focusMoved && !result.startTargetKnown)
+        rig.inserter.armReturn(after: result)
+        #expect(rig.inserter.unconfirmedSend == nil)
+        await release(rig, nil)
+        #expect(rig.poster.returns.isEmpty)
     }
 
     @Test func sendsOnceAfterTheDelayWithNoVerdict() async {
@@ -2568,7 +2746,7 @@ private struct Rig {
         let rig = rig()
         let task = await arm(rig)
         rig.pasteboard.read()
-        _ = await rig.inserter.deliver("two", startFocus: nil)
+        _ = await rig.inserter.deliver("two", startFocus: rig.focus.current)
         #expect(rig.inserter.unconfirmedSend == nil)
         await release(rig, task)
         #expect(rig.poster.returns.isEmpty)
@@ -2625,9 +2803,48 @@ private struct Rig {
 
     /// Delivers and queues the Return, as a normal take does.
     private func deliverAndArm(_ rig: Rig, _ text: String = "world") async -> DeliveryResult {
-        let result = await rig.inserter.deliver(text, startFocus: nil)
+        let result = await rig.inserter.deliver(text, startFocus: rig.focus.current)
         rig.inserter.armReturn(after: result)
         return result
+    }
+
+    @Test func focusMovedToAnotherOptedInAppSendsNothing() async {
+        let rig = rig()
+        let start = FocusSnapshot(pid: 5, bundleID: "com.example.start", element: element(5))
+        let result = await rig.inserter.deliver("world", startFocus: start)
+        #expect(result.focusMoved)
+        rig.inserter.armReturn(after: result)
+        await finish(rig)
+        #expect(rig.poster.posts == 1 && rig.poster.returns.isEmpty)
+    }
+
+    @Test func focusMovedToAnotherFieldInTheSameOptedInAppSendsNothing() async {
+        let rig = rig()
+        let start = FocusSnapshot(pid: 100, bundleID: app, role: "AXTextArea", element: element(99))
+        let result = await rig.inserter.deliver("world", startFocus: start)
+        #expect(result.focusMoved)
+        rig.inserter.armReturn(after: result)
+        await finish(rig)
+        #expect(rig.poster.posts == 1 && rig.poster.returns.isEmpty)
+    }
+
+    @Test func unmovedFocusStillSendsItsReturn() async {
+        let rig = rig()
+        let start = FocusSnapshot(pid: 100, bundleID: app, role: "AXTextArea", element: element(100))
+        let result = await rig.inserter.deliver("world", startFocus: start)
+        #expect(!result.focusMoved)
+        rig.inserter.armReturn(after: result)
+        await finish(rig)
+        #expect(rig.poster.returns == [100])
+    }
+
+    @Test func unknownStartingFieldSendsNothing() async {
+        let rig = rig()
+        let result = await rig.inserter.deliver("world", startFocus: FocusSnapshot(pid: 100, bundleID: app))
+        #expect(!result.focusMoved && !result.startTargetKnown)
+        rig.inserter.armReturn(after: result)
+        await finish(rig)
+        #expect(rig.poster.posts == 1 && rig.poster.returns.isEmpty)
     }
 
     @Test func nothingIsSentWhileTheVerdictIsPendingAndExactlyOneAfterItLands() async {
@@ -2642,7 +2859,7 @@ private struct Rig {
 
     @Test func aVerdictThatArrivedBeforeTheSendWasArmedStillSendsOnce() async {
         let rig = rig()
-        let result = await rig.inserter.deliver("world", startFocus: nil)
+        let result = await rig.inserter.deliver("world", startFocus: rig.focus.current)
         await finish(rig)
         #expect(rig.poster.returns.isEmpty)
         rig.inserter.armReturn(after: result)
@@ -2668,13 +2885,18 @@ private struct Rig {
         #expect(rig.poster.returns.isEmpty)
     }
 
-    @Test func pastingOverTheSameSelectedTextStillGetsItsReturn() async {
+    /// The field reads exactly as before and only the caret moved. An app that ignored the paste can do that too, so
+    /// the verdict is unknown and no Return goes out.
+    @Test func pastingOverTheSameSelectedTextSendsNothing() async {
         let selected = FieldReading(value: "Hello world", length: 11, selection: NSRange(location: 6, length: 5))
         let replaced = FieldReading(value: "Hello world", length: 11, selection: NSRange(location: 11, length: 0))
         let rig = rig(readings: [selected, replaced])
+        var seen: [PasteVerification] = []
+        rig.inserter.observeVerification { seen.append($0) }
         _ = await deliverAndArm(rig)
         await finish(rig)
-        #expect(rig.poster.returns == [100])
+        #expect(seen.map(\.verdict) == [.unknown])
+        #expect(rig.poster.returns.isEmpty)
     }
 
     @Test func aNotLandedVerdictSendsNothing() async {
@@ -2717,7 +2939,7 @@ private struct Rig {
 
     @Test func typingAfterTheVerdictButBeforeTheSendWasArmedSendsNothing() async {
         let rig = rig()
-        let result = await rig.inserter.deliver("world", startFocus: nil)
+        let result = await rig.inserter.deliver("world", startFocus: rig.focus.current)
         await finish(rig)
         rig.input.value = 1
         rig.inserter.armReturn(after: result)
@@ -2742,7 +2964,7 @@ private struct Rig {
 
     @Test func aCachedVerdictPastTheSendWindowSendsNothing() async {
         let rig = rig()
-        let result = await rig.inserter.deliver("world", startFocus: nil)
+        let result = await rig.inserter.deliver("world", startFocus: rig.focus.current)
         await finish(rig)
         rig.clock.advance(TextInserter.returnWindow + 1)
         rig.inserter.armReturn(after: result)
@@ -2777,7 +2999,7 @@ private struct Rig {
         rig.focus.current = FocusSnapshot(pid: 100, bundleID: app, role: "AXTextArea", element: element(100))
         rig.focus.readings = [Self.before, Self.grown]
         rig.inserter.observeVerification { _ in }
-        let result = await rig.inserter.deliver("world", startFocus: nil)
+        let result = await rig.inserter.deliver("world", startFocus: rig.focus.current)
         rig.inserter.armReturn(after: result)
         await rig.inserter.waitForVerification()
         #expect(rig.poster.returns.isEmpty)
@@ -2842,7 +3064,7 @@ private struct Rig {
 
     @Test func aDeliveryThatPastedNothingGetsNoReturn() async {
         let rig = rig()
-        let real = await rig.inserter.deliver("world", startFocus: nil)
+        let real = await rig.inserter.deliver("world", startFocus: rig.focus.current)
         let target = real.target
         let cases = [
             DeliveryResult(method: .paste, outcome: .unknown, focusMoved: false, target: target, finalText: ""),
@@ -2862,7 +3084,7 @@ private struct Rig {
         defer { rig.gate.open(); rig.inserter.cancelVerification() }
         _ = await deliverAndArm(rig, "one")
         rig.pasteboard.read()
-        let second = await rig.inserter.deliver("two", startFocus: nil)
+        let second = await rig.inserter.deliver("two", startFocus: rig.focus.current)
         #expect(second.method == .paste && rig.poster.posts == 2)
         await finish(rig)
         #expect(rig.poster.returns.isEmpty)
@@ -2873,7 +3095,7 @@ private struct Rig {
         let landed = FieldReading(
             value: "Hello" + passage, length: 5 + passage.count, selection: NSRange(location: 5 + passage.count, length: 0))
         let rig = rig(chunks: true, readings: [Self.before, landed])
-        let result = await rig.inserter.deliver(passage, startFocus: nil)
+        let result = await rig.inserter.deliver(passage, startFocus: rig.focus.current)
         rig.inserter.armReturn(after: result)
         #expect(result.method == .paste && result.outcome == .unknown)
         #expect(rig.poster.posts > 1)
@@ -2886,7 +3108,7 @@ private struct Rig {
         let rig = rig(chunks: true)
         rig.poster.onPost = nil
         let passage = String(repeating: "word ", count: 600)
-        let result = await rig.inserter.deliver(passage, startFocus: nil)
+        let result = await rig.inserter.deliver(passage, startFocus: rig.focus.current)
         rig.inserter.armReturn(after: result)
         #expect(result.outcome == .partialPaste)
         await finish(rig)
@@ -2895,7 +3117,7 @@ private struct Rig {
 
     @Test func pasteLastNeverPressesReturn() async {
         let rig = rig()
-        _ = await rig.inserter.deliver("world", startFocus: nil)
+        _ = await rig.inserter.deliver("world", startFocus: rig.focus.current)
         rig.pasteboard.read()
         _ = await rig.inserter.pasteLast()
         await finish(rig)

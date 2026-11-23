@@ -5,6 +5,8 @@ import Testing
 @testable import MouthtypeMac
 
 @Suite struct CaptureInputSelectionTests {
+    private let lease = CaptureLease(owner: .dictation)
+
     private func selected(_ id: UInt32, followsDefault: Bool = false) -> CaptureInputSelection {
         .init(device: .init(sampleRate: 48_000, channels: 1, id: id), followsDefault: followsDefault)
     }
@@ -14,8 +16,8 @@ import Testing
         let input = selected(99)
         let capture = AudioCapture(input: driver, resolveInput: { input })
         try await capture.prepare()
-        try await capture.start(keyDownAtNanos: HostClock.now())
-        await capture.cancel()
+        try await capture.start(keyDownAtNanos: HostClock.now(), lease: lease)
+        await capture.cancel(lease)
         #expect(driver.state.withLock { $0.prepared } == [input])
         #expect(driver.state.withLock { $0.started } == [input])
         #expect(driver.state.withLock { $0.stops } == 1)
@@ -25,21 +27,21 @@ import Testing
         let driver = SelectionInputDriver()
         let choice = Mutex(selected(99))
         let capture = AudioCapture(input: driver, resolveInput: { choice.withLock { $0 } })
-        try await capture.start(keyDownAtNanos: HostClock.now())
+        try await capture.start(keyDownAtNanos: HostClock.now(), lease: lease)
         choice.withLock { $0 = selected(100) }
         try await capture.prepare()
         #expect(driver.state.withLock { $0.prepared.isEmpty })
         #expect(driver.state.withLock { $0.started } == [selected(99)])
-        await capture.cancel()
-        try await capture.start(keyDownAtNanos: HostClock.now())
-        await capture.cancel()
+        await capture.cancel(lease)
+        try await capture.start(keyDownAtNanos: HostClock.now(), lease: lease)
+        await capture.cancel(lease)
         #expect(driver.state.withLock { $0.started } == [selected(99), selected(100)])
     }
 
     @Test func missingChosenInputNeverStartsAnotherMicrophone() async {
         let driver = SelectionInputDriver()
         let capture = AudioCapture(input: driver, resolveInput: { throw CaptureError.selectedMicrophoneUnavailable })
-        await #expect(throws: CaptureError.self) { try await capture.start(keyDownAtNanos: HostClock.now()) }
+        await #expect(throws: CaptureError.self) { try await capture.start(keyDownAtNanos: HostClock.now(), lease: lease) }
         #expect(driver.state.withLock { $0.started.isEmpty })
     }
 
@@ -51,7 +53,7 @@ import Testing
                 Issue.record("must not resolve a device without permission")
                 throw CaptureError.noInputDevice
             }, authorization: { .denied })
-        await #expect(throws: CaptureError.self) { try await capture.start(keyDownAtNanos: HostClock.now()) }
+        await #expect(throws: CaptureError.self) { try await capture.start(keyDownAtNanos: HostClock.now(), lease: lease) }
         #expect(driver.state.withLock { $0.started.isEmpty })
     }
 }
