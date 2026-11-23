@@ -1,0 +1,62 @@
+config_version = "0"
+
+exclude_patterns = [
+  "*_min.*",
+  "*-min.*",
+  "*.min.*",
+  "**/*.d.ts",
+  "**/.build/**",
+  "**/.next/**",
+  "**/.source/**",
+  "**/build/**",
+  "**/coverage/**",
+  "**/dist/**",
+  "**/generated/**",
+  "**/*.generated.*",
+  "**/node_modules/**",
+  "**/playwright-report/**",
+  "**/test-results/**",
+  "**/vendor/**",
+  ".claude/**",
+  ".planning/**",
+  ".playwright-mcp/**",
+  ".qlty/**",
+  # tools/ and packaging/ belong to the Linux owner and have existing findings
+  # (same carve-out lefthook.yml's shellcheck and swift-format hooks used).
+  "tools/**",
+  "packaging/**",
+]
+
+test_patterns = [
+  "**/test/**",
+  "**/tests/**",
+  "**/Tests/**",
+  "**/spec/**",
+  "**/unit/**",
+  "**/e2e/**",
+  "**/*.test.*",
+  "**/*.spec.*",
+  "**/*_test.*",
+  "**/*_spec.*",
+  "**/test_*.*",
+  "**/spec_*.*",
+]
+
+[smells]
+mode = "comment"
+
+[[source]]
+name = "default"
+default = true
+
+# Scope matches the linters lefthook already ran (shellcheck, actionlint).
+# Swift is not covered here: swift-format lint --strict stays in lefthook
+# (pre-commit on staged files, scripts/pre-push.sh on push), since Qlty has no
+# swift-format plugin. apps/docs keeps its own Biome setup (apps/docs/biome.json,
+# nested root config) so Qlty does not run Biome from the repo root.
+
+[[plugin]]
+name = "actionlint"
+
+[[plugin]]
+name = "shellcheck"
