@@ -45,10 +45,18 @@ private final class GatedEngine: DictationEngine {
     var biases: [VocabularyBias?] = []
     var inTranscribe = false
     var gate: CheckedContinuation<Void, Never>?
+    private var enteredWaiter: CheckedContinuation<Void, Never>?
+    /// Returns once a take is inside `transcribe`, however long the scheduler takes to get it there.
+    func waitUntilInTranscribe() async {
+        if inTranscribe { return }
+        await withCheckedContinuation { enteredWaiter = $0 }
+    }
     func setVocabularyBias(_ bias: VocabularyBias?) async { biases.append(bias) }
     func setVocabularyBias(_ bias: VocabularyBias?, settleWithin: Duration?) async { biases.append(bias) }
     func transcribe(samples: [Float]) async throws -> Transcription {
         inTranscribe = true
+        enteredWaiter?.resume()
+        enteredWaiter = nil
         await withCheckedContinuation { gate = $0 }
         inTranscribe = false
         return Transcription(text: "hi", processingSeconds: 0, engineID: "gated")
@@ -63,10 +71,18 @@ private final class SlowWriteEngine: DictationEngine {
     var writeHeld = false
     var transcribed = 0
     var release: CheckedContinuation<Void, Never>?
+    private var heldWaiter: CheckedContinuation<Void, Never>?
+    /// Returns once the first bias write is being held open.
+    func waitUntilWriteHeld() async {
+        if writeHeld { return }
+        await withCheckedContinuation { heldWaiter = $0 }
+    }
     func setVocabularyBias(_ bias: VocabularyBias?) async { biases.append(bias) }
     func setVocabularyBias(_ bias: VocabularyBias?, settleWithin: Duration?) async {
         if biases.isEmpty {
             writeHeld = true
+            heldWaiter?.resume()
+            heldWaiter = nil
             await withCheckedContinuation { release = $0 }
         }
         biases.append(bias)
@@ -480,15 +496,14 @@ private struct FakeSource: BoundedTextSource {
         #expect(engine.budgets.isEmpty)
     }
 
-    @Test func keyDownWarmUpWaitsOutAnEarlierTakeStillInTheEngine() async throws {
+    @Test(.timeLimit(.minutes(1))) func keyDownWarmUpWaitsOutAnEarlierTakeStillInTheEngine() async throws {
         let clock = SystemDictationClock()
         let engine = GatedEngine()
         var pipeline = DictationPipeline(store: CapturingStore(), archive: nil, engine: engine, clock: clock)
         pipeline.boostSavedWords = { true }
         let first = DictationSession(id: "a", startedAt: clock.now(), keyDownAt: clock.nowNanos(), rowOpen: true)
         let take = Task { try await pipeline.transcribe(audio(), session: first, voicedMs: 1000) }
-        for _ in 0..<1_000 where !engine.inTranscribe { await Task.yield() }
-        #expect(engine.inTranscribe)
+        await engine.waitUntilInTranscribe()
 
         // Take B starts in another editor while A is still being recognised: its names must not reach the engine yet.
         let warm = try #require(pipeline.warmEditorBias(Task { [VocabularyBias.Term(text: "otherEditorName")] }))
@@ -503,7 +518,7 @@ private struct FakeSource: BoundedTextSource {
         #expect(engine.biases.last??.terms == ["otherEditorName"])
     }
 
-    @Test func aTakeArrivingMidWarmUpWriteWaitsForItAndThenSetsItsOwnBias() async throws {
+    @Test(.timeLimit(.minutes(1))) func aTakeArrivingMidWarmUpWriteWaitsForItAndThenSetsItsOwnBias() async throws {
         let clock = SystemDictationClock()
         let engine = SlowWriteEngine()
         var pipeline = DictationPipeline(store: CapturingStore(), archive: nil, engine: engine, clock: clock)
@@ -511,8 +526,7 @@ private struct FakeSource: BoundedTextSource {
         pipeline.vocabulary = Rules(rules: [DictionaryRule(heard: "maya", written: "Maya")])
         // B checked idle and is mid-write when A enters.
         let warm = try #require(pipeline.warmEditorBias(Task { [VocabularyBias.Term(text: "otherEditorName")] }))
-        for _ in 0..<1_000 where !engine.writeHeld { await Task.yield() }
-        #expect(engine.writeHeld)
+        await engine.waitUntilWriteHeld()
         let first = DictationSession(id: "a", startedAt: clock.now(), keyDownAt: clock.nowNanos(), rowOpen: true)
         let take = Task { try await pipeline.transcribe(audio(), session: first, voicedMs: 1000) }
         for _ in 0..<200 { await Task.yield() }
