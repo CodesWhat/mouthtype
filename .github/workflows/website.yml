@@ -88,5 +88,7 @@ jobs:
           fi
         if: needs.changes.outputs.run == 'true'
         env:
+          # Firefox refuses to start as root when $HOME belongs to pwuser.
+          HOME: /root
           EVENT_NAME: ${{ github.event_name }}
           REQUIRE_DIST: "1"
