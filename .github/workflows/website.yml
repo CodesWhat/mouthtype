@@ -5,6 +5,9 @@ on:
     branches: [main, 'dev/**']
     paths: ["website/**", ".github/workflows/website.yml"]
   pull_request:
+  schedule:
+    - cron: '17 6 * * 1'
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -50,6 +53,11 @@ jobs:
     needs: changes
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    # Official Playwright image (matches @playwright/test 1.65.1): browsers and OS deps are baked in,
+    # so there is no apt step. PRs and pushes run Chromium; schedule and dispatch run all three engines.
+    container:
+      image: mcr.microsoft.com/playwright:v1.65.1-noble@sha256:1507cbfc550a63a6b7396791ca4f00df17beb56342d2447b3f106c306f525579
+      options: --ipc=host
     defaults:
       run:
         working-directory: website
@@ -72,9 +80,13 @@ jobs:
         if: needs.changes.outputs.run == 'true'
       - run: npm run build
         if: needs.changes.outputs.run == 'true'
-      - run: npx playwright install --with-deps chromium webkit firefox
-        if: needs.changes.outputs.run == 'true'
-      - run: npm test
+      - run: |
+          if [ "$EVENT_NAME" = "schedule" ] || [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            npm test
+          else
+            npm test -- --project=chromium
+          fi
         if: needs.changes.outputs.run == 'true'
         env:
+          EVENT_NAME: ${{ github.event_name }}
           REQUIRE_DIST: "1"
