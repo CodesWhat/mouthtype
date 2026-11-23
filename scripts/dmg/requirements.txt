@@ -2,4 +2,4 @@
 # (no Finder AppleScript), so the build is headless and repeatable.
 dmgbuild==2.0.0
 ds_store==1.3.3
-mac_alias==2.2.3
+mac_alias==2.2.4
