@@ -44,9 +44,11 @@ FILES = (['LICENSE', 'THIRD_PARTY_NOTICES.md'] +
 # Modules the daemon loads at runtime (cli_*.py, library.py, stats.py, transform_worker.py, ...) and their
 # test_*.py files are found by scanning, so a new slice ships without editing the lists above. Tests ship on
 # purpose: the Arch package runs them in check() and the install tests run them from the payload. Dev
-# scripts and tests that need the repository root (test_arch_bundle.py) stay out. Python packages beside them
-# (backends/, testing/) are scanned the same way, so a new backend or test helper ships without a list edit.
-SCAN_EXCLUDED = ('check_*.py', 'verify_*.py', 'conftest.py', 'test_arch_bundle.py')
+# scripts and tests that need the repository root (test_arch_bundle.py, test_vnc_auth_proxy.py) stay out.
+# Python packages beside them (backends/, testing/) are scanned the same way, so a new backend or test helper
+# ships without a list edit.
+SCAN_EXCLUDED = ('check_*.py', 'verify_*.py', 'conftest.py', 'test_arch_bundle.py',
+                'test_vnc_auth_proxy.py')
 SCAN_PACKAGES_SKIPPED = ('vendor',)
 
 
