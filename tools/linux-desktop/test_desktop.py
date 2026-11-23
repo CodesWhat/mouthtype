@@ -1097,7 +1097,8 @@ class PasteDeliveryTests(unittest.TestCase):
         from desktop import HyprlandDelivery
         import os
         real = HyprlandDelivery({'mode': 'paste', 'any_window': True, 'allow_unknown_secure_field': True})
-        self.assertEqual(real.process_name(os.getpid()), open('/proc/self/comm').read().strip())
+        with open('/proc/self/comm') as comm:
+            self.assertEqual(real.process_name(os.getpid()), comm.read().strip())
         self.assertIsNone(real.process_name(-1))
         self.assertIsNone(real.process_name('42'))
 

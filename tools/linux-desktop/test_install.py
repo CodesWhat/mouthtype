@@ -223,7 +223,7 @@ class InstallTests(unittest.TestCase):
             path.write_text('x')
         desktop = root / 'tools/linux-desktop'
         for name in ('library.py', 'stats.py', 'tone.py', 'profanity.py', 'cli_library.py', 'cli_style.py',
-                     'cli_transform.py', 'transform_worker.py', 'test_transform.py', 'test_arch_bundle.py',
+                     'cli_transform.py', 'transform_worker.py', 'test_transform.py', 'test_arch_bundle.py', 'test_vnc_auth_proxy.py',
                      'check_tone.py', 'verify_tone.py', 'conftest.py', 'notes.txt'):
             (desktop / name).write_text('x')
 
@@ -238,7 +238,7 @@ class InstallTests(unittest.TestCase):
                          'cli_style.py', 'cli_transform.py', 'transform_worker.py', 'test_transform.py'):
                 self.assertTrue((installed / name).is_file(), name)
                 self.assertEqual((installed / name).stat().st_mode, (installed / 'desktop.py').stat().st_mode, name)
-            for name in ('test_arch_bundle.py', 'check_tone.py', 'verify_tone.py', 'conftest.py', 'notes.txt'):
+            for name in ('test_arch_bundle.py', 'test_vnc_auth_proxy.py', 'check_tone.py', 'verify_tone.py', 'conftest.py', 'notes.txt'):
                 self.assertFalse((installed / name).exists(), name)
             output = Path(temp) / 'linux.tar.gz'
             installer.package(source, output)
@@ -250,6 +250,7 @@ class InstallTests(unittest.TestCase):
             self.assertIn('mouthtype-linux/tools/linux-desktop/transform_worker.py', names)
             self.assertIn('mouthtype-linux/tools/linux-desktop/test_transform.py', names)
             self.assertNotIn('mouthtype-linux/tools/linux-desktop/test_arch_bundle.py', names)
+            self.assertNotIn('mouthtype-linux/tools/linux-desktop/test_vnc_auth_proxy.py', names)
 
     def test_every_module_the_payload_imports_is_shipped(self):
         """A runtime import of a file install.py doesn't ship fails only on an installed machine, so walk the imports."""
