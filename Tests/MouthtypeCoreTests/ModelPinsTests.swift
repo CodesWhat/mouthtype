@@ -298,7 +298,7 @@ import WhisperKit
             let root = makeRoot()
             defer { try? FileManager.default.removeItem(at: root) }
             _ = try? await WhisperTokenizerFetch.prepare(
-                variant: variant, root: root,
+                variant: variant, root: root, legacyFolders: [],
                 fetch: { repo, revision, file in
                     await seen.record("\(repo)@\(revision)/\(file)")
                     throw URLError(.notConnectedToInternet)
@@ -346,6 +346,98 @@ import WhisperKit
         let cached = try await WhisperTokenizerFetch.prepare(pin: pin, root: root, fetch: { _, _, file in bytes[file]! })
         let offline = try await WhisperTokenizerFetch.prepare(pin: pin, root: root, fetch: { _, _, _ in throw URLError(.notConnectedToInternet) })
         #expect(offline == cached)
+    }
+
+    private func legacyFolder(_ files: [String: Data]) throws -> URL {
+        let folder = makeRoot()
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        for (name, data) in files { try data.write(to: folder.appendingPathComponent(name)) }
+        return folder
+    }
+
+    @Test func matchingLegacyFilesAreAdoptedWithNoRequest() async throws {
+        let (pin, bytes) = pin()
+        let root = makeRoot()
+        let legacy = try legacyFolder(bytes)
+        defer { for url in [root, legacy] { try? FileManager.default.removeItem(at: url) } }
+        let seen = Seen()
+        let folder = try await WhisperTokenizerFetch.prepare(
+            pin: pin, root: root, legacyFolders: [legacy],
+            fetch: { _, _, file in
+                await seen.record(file)
+                throw URLError(.notConnectedToInternet)
+            })
+        #expect(await seen.revisions.isEmpty)
+        for (name, data) in bytes {
+            #expect(try Data(contentsOf: folder.appendingPathComponent(name)) == data)
+            #expect(FileManager.default.fileExists(atPath: legacy.appendingPathComponent(name).path), "the legacy copy stays")
+        }
+    }
+
+    @Test func aMismatchedLegacyFileIsIgnoredAndFetchedFromThePinnedCommit() async throws {
+        let (pin, bytes) = pin()
+        let root = makeRoot()
+        var altered = bytes
+        altered["tokenizer.json"] = Data("old main revision".utf8)
+        let legacy = try legacyFolder(altered)
+        defer { for url in [root, legacy] { try? FileManager.default.removeItem(at: url) } }
+        let seen = Seen()
+        let folder = try await WhisperTokenizerFetch.prepare(
+            pin: pin, root: root, legacyFolders: [legacy],
+            fetch: { _, _, file in
+                await seen.record(file)
+                return bytes[file]!
+            })
+        #expect(await seen.revisions == ["tokenizer.json"])
+        for (name, data) in bytes { #expect(try Data(contentsOf: folder.appendingPathComponent(name)) == data) }
+    }
+
+    @Test func aMismatchedLegacyFileFailsClosedOffline() async throws {
+        let (pin, bytes) = pin()
+        let root = makeRoot()
+        var altered = bytes
+        altered["config.json"] = Data("not the pinned bytes".utf8)
+        let legacy = try legacyFolder(altered)
+        defer { for url in [root, legacy] { try? FileManager.default.removeItem(at: url) } }
+        await #expect(throws: URLError.self) {
+            _ = try await WhisperTokenizerFetch.prepare(
+                pin: pin, root: root, legacyFolders: [legacy], fetch: { _, _, _ in throw URLError(.notConnectedToInternet) })
+        }
+        #expect(!FileManager.default.fileExists(atPath: root.appendingPathComponent("\(pin.repo)/\(pin.revision)/config.json").path))
+    }
+
+    @Test func aLaterLegacyFolderSuppliesWhatAnEarlierOneLacks() async throws {
+        let (pin, bytes) = pin()
+        let root = makeRoot()
+        let first = try legacyFolder(["config.json": Data("wrong".utf8)])
+        let second = try legacyFolder(bytes)
+        defer { for url in [root, first, second] { try? FileManager.default.removeItem(at: url) } }
+        let folder = try await WhisperTokenizerFetch.prepare(
+            pin: pin, root: root, legacyFolders: [first, second], fetch: { _, _, _ in throw URLError(.notConnectedToInternet) })
+        for (name, data) in bytes { #expect(try Data(contentsOf: folder.appendingPathComponent(name)) == data) }
+    }
+
+    @Test func noLegacyFilesStillFetchEverything() async throws {
+        let (pin, bytes) = pin()
+        let root = makeRoot()
+        let legacy = makeRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let seen = Seen()
+        _ = try await WhisperTokenizerFetch.prepare(
+            pin: pin, root: root, legacyFolders: [legacy],
+            fetch: { _, _, file in
+                await seen.record(file)
+                return bytes[file]!
+            })
+        #expect(await seen.revisions.sorted() == bytes.keys.sorted())
+    }
+
+    @Test func legacyFoldersCoverTheHubCacheAndTheModelFolder() {
+        let paths = WhisperTokenizerFetch.legacyFolders(repo: "openai/whisper-large-v3", variant: "large-v3-v20240930_turbo").map(\.path)
+        #expect(paths.count == 3)
+        #expect(paths[0].hasSuffix("/huggingface/models/openai/whisper-large-v3"))
+        #expect(paths[1].hasSuffix("/huggingface/models/\(ModelPins.whisperKit.repo)/openai_whisper-large-v3-v20240930_turbo"))
+        #expect(paths[2] == paths[1] + "/models/openai/whisper-large-v3")
     }
 
     @Test func anAlteredCachedFileIsReplacedFromThePinnedCommit() async throws {
