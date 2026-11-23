@@ -1,4 +1,4 @@
-# Mouthtype 0.12.2
+# Mouthtype 0.12.3
 
 Local dictation for Apple Silicon Macs running macOS 26 or later. Hold Fn, speak, release, and clean text is pasted where you're typing. Recognition and cleanup run on your Mac.
 
@@ -15,6 +15,17 @@ Local dictation for Apple Silicon Macs running macOS 26 or later. Hold Fn, speak
 > This distribution is Developer ID signed and notarized. If macOS rejects it, record the exact message; do not disable Gatekeeper.
 
 The app’s Resources folder contains these notes and its license. Corresponding release source is available from https://mouthtype.app/source; the development repository is at https://github.com/CodesWhat/mouthtype.
+
+## What changed in 0.12.3
+
+- Privacy: a take dictated into a secure field no longer keeps its text, audio or search entry. Takes already marked secure are scrubbed when the new version opens your history.
+- Security: the Whisper tokenizer is pinned and checked against a known hash, and a cached Whisper model loads without going online. The Style page no longer fetches icons for its built-in sites.
+- Press Return after inserting skips the Return if focus moved since the take started, waits for a terminal to read the paste, and doesn't count a paste of the same text as confirmed.
+- Fixed: dictation stayed blocked after a quit for an update was cancelled.
+- Fixed: typing during a hands-free recording with a custom shortcut could make the next press of the shortcut do nothing.
+- Fixed: the microphone has one owner at a time, so the setup test and dictation can't mix. A mid-take input format change no longer loses or reorders audio.
+- Fixed: Edit Selection by Voice accepts rewrites that add an apology. A cancelled cleanup-model download is a cancel, with partial files removed. One-line Matrix pill messages no longer scroll.
+- Faster: history opens off the main thread at launch, and Paste Last doesn't slow down as history grows.
 
 ## What changed in 0.12.2
 
