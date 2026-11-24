@@ -470,6 +470,44 @@ h1 em {
   border-radius: 50%;
   flex-shrink: 0;
 }
+.stars-section {
+  padding: 40px;
+  margin-bottom: 20px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 30px;
+}
+.stars-section h2 {
+  font: 54px/1 var(--serif);
+  letter-spacing: -1px;
+  margin: 0 0 18px;
+}
+.stars-section .eyebrow {
+  margin-bottom: 17px;
+}
+.stars-section p:not(.eyebrow) {
+  font-size: 14px;
+  line-height: 1.6;
+  margin: 0 0 12px;
+  color: var(--muted);
+}
+.stars-section a {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.stars-section picture {
+  flex: 0 1 460px;
+  min-width: 0;
+}
+.stars-section img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--line);
+}
 .alpha-section {
   padding: 40px;
   background: var(--panel);
@@ -663,6 +701,20 @@ footer {
   .example-text {
     min-height: 160px;
   }
+  .stars-section {
+    padding: 33px 28px;
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .stars-section h2 {
+    font-size: 41px;
+  }
+  .stars-section p:not(.eyebrow) {
+    font-size: 12px;
+  }
+  .stars-section picture {
+    flex-basis: auto;
+  }
   .alpha-section {
     padding: 33px 28px;
   }
@@ -805,6 +857,12 @@ footer {
   .example-bottom {
     padding: 13px 17px;
     font-size: 9px;
+  }
+  .stars-section {
+    padding: 28px 22px;
+  }
+  .stars-section h2 {
+    font-size: 42px;
   }
   .alpha-section {
     padding: 28px 22px;
@@ -1182,6 +1240,7 @@ footer {
 @media (max-width: 600px) {
   .headline-label .eyebrow,
   .alpha-section .eyebrow,
+  .stars-section .eyebrow,
   .skin-controls legend,
   .pace-label,
   .shortcut-hint > span,
@@ -1209,6 +1268,7 @@ footer {
   .brand,
   .masthead nav a,
   .download-source a,
+  .stars-section a,
   .compare-switch button {
     position: relative;
   }
@@ -1226,6 +1286,11 @@ footer {
     inset: -8px -1px;
   }
   .download-source a::after {
+    content: "";
+    position: absolute;
+    inset: -15px -2px;
+  }
+  .stars-section a::after {
     content: "";
     position: absolute;
     inset: -15px -2px;

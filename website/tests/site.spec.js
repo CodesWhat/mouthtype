@@ -353,3 +353,30 @@ test("primary buttons use the highlight lime with dark ink", async ({ page }) =>
   await expect(button).toHaveCSS("background-color", "rgb(211, 229, 139)");
   await expect(button).toHaveCSS("color", "rgb(17, 24, 39)");
 });
+
+test("star history charts are self-hosted, themed and actually load", async ({ page, request }) => {
+  const external = [];
+  page.on("request", (req) => {
+    if (!req.url().startsWith("http://127.0.0.1:4177")) external.push(req.url());
+  });
+  await page.goto("/");
+  const img = page.locator("#stars img");
+  await img.scrollIntoViewIfNeeded();
+  await expect(img).toHaveAttribute("alt", /CodesWhat\/mouthtype/);
+  await expect(img).toHaveAttribute("src", "/assets/star-history.svg");
+  await expect(page.locator('#stars source[media="(prefers-color-scheme: dark)"]')).toHaveAttribute(
+    "srcset",
+    "/assets/star-history-dark.svg",
+  );
+  await expect.poll(() => img.evaluate((el) => el.complete && el.naturalWidth)).toBeGreaterThan(0);
+  expect(external).toEqual([]);
+  for (const path of ["/assets/star-history.svg", "/assets/star-history-dark.svg"]) {
+    const res = await request.get(path);
+    expect(res.headers()["content-type"]).toContain("image/svg+xml");
+    const body = await res.text();
+    expect(body.length).toBeGreaterThan(20000);
+    expect(body).toContain("codeswhat/mouthtype");
+    expect(body).toContain("GitHub Stars");
+    expect(body).not.toMatch(/https?:\/\/(?!www\.w3\.org)/);
+  }
+});
