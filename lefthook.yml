@@ -4,7 +4,9 @@
 # pre-commit: quick checks on staged files only (no build, no tests).
 # pre-push:   scripts/pre-push.sh, which swift-format lints the Swift files the
 #             push changes and runs `swift build -Xswiftc -warnings-as-errors`.
-#             The build can take a few minutes; let it finish.
+#             The build can take a few minutes; let it finish. Also runs
+#             `qlty check` (shellcheck + actionlint, see .qlty/qlty.toml) on the
+#             files the push changes.
 
 pre-commit:
   parallel: true
@@ -18,16 +20,6 @@ pre-commit:
       exclude: "tools/**/*"
       run: xcrun swift-format lint --strict -- {staged_files}
       fail_text: "swift-format lint --strict failed. Fix with: swift format format --in-place <file>"
-    shellcheck:
-      glob: "*.sh"
-      # tools/ and packaging/ belong to the Linux owner and have existing findings.
-      exclude: "{tools,packaging}/**/*"
-      run: shellcheck {staged_files}
-      fail_text: "shellcheck failed. Install with: brew install shellcheck"
-    actionlint:
-      glob: ".github/workflows/*.{yml,yaml}"
-      run: actionlint {staged_files}
-      fail_text: "actionlint failed. Install with: brew install actionlint"
 
 pre-push:
   commands:
@@ -35,3 +27,8 @@ pre-push:
       run: scripts/pre-push.sh --stdin
       use_stdin: true
       fail_text: "pre-push checks failed (swift-format lint --strict or warnings-as-errors build)"
+    qlty:
+      # Local Qlty CLI only, no Cloud analysis. Plugins and the tools/ and
+      # packaging/ carve-outs live in .qlty/qlty.toml. Install: curl https://qlty.sh | bash
+      run: qlty check --no-progress --upstream origin/dev/v0.8.0 </dev/null
+      fail_text: "qlty check failed (shellcheck or actionlint). Install qlty with: curl https://qlty.sh | bash"

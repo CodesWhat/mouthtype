@@ -9,6 +9,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.3] - 2026-11-23
+
+### Security
+
+- A take dictated into a secure field keeps no transcript, word timings, edits, search entry or audio. Existing secure takes are scrubbed on upgrade.
+- The Whisper tokenizer is fetched from a pinned revision and verified against a SHA-256 digest. A cached Whisper model loads without the online file listing.
+- The Style page no longer fetches favicons for built-in sites, and icon fetches refuse redirects off the requested host.
+- Press Return after inserting skips the Return when focus moved since the take started, waits for a terminal to read the paste, and no longer treats a same-text paste as confirmed.
+
+### Fixed
+
+- Dictation works again after a quit for an update is cancelled.
+- Typing during a locked hands-free recording no longer blocks the shortcut that stops it.
+- The microphone has one owner at a time. Starting dictation during the setup test take shows the busy message.
+- The audio converter flushes its tail when the input format changes mid-take.
+- Edit Selection by Voice accepts rewrites that add an apology or regret.
+- A cancelled cleanup-model download is a cancel, not a failure, and partial files are removed.
+- One-line messages in the Matrix pill no longer scroll.
+
+### Performance
+
+- History opens off the main thread at launch, and Paste Last reads through the date index.
+
 ## [0.12.2] - 2026-11-14
 
 ### Fixed
@@ -263,7 +286,8 @@ First stable release for Apple Silicon Macs on macOS 26 or later. Hold Fn, speak
 
 0.1.0 was preceded by `v0.1.0-alpha.1` through `v0.1.0-alpha.9`, `v0.1.0-beta.1` and `v0.1.0-rc.1` through `v0.1.0-rc.4`. Each has a tag on the [releases page](https://github.com/CodesWhat/mouthtype/tags). Their notes are folded into the 0.1.0 entry in [`packaging/ReleaseNotes.txt`](packaging/ReleaseNotes.txt).
 
-[Unreleased]: https://github.com/CodesWhat/mouthtype/compare/v0.12.2...HEAD
+[Unreleased]: https://github.com/CodesWhat/mouthtype/compare/v0.12.3...HEAD
+[0.12.3]: https://github.com/CodesWhat/mouthtype/compare/v0.12.2...v0.12.3
 [0.12.2]: https://github.com/CodesWhat/mouthtype/compare/v0.12.1...v0.12.2
 [0.12.1]: https://github.com/CodesWhat/mouthtype/compare/v0.12.0...v0.12.1
 [0.12.0]: https://github.com/CodesWhat/mouthtype/compare/v0.11.0...v0.12.0

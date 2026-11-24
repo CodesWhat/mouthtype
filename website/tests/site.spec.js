@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./fixtures.js";
 
 for (const [choice, title, tagline] of [
   [0, "Words, straight", "SOFTWARE FOR SAYING THINGS"],
@@ -286,11 +286,33 @@ test("hero menu bar mouth does not shift the hero layout", async ({ page }) => {
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(360);
 });
 
+// IntersectionObserver callbacks are delivered on the next rendering update in
+// real time, outside the fake clock. Wait for one so the card's own observer
+// (registered earlier, notified first) has armed the cycle before runFor.
+async function scrollCardIntoView(page) {
+  const card = page.locator("#demo .example");
+  await card.scrollIntoViewIfNeeded();
+  await card.evaluate(
+    (el) =>
+      new Promise((resolve) => {
+        const probe = new IntersectionObserver(
+          ([entry]) => {
+            if (!entry.isIntersecting) return;
+            probe.disconnect();
+            resolve();
+          },
+          { threshold: 0.4 },
+        );
+        probe.observe(el);
+      }),
+  );
+}
+
 test("example card auto-alternates until the user touches it", async ({ page }) => {
   await page.clock.install();
   await page.goto("/");
   const text = page.locator("#example-text");
-  await page.locator("#demo .example").scrollIntoViewIfNeeded();
+  await scrollCardIntoView(page);
   await expect(text).toContainText("Send the mockups");
   await page.clock.runFor(6000 + 400);
   await expect(text).toContainText("um send");

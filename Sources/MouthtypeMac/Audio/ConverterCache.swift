@@ -48,11 +48,22 @@ final class ConverterCache: @unchecked Sendable {
     /// Converts `input` and passes the result to `body`. The pointer is only
     /// valid inside `body`. Returns false if no converter could be built for
     /// the input format or the conversion failed.
+    ///
+    /// When `input` is in a different format from the previous buffer, the
+    /// converter that was active is flushed to `tail` first and reset, so its
+    /// held audio lands ahead of the new format's and nothing stale is left
+    /// in it for a later return to that format.
     @discardableResult
-    func convert(_ input: AVAudioPCMBuffer, _ body: (UnsafeBufferPointer<Float>) -> Void) -> Bool {
+    func convert(
+        _ input: AVAudioPCMBuffer,
+        tail: (UnsafeBufferPointer<Float>) -> Void,
+        _ body: (UnsafeBufferPointer<Float>) -> Void
+    ) -> Bool {
         lock.lock()
         defer { lock.unlock() }
-        guard input.format.sampleRate > 0, let entry = entry(for: input.format) else { return false }
+        guard input.format.sampleRate > 0 else { return false }
+        if let active = entries.last, active.format != input.format { flush(active, tail) }
+        guard let entry = entry(for: input.format) else { return false }
 
         let ratio = targetFormat.sampleRate / input.format.sampleRate
         let needed = AVAudioFrameCount(Double(input.frameLength) * ratio) + 64
@@ -79,14 +90,27 @@ final class ConverterCache: @unchecked Sendable {
         return true
     }
 
-    /// Flushes the audio the most recently used converter still holds and
-    /// passes it to `body`, possibly in several pieces. The resampler works
-    /// in blocks, so without this the last ~85 ms of a recording (the end of
-    /// the last word) never comes out. Call once the tap has stopped.
+    /// `convert` with a format change's tail passed to `body` as well.
+    @discardableResult
+    func convert(_ input: AVAudioPCMBuffer, _ body: (UnsafeBufferPointer<Float>) -> Void) -> Bool {
+        convert(input, tail: body, body)
+    }
+
+    /// Flushes the audio the active converter still holds and passes it to
+    /// `body`, possibly in several pieces. The resampler works in blocks, so
+    /// without this the last ~85 ms of a recording (the end of the last word)
+    /// never comes out. Call once the tap has stopped.
     func drain(_ body: (UnsafeBufferPointer<Float>) -> Void) {
         lock.lock()
         defer { lock.unlock() }
         guard let entry = entries.last else { return }
+        flush(entry, body)
+    }
+
+    /// Ends `entry`'s stream, passes what it still held to `body`, and resets
+    /// it so its next buffer starts clean. Caller holds the lock.
+    private func flush(_ entry: Entry, _ body: (UnsafeBufferPointer<Float>) -> Void) {
+        defer { entry.converter.reset() }
         let output = entry.output
         for _ in 0..<16 {
             output.frameLength = 0
@@ -108,6 +132,7 @@ final class ConverterCache: @unchecked Sendable {
         if let last = entries.last, last.format == format { return last }
         if let index = entries.firstIndex(where: { $0.format == format }) {
             let hit = entries.remove(at: index)
+            hit.converter.reset()
             entries.append(hit)
             return hit
         }

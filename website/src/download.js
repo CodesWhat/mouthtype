@@ -40,3 +40,5 @@ window.addEventListener("pageshow", (event) => {
   if (event.persisted && !requested) startCountdown();
 });
 startCountdown();
+
+import("./analytics.js").catch(() => {});

@@ -169,6 +169,15 @@ private final class Counter: @unchecked Sendable {
         #expect(rig.editor.captures == 0 && rig.recorder.starts == 0)
     }
 
+    @Test func aMicrophoneHeldByAnotherConsumerEndsAsBusy() async {
+        let rig = Rig()
+        rig.recorder.startError = CaptureError.busy(.dictation)
+        let flow = rig.coordinator()
+        await flow.begin()
+        #expect(flow.phase == .ended(.refused(.busy)))
+        #expect(rig.editor.replaceCalls.isEmpty)
+    }
+
     @Test func recordingFailureEndsWithAReasonAndNoWrite() async {
         let rig = Rig()
         rig.recorder.startError = CocoaError(.fileReadUnknown)

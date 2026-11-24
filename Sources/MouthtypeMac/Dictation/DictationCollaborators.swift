@@ -74,6 +74,15 @@ protocol DictationStoring: Sendable {
     func reopen(_ id: String) async throws
     func finish(_ id: String, status: DictationStatus, errorMessage: String?) async throws
     func appendEdits(_ id: String, _ edits: [EditOp]) async throws
+    /// A take from a secure field: its transcript, timings and search entry are dropped, leaving a stub row.
+    func scrubSecureTake(_ id: String) async throws
+    /// Records a secure-field take's outcome and scrubs it in one transaction.
+    func finishSecureTake(_ id: String, _ record: InsertionRecord) async throws
+}
+
+extension DictationStoring {
+    func scrubSecureTake(_ id: String) async throws {}
+    func finishSecureTake(_ id: String, _ record: InsertionRecord) async throws {}
 }
 
 protocol DictationArchiving: Sendable {
@@ -84,6 +93,8 @@ protocol DictationArchiving: Sendable {
     func appendPartial(samples: [Float], id: String) throws
     func readPartial(id: String) throws -> [Float]
     func discardPartial(id: String)
+    /// Removes the archived WAV and the in-progress copy.
+    func remove(id: String)
 }
 
 extension DictationArchiving {
@@ -91,6 +102,7 @@ extension DictationArchiving {
     func appendPartial(samples: [Float], id: String) throws {}
     func readPartial(id: String) throws -> [Float] { [] }
     func discardPartial(id: String) {}
+    func remove(id: String) {}
 }
 
 @MainActor
@@ -169,14 +181,49 @@ protocol DictationClock: Sendable {
 
 // MARK: - Real collaborators
 
+/// Which consumer holds the shared microphone, kept on the main actor so an admission check can ask before a start.
+@MainActor
+private final class CaptureClaim {
+    var lease: CaptureLease?
+}
+
+/// One consumer's handle on the shared microphone. `owned(by:)` gives another consumer its own handle on the same
+/// capture; only one of them records at a time, and each can stop or cancel only its own recording.
 @MainActor
 final class MicCapture: DictationCapturing {
     let capture: AudioCapture
-    let preparation = MicrophonePreparation()
+    let preparation: MicrophonePreparation
+    let owner: CaptureOwner
+    private let claim: CaptureClaim
+    /// True from the claim until the capture answers the start.
+    private var starting = false
     var isPrepared: Bool { preparation.isPrepared }
 
-    init(capture: AudioCapture = AudioCapture()) {
+    init(capture: AudioCapture = AudioCapture(), owner: CaptureOwner = .dictation) {
         self.capture = capture
+        self.owner = owner
+        preparation = MicrophonePreparation()
+        claim = CaptureClaim()
+    }
+
+    private init(sharing other: MicCapture, owner: CaptureOwner) {
+        capture = other.capture
+        preparation = other.preparation
+        claim = other.claim
+        self.owner = owner
+    }
+
+    /// A handle on the same microphone for another consumer.
+    func owned(by owner: CaptureOwner) -> MicCapture { MicCapture(sharing: self, owner: owner) }
+
+    /// The consumer recording now, or about to, on any handle. Nil when the microphone is free.
+    var holder: CaptureOwner? { claim.lease?.owner }
+
+    /// This handle's own lease, nil while it is not the one recording.
+    private var held: CaptureLease? { claim.lease.flatMap { $0.owner == owner ? $0 : nil } }
+
+    private func release(_ lease: CaptureLease) {
+        if claim.lease == lease { claim.lease = nil }
     }
 
     @discardableResult func prepare() async throws -> Bool {
@@ -186,20 +233,55 @@ final class MicCapture: DictationCapturing {
     func invalidatePreparation() { preparation.invalidate() }
 
     func start(keyDownAtNanos: UInt64) async throws {
-        try await preparation.start {
-            await capture.setInterruptionHandler(
-                CaptureInterruption.hop { [weak self] in
-                    self?.preparation.invalidate()
-                    self?.onInterrupted?()
-                })
-            try await capture.start(keyDownAtNanos: keyDownAtNanos)
+        // Refused before the preparation state is touched: the holder's microphone is fine.
+        if let held = claim.lease { throw CaptureError.busy(held.owner) }
+        let lease = CaptureLease(owner: owner)
+        claim.lease = lease
+        starting = true
+        defer { starting = false }
+        do {
+            try await preparation.start {
+                await capture.setInterruptionHandler(
+                    CaptureInterruption.hop { [weak self] in
+                        self?.preparation.invalidate()
+                        self?.onInterrupted?()
+                    })
+                try await capture.start(keyDownAtNanos: keyDownAtNanos, lease: lease)
+            }
+        } catch {
+            release(lease)
+            throw error
         }
     }
-    func stop() async throws -> CapturedAudio { try await capture.stop() }
-    func stopSalvaging() async throws -> CapturedAudio { try await capture.stop(salvaging: true) }
-    func partialSamples(from offset: Int) async -> [Float] { await capture.partialSamples(from: offset) }
-    func previewSnapshot(maxSamples: Int) async -> PreviewAudio { await capture.previewSnapshot(maxSamples: maxSamples) }
-    func cancel() async { await capture.cancel() }
+    func stop() async throws -> CapturedAudio { try await stop(salvaging: false) }
+    func stopSalvaging() async throws -> CapturedAudio { try await stop(salvaging: true) }
+    func partialSamples(from offset: Int) async -> [Float] {
+        guard let held else { return [] }
+        return await capture.partialSamples(from: offset, lease: held)
+    }
+    func previewSnapshot(maxSamples: Int) async -> PreviewAudio {
+        guard let held else { return PreviewAudio(samples: [], capturedSampleCount: 0) }
+        return await capture.previewSnapshot(maxSamples: maxSamples, lease: held)
+    }
+    func cancel() async {
+        guard let held else { return }
+        // A cancel that reaches the capture ahead of a start still on its way cancels nothing, and that start keeps the claim.
+        if await capture.cancel(held) || !starting { release(held) }
+    }
+
+    private func stop(salvaging: Bool) async throws -> CapturedAudio {
+        guard let held else { throw CaptureError.notRecording }
+        do {
+            let audio = try await capture.stop(held, salvaging: salvaging)
+            release(held)
+            return audio
+        } catch {
+            // The same for a stop that beats its own start to the capture.
+            if case CaptureError.notRecording = error, starting { throw error }
+            release(held)
+            throw error
+        }
+    }
 
     var onInterrupted: (@MainActor () -> Void)?
 }
@@ -272,6 +354,8 @@ struct TranscriptStoreWriter: DictationStoring {
         try store.finish(id, status: status, errorMessage: errorMessage)
     }
     func appendEdits(_ id: String, _ edits: [EditOp]) async throws { try store.appendEdits(id, edits) }
+    func scrubSecureTake(_ id: String) async throws { try store.scrubSecureTake(id) }
+    func finishSecureTake(_ id: String, _ record: InsertionRecord) async throws { try store.finishSecureTake(id, record) }
 }
 
 extension AudioArchive: DictationArchiving {

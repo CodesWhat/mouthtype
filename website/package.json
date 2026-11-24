@@ -1,6 +1,6 @@
 {
   "name": "mouthtype-website",
-  "version": "0.12.2",
+  "version": "0.12.3",
   "private": true,
   "type": "module",
   "engines": {
@@ -10,11 +10,16 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "playwright test",
-    "render:social": "node scripts/render-social-images.mjs"
+    "test": "npm run test:unit && playwright test",
+    "render:social": "node scripts/render-social-images.mjs",
+    "test:unit": "node --test unit/*.test.mjs"
   },
   "devDependencies": {
-    "@playwright/test": "1.64.1",
-    "vite": "8.3.6"
+    "@playwright/test": "1.65.1",
+    "vite": "8.3.8"
+  },
+  "dependencies": {
+    "posthog-js": "1.453.1",
+    "web-vitals": "6.2.3"
   }
 }

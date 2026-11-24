@@ -2,6 +2,7 @@ import { RootProvider } from "fumadocs-ui/provider/next";
 import type { Metadata } from "next";
 import localFont from "next/font/local";
 import type { ReactNode } from "react";
+import { AnalyticsRuntime } from "@/components/analytics-runtime";
 import { BASE_PATH, BASE_URL, SITE_CONFIG } from "@/lib/site-config";
 import "./globals.css";
 
@@ -61,6 +62,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     >
       <body>
         <RootProvider search={{ options: { type: "static", api: `${BASE_PATH}/api/search` } }}>
+          <AnalyticsRuntime />
           {children}
         </RootProvider>
       </body>

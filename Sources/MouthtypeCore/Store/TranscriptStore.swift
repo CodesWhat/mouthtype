@@ -161,6 +161,20 @@ public final class TranscriptStore: Sendable {
                     END;
                     """)
         }
+        migrator.registerMigration("v5-scrub-secure-takes") { db in
+            // Takes from secure fields keep no transcript, timings or search entry. Rows from before this can't be told
+            // apart (a stuck Secure Input marked them the same way), so every one of them is scrubbed. The audio goes with
+            // the next retention sweep, which removes the WAV of any secure row that still points at one.
+            try db.execute(
+                sql: """
+                    UPDATE dictation SET raw_text = NULL, det_text = NULL, final_text = NULL, word_timings_json = NULL,
+                        words_raw = NULL, words_final = 0, chars_final = 0
+                    WHERE is_secure = 1;
+                    DELETE FROM edit_op WHERE dictation_id IN (SELECT id FROM dictation WHERE is_secure = 1);
+                    DELETE FROM correction WHERE dictation_id IN (SELECT id FROM dictation WHERE is_secure = 1);
+                    DELETE FROM take_search WHERE rowid IN (SELECT rowid FROM dictation WHERE is_secure = 1);
+                    """)
+        }
         return migrator
     }
 
@@ -229,6 +243,10 @@ public final class TranscriptStore: Sendable {
     }
 
     public func recordInsertion(_ id: String, _ record: InsertionRecord) throws {
+        try update(id, Self.insertionColumns(record))
+    }
+
+    private static func insertionColumns(_ record: InsertionRecord) -> [(String, (any DatabaseValueConvertible)?)] {
         let cleanup = record.cleanup
         var columns: [(String, (any DatabaseValueConvertible)?)] = [
             ("status", DictationStatus.inserted),
@@ -249,7 +267,7 @@ public final class TranscriptStore: Sendable {
                 ("is_secure", target.isSecure),
             ]
         }
-        try update(id, columns)
+        return columns
     }
 
     /// Settles an insertion after the fact: what the read-back verdict was, and how long the target took to read the
@@ -341,6 +359,51 @@ public final class TranscriptStore: Sendable {
         try pool.write { db in try db.execute(sql: "DELETE FROM dictation WHERE id = ?", arguments: [id]) }
         archive?.remove(id: id)
         inputsChanged(notify: true)
+    }
+
+    /// Ends a take from a secure field in one transaction: the insertion outcome is recorded with no text and everything
+    /// the take said is dropped in the same write, so a crash can't leave a terminal row holding a transcript. The audio
+    /// pointer stays until the files are gone (`AudioRetentionMaintenance` clears it), so a failed delete is retried.
+    public func finishSecureTake(_ id: String, _ record: InsertionRecord) throws {
+        var columns = Self.insertionColumns(record)
+        columns += [("is_secure", true)]
+        try pool.write { db in
+            let assignments = columns.map { "\($0.0) = ?" }.joined(separator: ", ")
+            var arguments = StatementArguments(columns.map { $0.1 })
+            arguments += [id]
+            try db.execute(sql: "UPDATE dictation SET \(assignments) WHERE id = ?", arguments: arguments)
+            if db.changesCount == 0 { throw TranscriptStoreError.unknownDictation(id) }
+            try Self.scrub(db, id)
+        }
+        inputsChanged(notify: true)
+    }
+
+    /// Drops everything a take from a secure field said: the transcript columns, word timings, edits, offered
+    /// corrections and its search entry (the `take_search_update` trigger removes it). The row stays as a stub marked
+    /// secure, so the counts that leave secure rows out read the same. The audio pointer stays; retention removes the
+    /// files and then clears it.
+    public func scrubSecureTake(_ id: String) throws {
+        try pool.write { db in try Self.scrub(db, id) }
+        inputsChanged(notify: true)
+    }
+
+    private static func scrub(_ db: Database, _ id: String) throws {
+        try db.execute(
+            sql: """
+                UPDATE dictation SET raw_text = NULL, det_text = NULL, final_text = NULL, word_timings_json = NULL,
+                    words_raw = NULL, words_final = 0, chars_final = 0, is_secure = 1
+                WHERE id = ?
+                """, arguments: [id])
+        try db.execute(sql: "DELETE FROM edit_op WHERE dictation_id = ?", arguments: [id])
+        try db.execute(sql: "DELETE FROM correction WHERE dictation_id = ?", arguments: [id])
+    }
+
+    /// Every secure-field row with its stored audio path, if any. A scrubbed take can have no pointer yet still own a
+    /// final or partial WAV, so the sweep needs all of them.
+    public func secureTakes() throws -> [(id: String, audioPath: String?)] {
+        try pool.read { db in
+            try Row.fetchAll(db, sql: "SELECT id, audio_path FROM dictation WHERE is_secure = 1").map { ($0["id"], $0["audio_path"]) }
+        }
     }
 
     /// Every id with a row. Audio whose id is not here is never removed.
@@ -482,16 +545,18 @@ public final class TranscriptStore: Sendable {
         return TakesObservation(cancellable)
     }
 
+    /// Walks the chronological index newest first and stops at the first usable row, so the cost doesn't grow with history.
+    /// Left to itself the planner picks the status index and sorts every inserted row.
+    static let lastTranscriptSQL = """
+        SELECT final_text FROM dictation INDEXED BY dictation_started_at
+        WHERE status = ? AND final_text IS NOT NULL AND TRIM(final_text) != ''
+            AND COALESCE(is_secure, 0) = 0
+        ORDER BY started_at DESC LIMIT 1
+        """
+
     public func lastTranscript() throws -> String? {
         try pool.read { db in
-            try String.fetchOne(
-                db,
-                sql: """
-                    SELECT final_text FROM dictation
-                    WHERE status = ? AND final_text IS NOT NULL AND TRIM(final_text) != ''
-                        AND COALESCE(is_secure, 0) = 0
-                    ORDER BY started_at DESC LIMIT 1
-                    """, arguments: [DictationStatus.inserted])
+            try String.fetchOne(db, sql: Self.lastTranscriptSQL, arguments: [DictationStatus.inserted])
         }
     }
 

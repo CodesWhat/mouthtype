@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, INGESTION_ORIGIN } from "./fixtures.js";
 import {
   DAILY_WRITING_MINUTES,
   ELITE_TYPIST_WPM,
@@ -383,7 +383,7 @@ test("with motion allowed the caret blinks", async ({ page }) => {
   expect(name).toBe("wpm-blink");
 });
 
-test("stores nothing, sends nothing, and respects the CSP", async ({ page }) => {
+test("stores nothing, sends only to the analytics host, and respects the CSP", async ({ page }) => {
   const problems = [];
   const external = [];
   page.on("pageerror", (error) => problems.push(error.message));
@@ -391,8 +391,10 @@ test("stores nothing, sends nothing, and respects the CSP", async ({ page }) => 
     if (message.type() === "error") problems.push(message.text());
   });
   page.on("request", (request) => {
-    if (!request.url().startsWith("http://127.0.0.1:4177")) external.push(request.url());
-    if (request.method() !== "GET") external.push(`${request.method()} ${request.url()}`);
+    const url = request.url();
+    if (url.startsWith(INGESTION_ORIGIN)) return;
+    if (!url.startsWith("http://127.0.0.1:4177")) external.push(url);
+    if (request.method() !== "GET") external.push(`${request.method()} ${url}`);
   });
   const target = await open(page);
   await typeIn(page, target, target.length * 200);

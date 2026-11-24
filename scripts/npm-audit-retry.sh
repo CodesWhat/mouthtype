@@ -2,6 +2,9 @@
 # Run `npm audit` and retry only when the registry or network fails.
 # A real audit report with findings at or above the level fails immediately.
 #
+# Findings can be waived by an unexpired entry in scripts/npm-audit-waivers.json
+# (see scripts/npm-audit-waivers.mjs); an entry is void once a fix is published.
+#
 # usage: scripts/npm-audit-retry.sh [npm audit args...]
 # env:   AUDIT_ATTEMPTS (default 3), AUDIT_TIMEOUT seconds per attempt (default 60),
 #        AUDIT_BACKOFF initial seconds before a retry, doubles each time (default 10)
@@ -11,6 +14,7 @@ attempts="${AUDIT_ATTEMPTS:-3}"
 attempt_timeout="${AUDIT_TIMEOUT:-60}"
 backoff="${AUDIT_BACKOFF:-10}"
 
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 out="$(mktemp)"
 err="$(mktemp)"
 trap 'rm -f "$out" "$err"' EXIT
@@ -48,6 +52,10 @@ for ((i = 1; i <= attempts; i++)); do
   fi
 
   if [[ $status -ne 124 && $status -ne 137 && "$(classify "$out")" == "report" ]]; then
+    if node "$script_dir/npm-audit-waivers.mjs" "$out" "$script_dir/npm-audit-waivers.json" "$@"; then
+      echo "npm audit clean after waivers"
+      exit 0
+    fi
     echo "::error::npm audit found vulnerabilities"
     summarize "$out"
     exit 1

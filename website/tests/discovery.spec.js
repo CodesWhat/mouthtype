@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./fixtures.js";
 
 const paths = ["/", "/download/", "/start/", "/why-mouthtype/", "/compare/", "/compare/apple-dictation/", "/compare/wispr-flow/", "/linux/"];
 

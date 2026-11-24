@@ -159,6 +159,136 @@ private let paragraph =
                 == .refused(.modelDeclined))
     }
 
+    @Test func anEditThatIntroducesAnApologyRegretOrInabilityIsNotADecline() {
+        #expect(
+            judge("I'm sorry, but we can't make the meeting.", selection: "We can't make the meeting.", instruction: "make this more apologetic")
+                == .accepted("I'm sorry, but we can't make the meeting."))
+        #expect(
+            judge("Sorry, we won't be there on Tuesday.", selection: "We won't be there on Tuesday.", instruction: "soften it")
+                == .accepted("Sorry, we won't be there on Tuesday."))
+        #expect(
+            judge("I am sorry for the delay in replying.", selection: "This reply is late.", instruction: "apologize for it")
+                == .accepted("I am sorry for the delay in replying."))
+        #expect(
+            judge("Unfortunately, the launch slipped to March.", selection: "The launch slipped to March.", instruction: "sound more regretful")
+                == .accepted("Unfortunately, the launch slipped to March."))
+        #expect(
+            judge("I regret to say the launch slipped to March.", selection: "The launch slipped to March.", instruction: "sound more regretful")
+                == .accepted("I regret to say the launch slipped to March."))
+        #expect(
+            judge("Regrettably, the order was lost.", selection: "The order was lost.", instruction: "more formal")
+                == .accepted("Regrettably, the order was lost."))
+        #expect(
+            judge("I can't attend on Friday.", selection: "Friday doesn't work for me.", instruction: "say it plainly")
+                == .accepted("I can't attend on Friday."))
+        #expect(
+            judge("I'm unable to join the call tomorrow.", selection: "Tomorrow's call is a no for me.", instruction: "more formal")
+                == .accepted("I'm unable to join the call tomorrow."))
+        #expect(
+            judge("I won\u{2019}t change the plan again.", selection: "The plan stays as it is.", instruction: "first person")
+                == .accepted("I won\u{2019}t change the plan again."))
+    }
+
+    @Test func aRefusalToPerformTheEditIsADeclineHoweverItOpens() {
+        let selection = "We can't make the meeting."
+        let instruction = "make this more apologetic"
+        let refusals = [
+            "I cannot rewrite this.", "I can't edit that.", "I won't rephrase the text.", "I'm unable to change this.",
+            "I\u{2019}m sorry, but I can\u{2019}t rewrite that.", "Unfortunately, I am not able to modify the selection.",
+            "I can't help with that.", "I'm unable to assist.", "Sorry, can't help with that.", "I cannot comply.",
+            "As an AI, I don't edit that.", "I'm a language model and only edit text.",
+        ]
+        for refusal in refusals {
+            #expect(judge(refusal, selection: selection, instruction: instruction) == .refused(.modelDeclined), "\(refusal)")
+        }
+        #expect(
+            judge("We can't make the meeting. UNSUPPORTED_EDIT_REQUEST", selection: selection, instruction: instruction)
+                == .refused(.modelDeclined))
+    }
+
+    @Test func aRefusalThatNamesNoEditVerbIsADecline() {
+        let refusals = [
+            "I can't provide that.", "I can't answer that.", "I can't write that.", "I can't rewrite your text.",
+            "Sorry, I'm unable to process your request.", "Sorry, I can\u{2018}t rewrite this.", "Sorry, I can\u{02BC}t rewrite this.",
+            "Sorry, I can\u{FF07}t rewrite this.", "I cannot generate the following text.",
+        ]
+        for refusal in refusals {
+            #expect(judge(refusal, selection: "Please handle the request.", instruction: "make it friendlier") == .refused(.modelDeclined), "\(refusal)")
+        }
+    }
+
+    @Test func anOpeningApologyOrRefusalThatDropsTheSelectionIsADecline() {
+        let unrelated = [
+            "I'm sorry, that's outside what's possible here.", "Unfortunately, no.", "I can't go along with it.",
+            "I'm afraid that isn't possible.", "My apologies, nothing to offer here.",
+        ]
+        for output in unrelated {
+            #expect(judge(output) == .refused(.modelDeclined), "\(output)")
+        }
+        // One content word is too little to measure, so the opening alone doesn't decline.
+        #expect(judge("Sorry, no.", selection: "Nope.", instruction: "make it polite") == .accepted("Sorry, no."))
+    }
+
+    @Test func aMarkerTheSelectionAlreadyHasIsNotIntroduced() {
+        #expect(
+            judge("I'm unable to assist.", selection: "I'm unable to assist with that request.", instruction: "shorten this")
+                == .accepted("I'm unable to assist."))
+        #expect(
+            judge("As an AI, I don't have personal opinions.", selection: "She works as an airline pilot.", instruction: "rephrase it")
+                == .refused(.modelDeclined))
+    }
+
+    @Test func ordinarySentencesAboutHelpingAreNotRefusals() {
+        #expect(
+            judge("We can't help with this issue.", selection: "We have no fix for this issue yet.", instruction: "say it plainly")
+                == .accepted("We can't help with this issue."))
+        #expect(
+            judge(
+                "I'm sorry, I can't help with that this week.", selection: "Decline Sam's request to help with the launch this week.",
+                instruction: "write the reply") == .accepted("I'm sorry, I can't help with that this week."))
+    }
+
+    @Test func anImpossibilityRefusalIsADeclineUnlessTheSelectionSaysItToo() {
+        let selection = "Please handle the request."
+        for refusal in ["I'm sorry, that request isn't possible.", "Sorry, your request is not something I can help with.", "I'm not able to do that."] {
+            #expect(judge(refusal, selection: selection) == .refused(.modelDeclined), "\(refusal)")
+        }
+        #expect(
+            judge("I'm sorry, that request isn't possible.", selection: "Tell them that isn't possible.", instruction: "write the reply")
+                == .accepted("I'm sorry, that request isn't possible."))
+        #expect(
+            judge("It isn't possible to meet on Friday.", selection: "Friday is out for the meeting.", instruction: "rephrase it")
+                == .accepted("It isn't possible to meet on Friday."))
+    }
+
+    @Test func inflectedWordsCountAsKeptAndSynonymsDoNot() {
+        #expect(
+            judge("Sorry, we canceled the meeting.", selection: "Meeting cancel notice.", instruction: "make it a sentence")
+                == .accepted("Sorry, we canceled the meeting."))
+        // Known limit: an apologetic rewrite that swaps every content word for a synonym keeps nothing the guard can
+        // see, so it's declined like a refusal.
+        #expect(
+            judge("Unfortunately, the appointment is off.", selection: "Meeting canceled.", instruction: "make this more apologetic")
+                == .refused(.modelDeclined))
+    }
+
+    @Test func anApologyInAnotherLanguageOpensWithNoFamily() {
+        #expect(
+            judge("Lo siento, gracias por la actualización.", selection: "Thanks for the update.")
+                == .accepted("Lo siento, gracias por la actualización."))
+    }
+
+    @Test func thousandsOfBlankLinesAreJudgedQuickly() {
+        let blank = String(repeating: "\n", count: 20_000)
+        let selection = "We can't make the meeting.\(blank)See you next week."
+        let output = "Sorry, we can't make the meeting.\(blank)See you next week."
+        var verdict = VoiceEditVerdict.refused(.emptyOutput)
+        let elapsed = ContinuousClock().measure { verdict = judge(output, selection: selection, instruction: "make this more apologetic") }
+        // Past the editor's size cap, which is checked after the decline rules have run over the whole text.
+        #expect(verdict == .refused(.tooLong))
+        #expect(elapsed < .milliseconds(500), "judged in \(elapsed)")
+    }
+
     @Test func chatterAndPreambleAreRefused() {
         #expect(judge("Here is the rewritten text:\nWe had a good chat.") == .refused(.chatter))
         #expect(judge("Here's a friendlier version: We chatted.") == .refused(.chatter))

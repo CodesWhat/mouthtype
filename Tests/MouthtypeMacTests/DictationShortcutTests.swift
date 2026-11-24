@@ -80,6 +80,63 @@ import Testing
         }
         #expect(events == [.pressed, .discarded(.tooShort), .pressed, .locked(.doubleTap), .cancelled(.escape)])
     }
+
+    /// Double-taps the shortcut into a lock, runs `interlude` with every key up, then presses the shortcut once more.
+    func eventsAfterLock(_ shortcut: DictationShortcut, interlude: [TapSample]) -> [GestureEvent] {
+        let mods = shortcut.modifiers
+        let tap: [TapSample] =
+            shortcut.isModifier
+            ? [sample(.flagsChanged, shortcut.keyCode, shortcut.requiredFlags), sample(.flagsChanged, shortcut.keyCode)]
+            : [
+                sample(.flagsChanged, 59, mods), sample(.keyDown, shortcut.keyCode, mods),
+                sample(.keyUp, shortcut.keyCode, mods), sample(.flagsChanged, 59),
+            ]
+        var mapper = HotkeyInputMapper(source: .shortcut(shortcut))
+        var engine = GestureEngine()
+        var events: [GestureEvent] = []
+        var time = 0.0
+        for s in tap + tap + interlude + tap {
+            time += 0.05
+            if let mapped = mapper.map(s, otherKeysHeld: { false }),
+                let event = engine.process(mapped.keyEvent, now: Date(timeIntervalSinceReferenceDate: time))
+            {
+                events.append(event)
+            }
+            mapper.lockedRecording = engine.isLocked
+        }
+        return events
+    }
+
+    @Test func aKeyTypedDuringALockedRecordingDoesNotBlockTheShortcutFromStoppingIt() {
+        let shortcuts = [
+            DictationShortcut(keyCode: 61, keyName: "Right Option"),
+            DictationShortcut(keyCode: 40, modifiers: Self.control, keyName: "K"),
+        ]
+        let interludes: [[TapSample]] = [
+            [sample(.keyDown, 0), sample(.keyUp, 0)],
+            [sample(.keyDown, 123), sample(.keyUp, 123)],
+            [
+                sample(.flagsChanged, 55, Self.command), sample(.keyDown, 48, Self.command),
+                sample(.keyUp, 48, Self.command), sample(.flagsChanged, 55),
+            ],
+        ]
+        for shortcut in shortcuts {
+            for interlude in interludes {
+                let events = eventsAfterLock(shortcut, interlude: interlude)
+                #expect(
+                    events == [.pressed, .discarded(.tooShort), .pressed, .locked(.doubleTap), .released],
+                    "\(shortcut.keyName) after key \(interlude.first { $0.kind == .keyDown }?.keyCode ?? 0)")
+            }
+        }
+    }
+
+    @Test func aShortcutMapperPassesOnlyEscapeWhileLockedWithTheShortcutUp() {
+        var mapper = HotkeyInputMapper(source: .shortcut(DictationShortcut(keyCode: 61, keyName: "Right Option")))
+        mapper.lockedRecording = true
+        #expect(mapper.map(sample(.keyDown, 0), otherKeysHeld: { false }) == nil)
+        #expect(mapper.map(sample(.keyDown, 123), otherKeysHeld: { false }) == nil)
+        #expect(mapper.map(sample(.keyDown, 53), otherKeysHeld: { false })?.keyEvent.key == .escape)
+    }
 }
 
 @MainActor @Suite struct DictationShortcutSettingsTests {
