@@ -28,7 +28,7 @@ jobs:
     steps:
       # Pull requests run the real job only when a path from the push filter changed; pushes always do.
       - id: gate
-        uses: CodesWhat/.github/actions/changes-gate@f763dd4e8fea25a36892f4689f9f667adbbe197b
+        uses: CodesWhat/.github/actions/changes-gate@b85ebce168f649bcd2fddf2ff0d433fb38e30866
         with:
           patterns: |
             website/**

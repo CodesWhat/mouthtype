@@ -27,7 +27,7 @@ jobs:
       # Tests read design/, packaging/ and scripts/ from the checkout, so those count. Pushes and manual runs always run.
       # Matching is case-insensitive, like the macOS checkout.
       - id: gate
-        uses: CodesWhat/.github/actions/changes-gate@f763dd4e8fea25a36892f4689f9f667adbbe197b
+        uses: CodesWhat/.github/actions/changes-gate@b85ebce168f649bcd2fddf2ff0d433fb38e30866
         with:
           patterns: |
             Sources/**
