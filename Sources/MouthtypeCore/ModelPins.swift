@@ -221,15 +221,30 @@ enum WhisperTokenizerFetch {
         variant: String,
         pins: [String: ModelPins.TokenizerPin] = ModelPins.whisperTokenizers,
         root: URL = defaultRoot,
+        legacyFolders: [URL]? = nil,
         fetch: FetchFile = download
     ) async throws -> URL {
         guard let pin = pins[variant] else {
             throw WhisperError.tokenizerUnavailable("No pinned tokenizer for Whisper variant \(variant)")
         }
-        return try await prepare(pin: pin, root: root, fetch: fetch)
+        return try await prepare(pin: pin, root: root, legacyFolders: legacyFolders ?? self.legacyFolders(repo: pin.repo, variant: variant), fetch: fetch)
     }
 
-    static func prepare(pin: ModelPins.TokenizerPin, root: URL, fetch: FetchFile) async throws -> URL {
+    /// Where releases before the pinned folder left tokenizer files. WhisperKit 1.1.1 searches the Hub cache for the tokenizer
+    /// repo (`<Documents>/huggingface/models/<repo>`, where it also downloads to), then the model folder itself, then a Hub
+    /// layout nested under the model folder. A user who upgrades offline has files there but none in the pinned folder.
+    static func legacyFolders(repo: String, variant: String) -> [URL] {
+        let huggingface = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("huggingface", isDirectory: true)
+        let modelFolder = huggingface.appendingPathComponent("models/\(ModelPins.whisperKit.repo)/openai_whisper-\(variant)", isDirectory: true)
+        return [
+            huggingface.appendingPathComponent("models/\(repo)", isDirectory: true),
+            modelFolder,
+            modelFolder.appendingPathComponent("models/\(repo)", isDirectory: true),
+        ]
+    }
+
+    static func prepare(pin: ModelPins.TokenizerPin, root: URL, legacyFolders: [URL] = [], fetch: FetchFile) async throws -> URL {
         guard HubDownloader.isCommitHash(pin.revision), !pin.files.isEmpty else {
             throw WhisperError.tokenizerUnavailable("Tokenizer pin for \(pin.repo) is not an exact commit")
         }
@@ -248,9 +263,19 @@ enum WhisperTokenizerFetch {
         for (name, digest) in pin.files.sorted(by: { $0.key < $1.key }) {
             let url = folder.appendingPathComponent(name)
             if let cached = try? Data(contentsOf: url), sha256Hex(cached) == digest { continue }
-            let data = try await fetch(pin.repo, pin.revision, name)
-            guard sha256Hex(data) == digest else {
-                throw WhisperError.tokenizerUnavailable("\(pin.repo)@\(pin.revision)/\(name) doesn't match its pinned SHA-256")
+            // A file an earlier release cached counts only when it matches the pinned digest, and is copied in, never moved:
+            // WhisperKit may still read the original. One that doesn't match is ignored, so the fetch below replaces it.
+            let legacy = legacyFolders.lazy
+                .compactMap { try? Data(contentsOf: $0.appendingPathComponent(name)) }
+                .first { sha256Hex($0) == digest }
+            let data: Data
+            if let legacy {
+                data = legacy
+            } else {
+                data = try await fetch(pin.repo, pin.revision, name)
+                guard sha256Hex(data) == digest else {
+                    throw WhisperError.tokenizerUnavailable("\(pin.repo)@\(pin.revision)/\(name) doesn't match its pinned SHA-256")
+                }
             }
             let staged = staging.appendingPathComponent(name)
             try data.write(to: staged)
