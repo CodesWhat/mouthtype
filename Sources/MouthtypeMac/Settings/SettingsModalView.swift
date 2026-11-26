@@ -92,7 +92,7 @@ struct SettingsModalView: View {
             }
             .padding(.horizontal, 24).padding(.top, 22).padding(.bottom, 20)
             .frame(maxWidth: .infinity, alignment: .leading)
-        }.environment(\.settingsFormScrolls, false)
+        }
     }
 
     private var host: SettingsView { SettingsView(model: model, actions: actions) }
