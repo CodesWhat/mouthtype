@@ -389,8 +389,16 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         let activity = storeOpenActivity
         storeOpenInFlight = true
         Task {
-            let outcome = await withCheckedContinuation { (done: CheckedContinuation<StoreOpenOutcome, Never>) in
+            var outcome = await withCheckedContinuation { (done: CheckedContinuation<StoreOpenOutcome, Never>) in
                 DispatchQueue.global(qos: .userInitiated).async { done.resume(returning: open(activity)) }
+            }
+            // The deadline committed a quit, the open skipped its quarantine for it, and the quit was then cancelled
+            // (Keep Editing). That open is spent; run it again so the damaged file is still set aside.
+            while !isTerminating, activity.state != .quitCommitted, activity.takeSkippedForQuit() {
+                Log.app.info("quit was withdrawn after the open skipped its quarantine; opening history again")
+                outcome = await withCheckedContinuation { (done: CheckedContinuation<StoreOpenOutcome, Never>) in
+                    DispatchQueue.global(qos: .userInitiated).async { done.resume(returning: open(activity)) }
+                }
             }
             storeOpenInFlight = false
             // A quit that outwaited the open has already been answered; building the app now would start the engine and

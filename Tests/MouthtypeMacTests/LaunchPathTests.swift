@@ -290,6 +290,48 @@ import os
         #expect(box.replies == [true])
     }
 
+    @Test func aQuitWithdrawnAfterTheOpenSkippedItsQuarantineRunsTheOpenAgain() async {
+        let held = HeldStoreOpen(outcome: StoreOpenOutcome(failure: "skipped"), patience: .seconds(20))
+        defer { held.release() }
+        let seen = OSAllocatedUnfairLock<[StoreOpenActivity]>(initialState: [])
+        let delegate = AppDelegate()
+        let opens = OSAllocatedUnfairLock(initialState: 0)
+        delegate.openStore = { activity in
+            seen.withLock { $0.append(activity) }
+            if opens.withLock({
+                $0 += 1; return $0
+            }) > 1 {
+                return StoreOpenOutcome(quarantinedTo: URL(fileURLWithPath: "/tmp/moved"))
+            }
+            return held.open(activity)
+        }
+        delegate.storeQuitDeadline = .milliseconds(30)
+        // The quit is committed when the app asks the updater whether it may go ahead; that is the moment the stuck open
+        // reaches its quarantine step, so it is refused. The updater then says no, which cancels the quit.
+        delegate.appUpdater = AppUpdater(
+            driver: nil,
+            activity: {
+                if let activity = seen.withLock({ $0.first }), activity.state == .quitCommitted {
+                    #expect(!activity.beginQuarantine())
+                    held.release()
+                }
+                return .recovering
+            })
+        delegate.appUpdater.updateWillRelaunch()
+        let box = ReplyBox()
+        delegate.replyToTermination = { _, ready in box.replies.append(ready) }
+        var finished: [StoreOpenOutcome] = []
+        delegate.openStoreOffMain { finished.append($0) }
+        #expect(delegate.applicationShouldTerminate(NSApplication.shared) == .terminateLater)
+        await replies(1, in: box)
+        #expect(box.replies == [false])
+        for _ in 0..<400 where finished.isEmpty { try? await Task.sleep(for: .milliseconds(5)) }
+        #expect(opens.withLock { $0 } == 2)
+        #expect(finished.count == 1)
+        #expect(finished.first?.quarantinedTo != nil)
+        #expect(!delegate.storeOpenInFlight)
+    }
+
     @Test func aQuitCancelledDuringAnUpdateInstallUnblocksNewWork() {
         let delegate = AppDelegate()
         var activity = UpdateActivity.recovering

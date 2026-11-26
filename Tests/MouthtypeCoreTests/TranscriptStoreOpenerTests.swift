@@ -131,6 +131,20 @@ import Testing
         #expect(second.state == .quarantining)
     }
 
+    @Test func aQuarantineRefusedForACommittedQuitIsReportedOnceSoTheOpenCanRunAgain() {
+        let activity = StoreOpenActivity()
+        #expect(!activity.takeSkippedForQuit())
+        #expect(activity.commitQuit())
+        #expect(!activity.beginQuarantine())
+        activity.withdrawQuit()
+        #expect(activity.takeSkippedForQuit())
+        #expect(!activity.takeSkippedForQuit())
+        // A refusal for any other reason isn't a skipped quit.
+        #expect(activity.beginQuarantine())
+        #expect(!activity.beginQuarantine())
+        #expect(!activity.takeSkippedForQuit())
+    }
+
     @Test func theActivityFlagClearsWhenTheQuarantineFails() throws {
         let dir = try Self.makeDir()
         defer { try? FileManager.default.removeItem(at: dir) }
