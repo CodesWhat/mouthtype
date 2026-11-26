@@ -2,8 +2,8 @@
 """Require a full-suite receipt line in a promotion PR body.
 
 Hosted CI skips suites that need a free desktop, so the full `swift test` run happens locally once per promotion into main.
-The PR body records it as: `Full suite receipt: <commit sha> <N> tests, 0 failures`. The commit must be the PR head or one of
-its ancestors, N must be positive and failures must be zero.
+The PR body records it as: `Full suite receipt: <commit sha> <N> tests, 0 failures`. The commit must be the PR head or an
+ancestor with only documentation changes (*.md files, docs/) between it and the head, N must be positive and failures must be zero.
 """
 import argparse
 import os
@@ -30,6 +30,13 @@ def check(body, head, root):
                               capture_output=True, text=True)
     if ancestor.returncode:
         raise RuntimeError(f'Full suite receipt commit {sha} is not the PR head or one of its ancestors')
+    changed = subprocess.run(['git', 'diff', '--name-only', sha.lower(), head], cwd=root,
+                             capture_output=True, text=True)
+    if changed.returncode:
+        raise RuntimeError(f'Could not diff full suite receipt commit {sha} against the PR head')
+    code = [path for path in changed.stdout.splitlines() if not (path.endswith('.md') or path.startswith('docs/'))]
+    if code:
+        raise RuntimeError(f'Full suite receipt commit {sha} predates non-documentation changes: {", ".join(code[:5])}')
     return sha.lower()
 
 
