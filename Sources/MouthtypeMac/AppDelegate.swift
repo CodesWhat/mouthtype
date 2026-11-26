@@ -752,20 +752,18 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// How often the retention policy is re-applied while the app keeps running. A menu bar app can stay up for weeks, so
-    /// a launch-only sweep would let the archive grow past its age and size limits.
-    static let audioPurgeInterval: Duration = .seconds(6 * 60 * 60)
     private var audioPurgeLoop: Task<Void, Never>?
 
+    /// A menu bar app can stay up for weeks, so a launch-only sweep would let the archive grow past its age and size limits.
     private func purgeAudio(archive: AudioArchive, store: TranscriptStore?) {
         guard let store else { return }
         audioPurgeLoop?.cancel()
         audioPurgeLoop = Task { [weak self] in
-            while !Task.isCancelled {
-                try? await Task.sleep(for: Self.audioPurgeInterval)
-                guard !Task.isCancelled, let self, !self.isTerminating, self.dictation?.phase == .idle else { continue }
-                self.runAudioPurge(archive: archive, store: store)
-            }
+            await AudioPurgeLoop.run(
+                shouldStop: { @MainActor in self?.isTerminating ?? true },
+                isIdle: { @MainActor in self?.dictation?.phase == .idle },
+                purge: { @MainActor in self?.runAudioPurge(archive: archive, store: store) }
+            )
         }
         runAudioPurge(archive: archive, store: store)
     }
