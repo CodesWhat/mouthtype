@@ -28,8 +28,4 @@ enum CodingTargets {
         guard let host = host.flatMap(AppCleanupStyles.normalizedDomain), WebsiteContext.supports(bundleID: bundleID) else { return false }
         return websiteHosts.contains(host) || websiteHosts.contains { host.hasSuffix("." + $0) }
     }
-
-    static func isCodingTarget(bundleID: String?, websiteHost: String? = nil) -> Bool {
-        isCodingApp(bundleID: bundleID) || isCodingWebsite(host: websiteHost, bundleID: bundleID)
-    }
 }

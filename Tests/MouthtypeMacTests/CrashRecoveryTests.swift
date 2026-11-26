@@ -172,7 +172,7 @@ private struct Rig {
         defer { rig.cleanUp() }
         let id = try rig.seed(ago: 10)
         _ = await rig.recovery.offerIfNeeded()
-        let recording = try #require(try rig.recovery.savedRecordings().first { $0.id == id })
+        let recording = try #require(try await rig.recovery.loadSavedRecordings().first { $0.id == id })
         var requests: [Int: CheckedContinuation<[RecoverableDictation], Error>] = [:]
         var calls = 0
         defer { requests.values.forEach { $0.resume(returning: []) } }
@@ -290,7 +290,7 @@ private struct Rig {
 
         #expect(scan?.newest == nil && rig.recovery.offered == nil)
         #expect(rig.cards.presented.isEmpty && rig.engine.calls == 0)
-        let saved = try #require(try rig.recovery.savedRecordings().first { $0.id == stale })
+        let saved = try #require(try await rig.recovery.loadSavedRecordings().first { $0.id == stale })
         rig.recovery.offerSaved(saved)
         #expect(rig.recovery.offered?.id == stale)
         #expect(rig.cards.presented.last?.kind == .recoverOffer)
