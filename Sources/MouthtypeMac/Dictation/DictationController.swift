@@ -100,6 +100,8 @@ final class DictationController {
     @ObservationIgnored private var processing: Task<Void, Never>?
     @ObservationIgnored private var pendingJobs = 0
     /// Every queued or running job, so Esc during processing can stop them.
+    /// A cancel that arrived after the phase flipped to processing but before the take's job was queued.
+    @ObservationIgnored private var pendingCancel = false
     @ObservationIgnored private var jobTasks: [Int: Task<Void, Never>] = [:]
     @ObservationIgnored private var jobSerial = 0
     /// Fired when takes start or stop waiting on the engine, so the key tap can listen for Esc past the release.
@@ -184,7 +186,7 @@ final class DictationController {
                 self.pill.showCardMessage(message)
             } else if self.pill.cardHeld, self.phase == .processing, self.pendingJobs > (self.deliveringOwnCard ? 1 : 0) {
                 // The card's line goes, but a job is still working: the pill goes back to showing that.
-                self.pill.showProcessing()
+                self.pill.showProcessing(cancellable: true)
             } else {
                 self.pill.hideCardMessage()
             }
@@ -337,6 +339,7 @@ final class DictationController {
             cleanupStyle: cleanupStyle, cleanupLevel: cleanupLevel, cleanupInstructions: cleanupInstructions,
             languageRequest: languageRequest
         )
+        pendingCancel = false
         phase = .recording
         captureStarting = true
         recordingLive = false
@@ -637,6 +640,10 @@ final class DictationController {
         }
         jobTasks[id] = task
         processing = task
+        if pendingCancel {
+            pendingCancel = false
+            task.cancel()
+        }
     }
 
     private func reportProcessing() {
@@ -659,6 +666,8 @@ final class DictationController {
     /// archive. A take the engine is already transcribing finishes there, but its text is dropped.
     func cancelProcessing() {
         guard phase == .processing else { return }
+        // The capture is still stopping and the job isn't queued yet: the job is cancelled as it is queued.
+        if jobTasks.isEmpty { pendingCancel = true }
         for task in jobTasks.values { task.cancel() }
     }
 
@@ -691,7 +700,7 @@ final class DictationController {
 
     /// The processing pill, unless a newer recording has the pill.
     private func showProcessing() {
-        if phase != .recording { pill.showProcessing() }
+        if phase != .recording { pill.showProcessing(cancellable: true) }
     }
 
     /// A job ending without a card of its own must not take down an earlier card's "Your text is safe", which stays until
@@ -1082,6 +1091,7 @@ final class DictationController {
     /// A queued job ended, whatever the outcome. A recording started meanwhile keeps the phase.
     private func jobFinished() {
         pendingJobs -= 1
+        if pendingJobs == 0 { pendingCancel = false }
         reportProcessing()
         if phase != .recording { phase = pendingJobs > 0 ? .processing : .idle }
         presentDeferredVerdict()

@@ -74,7 +74,7 @@ final class CrashRecovery {
         var session = DictationSession(id: item.id, startedAt: item.startedAt, keyDownAt: clock.nowNanos(), rowOpen: rowOpen(for: item))
         // The take is read in the language it was recorded in, not whatever the setting says today.
         session.languageRequest = item.language.flatMap { DictationLanguage(code: $0) }.map { .explicit($0) }
-        pill.showProcessing()
+        pill.showProcessing(cancellable: false)
         do {
             let url = item.audioURL
             let samples = try await Task.detached { try AudioArchive.read(contentsOf: url) }.value

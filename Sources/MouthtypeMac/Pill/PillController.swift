@@ -55,6 +55,7 @@ public final class PillController {
     private var link: CADisplayLink?
     private var lastTimestamp: CFTimeInterval?
     private var processingStart: CFTimeInterval = 0
+    private var processingCancellable = false
     /// When the current recording began; nil outside a recording and its notices.
     private var recordingStart: CFTimeInterval?
     private var messageStart: CFTimeInterval = 0
@@ -219,12 +220,14 @@ public final class PillController {
 
     static let processingHelp = "Click to cancel this take"
 
-    public func showProcessing() {
+    /// Only a cancellable take (one the dictation controller can actually stop) gets the click target and tooltip.
+    public func showProcessing(cancellable: Bool = false) {
         enter(.processing)
+        processingCancellable = cancellable
         recordingStart = nil
         skin.beginProcessing()
         processingStart = CACurrentMediaTime()
-        host.toolTip = Self.processingHelp
+        host.toolTip = cancellable ? Self.processingHelp : nil
         startLink()
         updateInteractivity(pointer: NSEvent.mouseLocation)
     }
@@ -569,6 +572,7 @@ public final class PillController {
     /// The control under `point`: cancel or stop on a locked pill, the whole pill while a take is processing.
     private func control(at point: CGPoint) -> PillControl? {
         if state == .processing {
+            guard processingCancellable else { return nil }
             return PillHit.target(for: skin.bodyFrame).contains(point) ? .pill : nil
         }
         return PillHit.control(at: point, frames: skin.controlFrames)

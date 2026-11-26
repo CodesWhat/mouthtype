@@ -339,9 +339,13 @@ private final class FakePill: DictationPill {
         notices.append(text)
         log.add("pill.notice:\(text)")
     }
-    func showProcessing() {
+    var onShowProcessing: (@MainActor () -> Void)?
+    var processingCancellable: [Bool] = []
+    func showProcessing(cancellable: Bool) {
         cardMessage = nil
+        processingCancellable.append(cancellable)
         log.add("pill.processing")
+        onShowProcessing?()
     }
     func showMessage(_ message: PillMessage, duration: TimeInterval) {
         cardMessage = nil
@@ -2017,6 +2021,37 @@ private final class FakeCorrections: CorrectionObserving {
         await rig.controller.waitForProcessing()
         #expect(rig.inserter.delivered.isEmpty)
         #expect(rig.store.finishes.map(\.0) == [.cancelled])
+    }
+
+    @Test func cancellingDuringTheStopWindowBeforeTheJobIsQueuedEndsTheTakeAsCancelled() async {
+        let rig = Rig()
+        // The pill is shown after the phase flips and before the job is queued: a click right then finds no job yet.
+        rig.pill.onShowProcessing = { [controller = rig.controller] in
+            rig.pill.onShowProcessing = nil
+            controller.handle(control: .pill)
+        }
+        await rig.controller.handle(.pressed(at: keyDown))
+        await rig.controller.handle(.released(at: keyUp))
+        await rig.controller.waitForProcessing()
+        #expect(rig.inserter.delivered.isEmpty)
+        #expect(rig.store.finishes.map(\.0) == [.cancelled])
+        #expect(rig.controller.phase == .idle)
+        #expect(rig.pill.processingCancellable.first == true)
+    }
+
+    @Test func aCancelClickedDuringTheStopWindowDoesNotCancelTheNextTake() async {
+        let rig = Rig()
+        rig.pill.onShowProcessing = { [controller = rig.controller] in
+            rig.pill.onShowProcessing = nil
+            controller.handle(control: .pill)
+        }
+        await rig.controller.handle(.pressed(at: keyDown))
+        await rig.controller.handle(.released(at: keyUp))
+        await rig.controller.waitForProcessing()
+        await rig.controller.handle(.pressed(at: keyDown + 10))
+        await rig.controller.handle(.released(at: keyUp + 10))
+        await rig.controller.waitForProcessing()
+        #expect(rig.inserter.delivered.count == 1)
     }
 
     @Test func cancellingProcessingWhileIdleDoesNothing() async {

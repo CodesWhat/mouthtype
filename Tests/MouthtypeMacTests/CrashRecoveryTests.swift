@@ -49,7 +49,7 @@ private final class StubPill: DictationPill {
     func showRecording() {}
     func showHandsFree() {}
     func showHandsFreeNotice(_ text: String, duration: TimeInterval) {}
-    func showProcessing() {}
+    func showProcessing(cancellable: Bool) {}
     func showMessage(_ message: PillMessage, duration: TimeInterval) { messages.append(message) }
     func hide() {}
 }
