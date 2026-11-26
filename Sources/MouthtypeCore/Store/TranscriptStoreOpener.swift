@@ -40,6 +40,7 @@ public final class StoreOpenActivity: Sendable {
     }
 
     private let current = Mutex(State.opening)
+    private let skipped = Mutex(false)
 
     public init() {}
 
@@ -48,9 +49,18 @@ public final class StoreOpenActivity: Sendable {
     /// The opener asks before moving any file. False means the app has committed to quitting and nothing may be moved.
     public func beginQuarantine() -> Bool {
         current.withLock {
+            if $0 == .quitCommitted { skipped.withLock { flag in flag = true } }
             guard $0 == .opening else { return false }
             $0 = .quarantining
             return true
+        }
+    }
+
+    /// True once if a quarantine was refused because the quit had committed. If that quit was then cancelled, the open
+    /// came back without its quarantine and has to run again.
+    public func takeSkippedForQuit() -> Bool {
+        skipped.withLock {
+            let was = $0; $0 = false; return was
         }
     }
 
