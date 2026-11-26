@@ -16,6 +16,23 @@ final class CoreAudioQuietOutput: QuietOutputAccess {
         return QuietOutput(id: id, uid: uid)
     }
 
+    func output(forUID uid: String) throws -> QuietOutput? {
+        var id = AudioDeviceID(kAudioObjectUnknown)
+        var size = UInt32(MemoryLayout<AudioDeviceID>.size)
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyTranslateUIDToDevice,
+            mScope: kAudioObjectPropertyScopeGlobal, mElement: kAudioObjectPropertyElementMain)
+        var qualifier: CFString = uid as CFString
+        try withUnsafeMutablePointer(to: &qualifier) { pointer in
+            try check(
+                AudioObjectGetPropertyData(
+                    AudioObjectID(kAudioObjectSystemObject), &address, UInt32(MemoryLayout<CFString>.size), pointer,
+                    &size, &id))
+        }
+        guard id != kAudioObjectUnknown, InputDevice.uid(of: id) == uid else { return nil }
+        return QuietOutput(id: id, uid: uid)
+    }
+
     func isMuted(_ output: QuietOutput) throws -> Bool {
         try validate(output)
         var address = muteAddress

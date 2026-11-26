@@ -20,6 +20,8 @@ protocol QuietOutputObservation: AnyObject {
 @MainActor
 protocol QuietOutputAccess: AnyObject {
     func currentOutput() throws -> QuietOutput
+    /// The output device with this UID, or nil when it is no longer present.
+    func output(forUID uid: String) throws -> QuietOutput?
     func isMuted(_ output: QuietOutput) throws -> Bool
     func setMuted(_ muted: Bool, output: QuietOutput) throws
     func observeChanges(_ output: QuietOutput) throws -> any QuietOutputObservation
@@ -64,13 +66,13 @@ final class RecordingAudioQuiet: RecordingAudioQuieting {
     }
 
     /// Call once at launch. If a previous run muted the output and never restored it (a crash or force-quit),
-    /// unmute that output now. Returns true when it restored one. Only the current default output can be
-    /// reached, so a marker for any other device is dropped without touching anything.
+    /// unmute that output now, wherever the default has moved since. Returns true when it restored one. A marker
+    /// for a device that is gone or already unmuted is dropped without touching anything.
     @discardableResult
     func recoverFromCrash() -> Bool {
         guard owned == nil, let uid = marker.markedUID else { return false }
         marker.markedUID = nil
-        guard let device = try? output.currentOutput(), device.uid == uid,
+        guard let device = try? output.output(forUID: uid),
             (try? output.isMuted(device)) == true
         else {
             Log.app.notice("Stale quiet-audio marker cleared; the output was not left muted")
