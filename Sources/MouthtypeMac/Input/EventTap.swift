@@ -186,6 +186,7 @@ private func tapCallback(
         hotkeyHeld: wasHeld,
         pending: pending,
         idleKeysReported: context.idleKeysReported,
+        processing: shared.processing.load(ordering: .relaxed),
         shortcut: context.shortcut, shortcutHeld: shortcutHeld
     )
     if context.role == .keys, context.shortcut != nil {

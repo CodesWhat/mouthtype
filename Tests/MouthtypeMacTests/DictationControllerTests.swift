@@ -1978,6 +1978,74 @@ private final class FakeCorrections: CorrectionObserving {
         #expect(rig.controller.phase == .idle)
     }
 
+    @Test func anInputLostCancelDoesNotStopTakesThatAreAlreadyProcessing() async {
+        let rig = Rig()
+        rig.engine.holds = 1
+        await rig.controller.handle(.pressed(at: keyDown))
+        await rig.controller.handle(.released(at: keyUp))
+        await rig.engine.waitForHeld()
+        await rig.controller.handle(.cancelled(reason: .inputLost))
+        rig.engine.releaseHeld()
+        await rig.controller.waitForProcessing()
+        #expect(rig.inserter.delivered.count == 1)
+        #expect(rig.store.finishes.map(\.0).contains(.cancelled) == false)
+    }
+
+    @Test func escapeStopsQueuedTakesBehindTheRunningOne() async {
+        let rig = Rig()
+        rig.engine.holds = 1
+        await rig.controller.handle(.pressed(at: keyDown))
+        await rig.controller.handle(.released(at: keyUp))
+        await rig.engine.waitForHeld()
+        await rig.controller.handle(.pressed(at: keyDown + 1))
+        await rig.controller.handle(.released(at: keyUp + 1))
+        await rig.controller.handle(.cancelled(reason: .escape))
+        rig.engine.releaseHeld()
+        await rig.controller.waitForProcessing()
+        #expect(rig.inserter.delivered.isEmpty)
+        #expect(rig.store.finishes.map(\.0).filter { $0 == .cancelled }.count == 2)
+    }
+
+    @Test func aCancelledRequestThatThrowsItsOwnErrorEndsAsCancelledNotFailed() async {
+        let rig = Rig()
+        rig.engine.holds = 1
+        await rig.controller.handle(.pressed(at: keyDown))
+        await rig.controller.handle(.released(at: keyUp))
+        await rig.engine.waitForHeld()
+        await rig.controller.handle(.cancelled(reason: .escape))
+        rig.engine.error = URLError(.cancelled)
+        rig.engine.releaseHeld()
+        await rig.controller.waitForProcessing()
+        #expect(rig.store.finishes.map(\.0) == [.cancelled])
+    }
+
+    @Test func theControllerReportsWhenTakesStartAndStopProcessing() async {
+        let rig = Rig()
+        var reports: [Bool] = []
+        rig.controller.onProcessingChanged = { reports.append($0) }
+        rig.engine.holds = 1
+        await rig.controller.handle(.pressed(at: keyDown))
+        await rig.controller.handle(.released(at: keyUp))
+        await rig.engine.waitForHeld()
+        #expect(reports == [true])
+        rig.engine.releaseHeld()
+        await rig.controller.waitForProcessing()
+        #expect(reports == [true, false])
+    }
+
+    @Test func aMissForTheFirstTakeStillCountsAfterTheSecondTakeDelivered() async {
+        let rig = Rig()
+        rig.inserter.result = pastedResult()
+        await rig.dictate()
+        rig.inserter.result = pastedResult(id: 2)
+        await rig.controller.handle(.pressed(at: keyDown + 1))
+        await rig.controller.handle(.released(at: keyUp + 1))
+        await rig.controller.waitForProcessing()
+        rig.inserter.verify(PasteVerification(id: 1, verdict: .notLanded, receiptMs: nil))
+        await rig.until { rig.store.verdicts.map(\.outcome) == ["not landed"] }
+        #expect(rig.store.verdicts.map(\.outcome) == ["not landed"])
+    }
+
     @Test func dismissingTheMicrophoneCardReleasesTheHeldInterruption() async {
         let rig = Rig()
         await rig.controller.handle(.pressed(at: keyDown))
