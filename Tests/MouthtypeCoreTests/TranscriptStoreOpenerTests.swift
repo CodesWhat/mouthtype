@@ -37,6 +37,22 @@ import Testing
         _ = try outcome.store?.stats(now: Date())
     }
 
+    @Test func aDatabaseFromANewerVersionIsLeftUntouchedAndReported() throws {
+        let dir = try Self.makeDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let url = dir.appendingPathComponent("mouthtype.sqlite")
+        _ = try TranscriptStore(url: url)
+        let pool = try DatabasePool(path: url.path)
+        try pool.write { try $0.execute(sql: "INSERT INTO grdb_migrations(identifier) VALUES ('v99-from-the-future')") }
+
+        let outcome = TranscriptStoreOpener.open(url: url)
+
+        #expect(outcome.store == nil)
+        #expect(outcome.quarantinedTo == nil)
+        #expect(outcome.failure?.contains("newer version") == true)
+        #expect(try pool.read { try Int.fetchOne($0, sql: "SELECT COUNT(*) FROM grdb_migrations") } == 6)
+    }
+
     @Test func theActivityFlagCoversEveryQuarantineMoveAndNothingElse() throws {
         let dir = try Self.makeDir()
         defer { try? FileManager.default.removeItem(at: dir) }

@@ -733,6 +733,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     public func applicationWillTerminate(_ notification: Notification) {
         guard !launchRefused else { return }
         isTerminating = true
+        audioPurgeLoop?.cancel()
         audioQuiet.end()
         fileTranscriptionModel.cancel()
         guard menuBar != nil else { return }
@@ -752,8 +753,23 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    private var audioPurgeLoop: Task<Void, Never>?
+
+    /// A menu bar app can stay up for weeks, so a launch-only sweep would let the archive grow past its age and size limits.
     private func purgeAudio(archive: AudioArchive, store: TranscriptStore?) {
         guard let store else { return }
+        audioPurgeLoop?.cancel()
+        audioPurgeLoop = Task { [weak self] in
+            await AudioPurgeLoop.run(
+                shouldStop: { @MainActor in self?.isTerminating ?? true },
+                isIdle: { @MainActor in self?.dictation?.phase == .idle },
+                purge: { @MainActor in self?.runAudioPurge(archive: archive, store: store) }
+            )
+        }
+        runAudioPurge(archive: archive, store: store)
+    }
+
+    private func runAudioPurge(archive: AudioArchive, store: TranscriptStore) {
         let policy = AudioRetentionPreference.load()
         Task.detached {
             do {
