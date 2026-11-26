@@ -66,6 +66,10 @@ class TreeReceiptWorkflowTests(unittest.TestCase):
         )
         self.assertIn("[ \"$REUSE\" != true ]", block)
 
+    def test_receipt_job_only_runs_on_push(self):
+        block = job_block(self.text, "receipt")
+        self.assertEqual(job_if(block), "${{ always() && github.event_name == 'push' }}")
+
     def test_status_write_is_limited_to_the_receipt_job(self):
         self.assertEqual(self.text.count("statuses: write"), 1)
 

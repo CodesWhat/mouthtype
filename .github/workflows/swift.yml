@@ -256,7 +256,8 @@ jobs:
   # ran and passed, so a reused result is never re-recorded and its age never refreshed.
   receipt:
     needs: [verify, build, test]
-    if: always()
+    # Push only: receipts are written from push runs, so pull request and manual runs never get a status-writing credential.
+    if: ${{ always() && github.event_name == 'push' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
