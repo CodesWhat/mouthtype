@@ -147,6 +147,6 @@ import Testing
         var out = ""
         let elapsed = clock.measure { out = replacer.apply(text).text }
         #expect(out.hasPrefix("alpha Term5 beta Term1999 gamma"))
-        if TextTestSupport.timingAssertsEnabled { #expect(elapsed < .seconds(1)) }
+        #expect(elapsed < TextTestSupport.budget(.seconds(1)))
     }
 }
