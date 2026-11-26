@@ -1,4 +1,6 @@
 // Adapted from Parrot (https://github.com/humanitas-labs/parrot, 0eb4708), MIT License, Copyright (c) 2026 Humanitas Labs.
+import ApplicationServices
+import Carbon.HIToolbox
 import CoreGraphics
 import Foundation
 
@@ -43,9 +45,44 @@ private struct ReleaseBox: @unchecked Sendable {
     func release() { retained.release() }
 }
 
+/// What the hotkey service needs from a live tap: the real `EventTap` in the app, a fake in tests.
+@MainActor
+protocol TapHandle: AnyObject {
+    var isEnabled: Bool { get }
+    func enable()
+    func teardown()
+}
+
+/// The system calls `HotkeyService` makes: the Accessibility grant, tap creation, and live key and secure-input state.
+/// The system in the app, a fake in tests, so start, stop, recovery and resync run without a real event tap.
+@MainActor
+protocol HotkeySystem: AnyObject {
+    var isProcessTrusted: Bool { get }
+    var isSecureInputEnabled: Bool { get }
+    /// The modifier flags currently held, as `CGEventFlags.rawValue`.
+    var currentFlags: UInt64 { get }
+    func isKeyDown(_ keyCode: UInt16) -> Bool
+    func makeTap(role: TapRole, context: TapContext, runLoop: CFRunLoop, countsInput: Bool) -> (any TapHandle)?
+}
+
+@MainActor
+final class LiveHotkeySystem: HotkeySystem {
+    var isProcessTrusted: Bool { AXIsProcessTrusted() }
+    var isSecureInputEnabled: Bool { IsSecureEventInputEnabled() }
+    var currentFlags: UInt64 { CGEventSource.flagsState(.combinedSessionState).rawValue }
+
+    func isKeyDown(_ keyCode: UInt16) -> Bool {
+        CGEventSource.keyState(.combinedSessionState, key: CGKeyCode(keyCode))
+    }
+
+    func makeTap(role: TapRole, context: TapContext, runLoop: CFRunLoop, countsInput: Bool) -> (any TapHandle)? {
+        EventTap(role: role, context: context, runLoop: runLoop, countsInput: countsInput)
+    }
+}
+
 /// One CGEvent tap on the tap thread. The callback copies fields and hands them off; it does nothing else.
 @MainActor
-final class EventTap {
+final class EventTap: TapHandle {
     let role: TapRole
     let context: TapContext
     private let runLoop: CFRunLoop
