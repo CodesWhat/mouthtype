@@ -646,6 +646,15 @@ final class DictationController {
         onProcessingChanged?(now)
     }
 
+    /// What a click on the pill does: stop or cancel the locked recording, or cancel the takes still processing.
+    func handle(control: PillControl) {
+        switch control {
+        case .stop: stopHandsFree()
+        case .cancel: Task { await cancelHandsFree() }
+        case .pill: cancelProcessing()
+        }
+    }
+
     /// Stops every take still processing. Nothing is delivered: each row ends as cancelled and its audio stays in the
     /// archive. A take the engine is already transcribing finishes there, but its text is dropped.
     func cancelProcessing() {

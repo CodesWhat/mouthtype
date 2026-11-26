@@ -112,6 +112,8 @@ final class HiFiPillView: NSView, PillSkinView {
 
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
 
+    var bodyFrame: CGRect { pill.frame }
+
     /// The cap sprites' frames in this view, while locked and showing the meter.
     var controlFrames: [PillControl: CGRect] {
         guard isLocked, mode == .meter else { return [:] }

@@ -103,7 +103,7 @@ public final class PillController {
         panel.isReleasedWhenClosed = false
         panel.contentView = host
         host.wantsLayer = true
-        host.controlAt = { [weak self] point in self.flatMap { PillHit.control(at: point, frames: $0.skin.controlFrames) } }
+        host.controlAt = { [weak self] point in self?.control(at: point) }
         host.onPress = { [weak self] control in self?.press(control) }
         host.onActivate = { [weak self] control in self?.onControl?(control) }
         install(skin)
@@ -217,12 +217,16 @@ public final class PillController {
         previewView.update(text)
     }
 
+    static let processingHelp = "Click to cancel this take"
+
     public func showProcessing() {
         enter(.processing)
         recordingStart = nil
         skin.beginProcessing()
         processingStart = CACurrentMediaTime()
+        host.toolTip = Self.processingHelp
         startLink()
+        updateInteractivity(pointer: NSEvent.mouseLocation)
     }
 
     func showMessage(_ message: PillMessage, duration: TimeInterval = 2.5) {
@@ -548,6 +552,10 @@ public final class PillController {
             skin.setHovered(pressedControl == nil ? control : nil)
             return
         }
+        if state == .processing {
+            panel.ignoresMouseEvents = control(at: local) == nil && pressedControl == nil
+            return
+        }
         guard state == .handsFree else {
             endInteraction()
             return
@@ -558,18 +566,29 @@ public final class PillController {
         skin.setHovered(pressedControl == nil ? control : nil)
     }
 
+    /// The control under `point`: cancel or stop on a locked pill, the whole pill while a take is processing.
+    private func control(at point: CGPoint) -> PillControl? {
+        if state == .processing {
+            return PillHit.target(for: skin.bodyFrame).contains(point) ? .pill : nil
+        }
+        return PillHit.control(at: point, frames: skin.controlFrames)
+    }
+
     private func refreshInteractivity() {
         if isGrown { updateInteractivity(pointer: NSEvent.mouseLocation) } else { endInteraction() }
     }
 
     private func press(_ control: PillControl?) {
         pressedControl = control
+        // The processing pill has no pressed look; only the locked controls draw one.
+        guard control != .pill else { return }
         skin.setPressed(control)
         if control != nil { skin.setHovered(nil) }
     }
 
     private func endInteraction() {
         pressedControl = nil
+        host.toolTip = nil
         skin.setPressed(nil)
         skin.setHovered(nil)
         if isGrown {
@@ -604,7 +623,7 @@ public final class PillController {
             if state == .handsFree || isGrown { updateInteractivity(pointer: NSEvent.mouseLocation) }
         case .processing:
             skin.updateProcessing(time: now - processingStart)
-            if isGrown { updateInteractivity(pointer: NSEvent.mouseLocation) }
+            updateInteractivity(pointer: NSEvent.mouseLocation)
         case .message:
             let distance = skin.messageScrollDistance
             let elapsed = now - messageStart
