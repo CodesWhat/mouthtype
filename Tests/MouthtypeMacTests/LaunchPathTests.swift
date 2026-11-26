@@ -419,6 +419,27 @@ private final class HeldStoreOpen: Sendable {
 }
 
 @Suite struct PhrasesHealthTests {
+    @Test func aTakeReadsThePhrasesOnlyWhenTheFileChanges() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("phrases-snippets-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let url = dir.appendingPathComponent("phrases.json")
+        let phrases = FilePhrases(url: url)
+        #expect(phrases.snippets().isEmpty)
+        #expect(phrases.snippets().isEmpty)
+        #expect(phrases.snippetReads.withLock { $0 } == 1)
+        try phrases.save(original: nil, phrase: Snippet(trigger: "my email", expansion: "a@b.co"))
+        let saved = phrases.snippets()
+        #expect(saved.count == 1)
+        #expect(phrases.snippets() == saved)
+        #expect(phrases.snippetReads.withLock { $0 } == 2)
+        // A file broken by hand keeps the last good list and is not re-read until it changes again.
+        try Data("not json at all".utf8).write(to: url)
+        #expect(phrases.snippets() == saved)
+        #expect(phrases.snippets() == saved)
+        #expect(phrases.snippetReads.withLock { $0 } == 3)
+    }
+
     @Test func theFileIsReadAgainOnlyWhenItChanges() throws {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("phrases-health-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)

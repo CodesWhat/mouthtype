@@ -45,9 +45,7 @@ final class FilePhrases: Sendable {
     /// The error a read of the file would give, or nil when it parses. The file is read again only when its modification
     /// time or size changed since the last check, so polling this on every menu open costs one stat.
     func healthError() -> String? {
-        // A fresh URL each time: a URL caches its resource values, which would hide a change.
-        let values = try? URL(fileURLWithPath: url.path).resourceValues(forKeys: [.contentModificationDateKey, .fileSizeKey])
-        let stamp = FileStamp(exists: values != nil, modified: values?.contentModificationDate, size: values?.fileSize)
+        let stamp = currentStamp()
         if let last = healthCheck.withLock({ $0 }), last.stamp == stamp { return last.error }
         healthReads.withLock { $0 += 1 }
         let message: String?
@@ -56,7 +54,23 @@ final class FilePhrases: Sendable {
         return message
     }
 
+    private func currentStamp() -> FileStamp {
+        // A fresh URL each time: a URL caches its resource values, which would hide a change.
+        let values = try? URL(fileURLWithPath: url.path).resourceValues(forKeys: [.contentModificationDateKey, .fileSizeKey])
+        return FileStamp(exists: values != nil, modified: values?.contentModificationDate, size: values?.fileSize)
+    }
+
+    private let snippetStamp = OSAllocatedUnfairLock<FileStamp?>(initialState: nil)
+    /// How many times `snippets()` has actually read the file. Lets a test check the gate.
+    let snippetReads = OSAllocatedUnfairLock(initialState: 0)
+
+    /// The phrases for a take. The file is read again only when its modification time or size changed since the last
+    /// read, so a take costs one stat. A file that fails to parse keeps the last good list.
     func snippets() -> [Snippet] {
+        let stamp = currentStamp()
+        if snippetStamp.withLock({ $0 }) == stamp { return lastGood.withLock { $0 } }
+        snippetReads.withLock { $0 += 1 }
+        defer { snippetStamp.withLock { $0 = stamp } }
         do { return try all() } catch { return lastGood.withLock { $0 } }
     }
 
