@@ -8,6 +8,10 @@ public enum SmartCleanupGuard {
     public static func minimumKept(for level: CleanupLevel) -> Double { 0.5 }
     /// Share of the output's content words that may be new, past which it is answering rather than transcribing.
     public static func maximumNovel(for level: CleanupLevel) -> Double { 0.5 }
+    /// The novel share allowed once the output has `longOutputWords` content words. A short output can legitimately be
+    /// half new when one corrected name is one of two content words, so the tighter limit only applies to longer text.
+    public static let longOutputNovel = 0.4
+    static let longOutputWords = 8
 
     /// How far after an abandoned number or name its correction cue may appear.
     static let cueReach = 4
@@ -280,7 +284,8 @@ public enum SmartCleanupGuard {
         }
         if !outputContent.isEmpty {
             let novel = Double(outputContent.filter { !present($0, in: inputWords) }.count) / Double(outputContent.count)
-            if novel > maximumNovel(for: level) {
+            let limit = outputContent.count >= longOutputWords ? longOutputNovel : maximumNovel(for: level)
+            if novel > limit {
                 return "\(Int(novel * 100))% of the output's content words are new"
             }
         }
@@ -288,6 +293,36 @@ public enum SmartCleanupGuard {
     }
 
     // MARK: Words
+
+    private static let negators: Set<String> = ["no", "not", "never", "neither", "nor", "without", "cannot"]
+
+    /// The content word each negation in `text` applies to: the first content word after it, within three words.
+    /// A "no wait", "no sorry" or "never mind" is a correction cue, not a negation, and binds nothing.
+    static func negatedWords(_ text: String) -> [String] {
+        let words = TextMetrics.normalizedWords(text)
+        var bound: [String] = []
+        for (index, word) in words.enumerated() {
+            let next = index + 1 < words.count ? words[index + 1] : ""
+            if word == "no", ["wait", "sorry"].contains(next) { continue }
+            if word == "never", next == "mind" { continue }
+            guard negators.contains(word) || word.hasSuffix("n't") else { continue }
+            let window = words[(index + 1)...].prefix(3)
+            if let target = contentWords(window.joined(separator: " ")).first { bound.append(target) }
+        }
+        return bound
+    }
+
+    /// True when a negation has moved onto a different word: the same count of negations, but one that bound to a word
+    /// the output still has now binds to nothing there ("I don't think it's good" became "I think it's not good").
+    static func negationMoved(input: String, output: String) -> Bool {
+        let inputBound = negatedWords(input)
+        let outputBound = negatedWords(output)
+        let inputWords = contentWords(input)
+        let outputWords = contentWords(output)
+        for word in inputBound where present(word, in: outputWords) && !present(word, in: outputBound) { return true }
+        for word in outputBound where present(word, in: inputWords) && !present(word, in: inputBound) { return true }
+        return false
+    }
 
     static func changedIntent(input: String, output: String) -> String? {
         func negatives(_ text: String) -> Int {
@@ -301,6 +336,7 @@ public enum SmartCleanupGuard {
             }.count
         }
         if negatives(input) != negatives(output) { return "negation changed" }
+        if negationMoved(input: input, output: output) { return "negation changed" }
         let certainty: Set<String> = ["probably", "maybe", "perhaps", "might", "must", "should", "could", "would"]
         func words(_ text: String) -> [String] {
             TextMetrics.normalizedWords(text).map { $0.hasSuffix("n't") ? String($0.dropLast(3)) : $0 }
