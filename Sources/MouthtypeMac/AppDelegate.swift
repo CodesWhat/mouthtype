@@ -582,14 +582,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let dictation else { return }
             Task { await dictation.cancelHandsFree() }
         }
-        pill.onControl = { [weak dictation] control in
-            guard let dictation else { return }
-            switch control {
-            case .stop: dictation.stopHandsFree()
-            case .cancel: Task { await dictation.cancelHandsFree() }
-            case .pill: dictation.cancelProcessing()
-            }
-        }
+        pill.onControl = { [weak dictation] control in dictation?.handle(control: control) }
         systemSection.onToggleRemap = { [weak self] in self?.toggleRemap() }
         systemSection.onChangeShortcut = { [weak self] in self?.showShortcutEditor() }
         systemSection.update(shortcut: ShortcutSettings.load())
