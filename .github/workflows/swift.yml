@@ -143,6 +143,56 @@ jobs:
       - name: Build (warnings as errors)
         run: swift build -Xswiftc -warnings-as-errors
 
+  # Builds the release bundle (ad-hoc signed, there is no Developer ID on the runner) and launches it in the pill demo, so a
+  # bundle that will not assemble, verify or start fails here and not after the tag. Same gating as build and test.
+  bundle:
+    needs: [changes, verify]
+    if: >-
+      ${{ !cancelled() &&
+      (needs.changes.result != 'success' || needs.changes.outputs.run != 'false') &&
+      (needs.verify.result != 'success' || needs.verify.outputs.reuse != 'true') }}
+    permissions:
+      contents: read
+    runs-on: xcode-27
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Toolchain
+        id: toolchain
+        run: |
+          xcodebuild -version
+          swift --version
+          echo "xcode=$(xcodebuild -version | awk '/^Build version/ {print $3}')" >> "$GITHUB_OUTPUT"
+
+      - name: Metal toolchain
+        run: |
+          if ! xcrun metal --version >/dev/null 2>&1; then
+            xcodebuild -downloadComponent MetalToolchain
+          fi
+          xcrun metal --version
+
+      # Same key and paths as the build job, which is the one that saves it.
+      - name: Restore SwiftPM dependencies
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            .build/artifacts
+            .build/checkouts
+            .build/prebuilts
+            .build/repositories
+            .build/workspace-state.json
+            ~/Library/Caches/org.swift.swiftpm/artifacts
+            ~/Library/Caches/org.swift.swiftpm/manifests
+          key: swiftpm-${{ runner.os }}-${{ runner.arch }}-xcode${{ steps.toolchain.outputs.xcode }}-${{ hashFiles('Package.resolved') }}
+          restore-keys: |
+            swiftpm-${{ runner.os }}-${{ runner.arch }}-xcode${{ steps.toolchain.outputs.xcode }}-
+
+      - name: Build and launch the release bundle
+        run: scripts/smoke-release-app.sh
+
   # Headless tests and offscreen Settings renders run on PRs and after merge. Desktop tests run locally.
   test:
     needs: [changes, verify]
@@ -255,7 +305,7 @@ jobs:
   # Final job on push runs: writes the receipt a later verify looks for. It records only when build and test actually
   # ran and passed, so a reused result is never re-recorded and its age never refreshed.
   receipt:
-    needs: [verify, build, test]
+    needs: [verify, build, test, bundle]
     # Push only: receipts are written from push runs, so pull request and manual runs never get a status-writing credential.
     if: ${{ always() && github.event_name == 'push' }}
     runs-on: ubuntu-latest
@@ -272,10 +322,11 @@ jobs:
           REUSE: ${{ needs.verify.outputs.reuse }}
           BUILD_RESULT: ${{ needs.build.result }}
           TEST_RESULT: ${{ needs.test.result }}
+          BUNDLE_RESULT: ${{ needs.bundle.result }}
         run: |
           # Pushes always build, so a skipped job there needs a verified reuse. Pull requests may skip on the changes gate.
           if [ "$EVENT" != pull_request ] \
-              && { [ "$BUILD_RESULT" = skipped ] || [ "$TEST_RESULT" = skipped ]; } \
+              && { [ "$BUILD_RESULT" = skipped ] || [ "$TEST_RESULT" = skipped ] || [ "$BUNDLE_RESULT" = skipped ]; } \
               && { [ "$VERIFY_RESULT" != success ] || [ "$REUSE" != true ]; }; then
             echo "build or test skipped without a verified reuse"; exit 1
           fi
@@ -287,9 +338,9 @@ jobs:
           done
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        if: ${{ needs.build.result == 'success' && needs.test.result == 'success' }}
+        if: ${{ needs.build.result == 'success' && needs.test.result == 'success' && needs.bundle.result == 'success' }}
         with:
           persist-credentials: false
 
       - uses: CodesWhat/.github/actions/tree-receipt/record@b85ebce168f649bcd2fddf2ff0d433fb38e30866
-        if: ${{ needs.build.result == 'success' && needs.test.result == 'success' }}
+        if: ${{ needs.build.result == 'success' && needs.test.result == 'success' && needs.bundle.result == 'success' }}

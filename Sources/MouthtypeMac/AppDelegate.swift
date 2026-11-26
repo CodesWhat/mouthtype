@@ -296,7 +296,9 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             cardPresenter = presenter
             Task {
                 await PillDemo.run(controller: pill, cards: cards, presenter: presenter, options: demo)
-                NSApp.terminate(nil)
+                // The demo has no history, dictation or drafts to save. NSApp.terminate parks waiting on the termination
+                // task, which never runs from here, so the process stayed up after the walk-through and a CI smoke run hung.
+                exit(0)
             }
             return
         }
