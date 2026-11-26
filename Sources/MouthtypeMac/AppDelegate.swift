@@ -392,9 +392,14 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             var outcome = await withCheckedContinuation { (done: CheckedContinuation<StoreOpenOutcome, Never>) in
                 DispatchQueue.global(qos: .userInitiated).async { done.resume(returning: open(activity)) }
             }
-            // The deadline committed a quit, the open skipped its quarantine for it, and the quit was then cancelled
-            // (Keep Editing). That open is spent; run it again so the damaged file is still set aside.
-            while !isTerminating, activity.state != .quitCommitted, activity.takeSkippedForQuit() {
+            // The deadline committed a quit and the open skipped its quarantine for it. If that quit is cancelled (Keep
+            // Editing, an updater refusal), this open is spent and runs again so the damaged file is still set aside. The
+            // open can come back while the quit is still committed (a draft prompt is up), so wait for the quit to resolve.
+            while !isTerminating, activity.takeSkippedForQuit() {
+                while !isTerminating, activity.state == .quitCommitted {
+                    try? await Task.sleep(for: .milliseconds(20))
+                }
+                guard !isTerminating else { break }
                 Log.app.info("quit was withdrawn after the open skipped its quarantine; opening history again")
                 outcome = await withCheckedContinuation { (done: CheckedContinuation<StoreOpenOutcome, Never>) in
                     DispatchQueue.global(qos: .userInitiated).async { done.resume(returning: open(activity)) }
@@ -709,7 +714,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                 await inserter?.prepareForTermination()
             },
             reply: { [self] ready in
-                if !ready { isTerminating = false; appUpdater.installWasDeferred() }
+                if !ready { isTerminating = false; storeOpenActivity.withdrawQuit(); appUpdater.installWasDeferred() }
                 // The draft the user agreed to discard goes only once the quit is certain; a delayed quit keeps it.
                 if ready, !signalShutdown { builtSettingsWindow?.discardDraftForQuit() }
                 replyToTermination(sender, ready)

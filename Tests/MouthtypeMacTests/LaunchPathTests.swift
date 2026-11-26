@@ -332,6 +332,41 @@ import os
         #expect(!delegate.storeOpenInFlight)
     }
 
+    @Test func anOpenThatSkippedItsQuarantineWhileTheQuitIsStillCommittedRunsAgainOnceTheQuitIsWithdrawn() async {
+        let held = HeldStoreOpen(outcome: StoreOpenOutcome(failure: "skipped"), patience: .seconds(20))
+        defer { held.release() }
+        let seen = OSAllocatedUnfairLock<[StoreOpenActivity]>(initialState: [])
+        let opens = OSAllocatedUnfairLock(initialState: 0)
+        let delegate = AppDelegate()
+        delegate.openStore = { activity in
+            seen.withLock { $0.append(activity) }
+            if opens.withLock({
+                $0 += 1; return $0
+            }) > 1 {
+                return StoreOpenOutcome(quarantinedTo: URL(fileURLWithPath: "/tmp/moved"))
+            }
+            return held.open(activity)
+        }
+        var finished: [StoreOpenOutcome] = []
+        delegate.openStoreOffMain { finished.append($0) }
+        for _ in 0..<400 where seen.withLock({ $0.isEmpty }) { try? await Task.sleep(for: .milliseconds(5)) }
+        guard let activity = seen.withLock({ $0.first }) else { Issue.record("open never started"); return }
+        // The deadline committed the quit and a draft prompt is up; the open reaches its quarantine and is refused.
+        #expect(activity.commitQuit())
+        #expect(!activity.beginQuarantine())
+        held.release()
+        try? await Task.sleep(for: .milliseconds(150))
+        #expect(finished.isEmpty)
+        #expect(opens.withLock { $0 } == 1)
+        // Keep Editing.
+        activity.withdrawQuit()
+        for _ in 0..<400 where finished.isEmpty { try? await Task.sleep(for: .milliseconds(5)) }
+        #expect(opens.withLock { $0 } == 2)
+        #expect(finished.count == 1)
+        #expect(finished.first?.quarantinedTo != nil)
+        #expect(!delegate.storeOpenInFlight)
+    }
+
     @Test func aQuitCancelledDuringAnUpdateInstallUnblocksNewWork() {
         let delegate = AppDelegate()
         var activity = UpdateActivity.recovering
