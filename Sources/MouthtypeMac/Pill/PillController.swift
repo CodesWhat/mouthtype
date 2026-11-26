@@ -551,9 +551,7 @@ public final class PillController {
             let control = state == .handsFree ? PillHit.control(at: local, frames: skin.controlFrames) : nil
             // A press that started on the card keeps the panel live until the button comes up.
             let dragging = !panel.ignoresMouseEvents && primaryButtonDown()
-            // A cancellable processing pill folded under a card still takes its own click, same as a plain pill.
-            let overPill = state == .processing && self.control(at: local) != nil
-            panel.ignoresMouseEvents = !card.contains(local) && !overPill && pressedControl == nil && !dragging
+            panel.ignoresMouseEvents = !card.contains(local) && pressedControl == nil && !dragging
             skin.setHovered(pressedControl == nil ? control : nil)
             return
         }
