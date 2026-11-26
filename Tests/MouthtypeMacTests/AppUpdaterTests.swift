@@ -33,6 +33,24 @@ import Testing
         #expect(!UpdateLaunchPolicy.allows(arguments: ["Mouthtype"], bundleURL: app, info: ["SUFeedURL": "http://mouthtype.app/updates/appcast.xml", "SUPublicEDKey": "invalid"]))
     }
 
+    @Test func theFeedAndTheKeyAreEachRequiredOnTheirOwn() {
+        let app = URL(fileURLWithPath: "/Applications/Mouthtype.app")
+        let feed = "https://mouthtype.app/updates/appcast.xml"
+        let key = Data(repeating: 1, count: 32).base64EncodedString()
+        func allows(_ info: [String: Any]) -> Bool { UpdateLaunchPolicy.allows(arguments: ["Mouthtype"], bundleURL: app, info: info) }
+        #expect(allows(["SUFeedURL": feed, "SUPublicEDKey": key]))
+        // A valid key does not rescue a feed that is missing, wrong-host, plain http or not a string.
+        for badFeed: Any in ["http://mouthtype.app/updates/appcast.xml", "https://example.com/updates/appcast.xml", "https://mouthtype.app/updates/appcast.xml?x=1", "", 7] {
+            #expect(!allows(["SUFeedURL": badFeed, "SUPublicEDKey": key]))
+        }
+        #expect(!allows(["SUPublicEDKey": key]))
+        // A valid feed does not rescue a key that is missing, not base64, the wrong length or not a string.
+        for badKey: Any in ["not base64!", Data(repeating: 1, count: 31).base64EncodedString(), Data(repeating: 1, count: 33).base64EncodedString(), "", 7] {
+            #expect(!allows(["SUFeedURL": feed, "SUPublicEDKey": badKey]))
+        }
+        #expect(!allows(["SUFeedURL": feed]))
+    }
+
     @Test func startupAndChecksWaitForEveryKindOfDictationWork() {
         let activity = Activity(), driver = Driver()
         activity.value = .recording
