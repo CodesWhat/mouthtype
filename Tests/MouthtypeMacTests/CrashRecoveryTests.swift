@@ -214,18 +214,14 @@ private struct Rig {
         section.refresh()
         #expect(submenu.items.count == 1 && submenu.items[0].representedObject == nil)
         submenu.delegate?.menuNeedsUpdate?(submenu)
-        for _ in 0..<400 where submenu.items.allSatisfy({ $0.representedObject == nil }) {
-            try await Task.sleep(for: .milliseconds(5))
-        }
+        await pollUntil { submenu.items.contains { $0.representedObject != nil } }
         func shown() -> [String] { submenu.items.compactMap { ($0.representedObject as? RecoverableDictation)?.id } }
         #expect(shown() == Array(ids.prefix(20)))
         let next = try #require(submenu.items.first { $0.title == "Older recordings" })
         _ = section.perform(try #require(next.action), with: next)
         #expect(shown() == Array(ids[20..<40]))
         section.menuNeedsUpdate(submenu)
-        for _ in 0..<400 where submenu.items.allSatisfy({ $0.representedObject == nil }) {
-            try await Task.sleep(for: .milliseconds(5))
-        }
+        await pollUntil { submenu.items.contains { $0.representedObject != nil } }
         #expect(shown() == Array(ids[20..<40]))
         let oldest = try #require(submenu.items.first { $0.title == "Older recordings" })
         _ = section.perform(try #require(oldest.action), with: oldest)
@@ -236,9 +232,7 @@ private struct Rig {
         #expect(shown() == Array(ids[20..<40]))
         for id in ids.prefix(40) { try rig.store.finish(id, status: .cancelled) }
         section.menuNeedsUpdate(submenu)
-        for _ in 0..<400 where submenu.items.allSatisfy({ $0.representedObject == nil }) {
-            try await Task.sleep(for: .milliseconds(5))
-        }
+        await pollUntil { submenu.items.contains { $0.representedObject != nil } }
         #expect(shown() == Array(ids[40..<45]))
         #expect(!submenu.items.contains { $0.title == "Newer recordings" || $0.title == "Older recordings" })
     }
@@ -252,9 +246,7 @@ private struct Rig {
         let menu = SavedRecordingsMenuSection(recovery: rig.recovery, canRecover: { true })
         let submenu = try #require(menu.items.first?.submenu)
         submenu.delegate?.menuNeedsUpdate?(submenu)
-        for _ in 0..<400 where submenu.items.allSatisfy({ $0.representedObject == nil }) {
-            try await Task.sleep(for: .milliseconds(5))
-        }
+        await pollUntil { submenu.items.contains { $0.representedObject != nil } }
         let entries = submenu.items
         #expect(menu.items.first?.submenu?.autoenablesItems == false)
         #expect(entries.count == 2)
