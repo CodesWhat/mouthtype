@@ -27,7 +27,7 @@ private actor Recorder {
                 purge: { await rec.purged() })
         }
         await task.value
-        #expect(await rec.sleeps == [.seconds(100), .seconds(5), .seconds(100)])
+        #expect(await rec.sleeps == [.seconds(100), .seconds(5), .seconds(100), .seconds(100)])
         #expect(await rec.purges == 2)
     }
 
