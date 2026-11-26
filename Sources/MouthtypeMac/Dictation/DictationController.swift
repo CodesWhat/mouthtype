@@ -99,6 +99,14 @@ final class DictationController {
     /// The last job queued. A job waits for the one before it, so the chain keeps deliveries in order.
     @ObservationIgnored private var processing: Task<Void, Never>?
     @ObservationIgnored private var pendingJobs = 0
+    /// Every queued or running job, so Esc during processing can stop them.
+    @ObservationIgnored private var jobTasks: [Int: Task<Void, Never>] = [:]
+    @ObservationIgnored private var jobSerial = 0
+    /// Fired when takes start or stop waiting on the engine, so the key tap can listen for Esc past the release.
+    @ObservationIgnored var onProcessingChanged: (@MainActor (Bool) -> Void)?
+    @ObservationIgnored private var reportedProcessing = false
+    /// A "paste didn't land" card whose verdict arrived while a newer take was recording. Shown once the take ends.
+    @ObservationIgnored private var deferredVerdictCard: DeliveryCard?
     /// The capture's stop for the last release. The next press waits for it before the capture starts again.
     @ObservationIgnored private var stopping: Task<CapturedAudio, Error>?
     @ObservationIgnored private var capTimer: Task<Void, Never>?
@@ -107,7 +115,8 @@ final class DictationController {
     @ObservationIgnored private var limitCardUp = false
     @ObservationIgnored private var interrupted: PendingInterruption?
     @ObservationIgnored private let limits: Limits
-    @ObservationIgnored private var verifying: PendingVerification?
+    /// Read-backs still running, by id. A newer take's paste must not displace an older one that is still waiting.
+    @ObservationIgnored private var verifying: [Int: PendingVerification] = [:]
 
     /// A cancelled dictation whose audio is kept for `DeliveryCard.undoWindow`.
     private struct PendingUndo {
@@ -162,10 +171,14 @@ final class DictationController {
         }
         cards.onDismissed = { [weak self] card in
             if card.kind == .cancelled { self?.discardPendingUndo() }
+            // The row is already failed with its audio archived, so closing the card leaves the take in Saved Recordings.
+            if card.kind == .micDisconnected { self?.interrupted = nil }
         }
         cards.onCardChange = { [weak self] card in
             guard let self else { return }
             self.shownCard = card
+            // Another card took the place of the microphone card: its Insert and Discard are gone, so stop holding the take.
+            if let card, card.kind != .micDisconnected { self.interrupted = nil }
             // A card raised during a recording (the limit warning) must not take the recording's pill.
             if let message = card?.pillMessage, self.phase != .recording {
                 self.pill.showCardMessage(message)
@@ -199,7 +212,13 @@ final class DictationController {
         case let .locked(_, trigger): await locked(trigger)
         case let .released(nanos): released(at: nanos)
         case .discarded: await discarded()
-        case .cancelled: await cancelled()
+        case let .cancelled(reason):
+            if phase == .recording {
+                await cancelled()
+            } else if reason == .escape {
+                // Other reasons (the input source switched, the tap dropped) say nothing about takes already past the key.
+                cancelProcessing()
+            }
         }
     }
 
@@ -303,10 +322,6 @@ final class DictationController {
         // An earlier take still in flight must not press Return into this recording.
         recordingEpoch += 1
         inserter.cancelPendingReturn()
-        if pendingJobs == 0 {
-            inserter.cancelVerification()
-            verifying = nil
-        }
         corrections?.dictationStarted()
 
         var startFocus = inserter.snapshotApplication()
@@ -611,11 +626,31 @@ final class DictationController {
     private func enqueue(_ job: @escaping @MainActor (_ previous: Task<Void, Never>?) async -> Void) {
         let previous = processing
         pendingJobs += 1
+        reportProcessing()
         if phase != .recording { phase = .processing }
-        processing = Task { [self] in
+        jobSerial += 1
+        let id = jobSerial
+        let task = Task { [self] in
             await job(previous)
+            jobTasks[id] = nil
             jobFinished()
         }
+        jobTasks[id] = task
+        processing = task
+    }
+
+    private func reportProcessing() {
+        let now = pendingJobs > 0
+        guard now != reportedProcessing else { return }
+        reportedProcessing = now
+        onProcessingChanged?(now)
+    }
+
+    /// Stops every take still processing. Nothing is delivered: each row ends as cancelled and its audio stays in the
+    /// archive. A take the engine is already transcribing finishes there, but its text is dropped.
+    func cancelProcessing() {
+        guard phase == .processing else { return }
+        for task in jobTasks.values { task.cancel() }
     }
 
     private func process(
@@ -675,6 +710,7 @@ final class DictationController {
             if !shuttingDown { unsavedQueuedAudio[session.id] = nil }
         }
         guard await continueProcessing(session) else { return }
+        try Task.checkCancellation()
         guard let transcribed = try await pipeline.transcribe(audio, session: session, voicedMs: features.voicedMs) else {
             if let holdMs, let kind = silentWarning.check(features, holdMs: holdMs, now: clock.now()) {
                 presentSilentMic(kind, micName: audio.deviceName)
@@ -685,6 +721,7 @@ final class DictationController {
         }
 
         guard await continueProcessing(session) else { return }
+        try Task.checkCancellation()
         let inputs = pipeline.cleanupInputs(style: session.cleanupStyle, level: session.cleanupLevel, instructions: session.cleanupInstructions)
         let context = inputs.settings.enabled ? inserter.insertionContext() : nil
         let clipboard = inputs.needsClipboard ? inserter.clipboardText() : nil
@@ -705,9 +742,10 @@ final class DictationController {
         await session.sendReadiness?.waitUntilReady()
         // Quit may have begun while the wait was suspended.
         guard await continueProcessing(session) else { return }
+        try Task.checkCancellation()
         let result = await inserter.deliver(cleaned.text, startFocus: session.startFocus)
         // Before anything suspends: the read-back can end while the row is still being written.
-        verifying = result.verificationID.map { PendingVerification(id: $0, session: session, text: result.finalText) }
+        if let id = result.verificationID { verifying[id] = PendingVerification(id: id, session: session, text: result.finalText) }
         await pipeline.recordInsertion(result, session: session, cleaned: cleaned)
         if result.method == .paste, result.outcome == .unknown {
             corrections?.pasted(result.finalText, dictationID: session.id, target: result.target)
@@ -722,9 +760,9 @@ final class DictationController {
         } else if result.transcriptStaysOnClipboard {
             showNotice(Self.clipboardKeptNotice)
         }
-        if verifying?.id == result.verificationID {
-            verifying?.wrappedUp = true
-            if let arrived = verifying?.arrived { verificationEnded(arrived) }
+        if let id = result.verificationID, verifying[id] != nil {
+            verifying[id]?.wrappedUp = true
+            if let arrived = verifying[id]?.arrived { verificationEnded(arrived) }
         }
         if let returnEpoch, returnEpoch == recordingEpoch, phase != .recording, !Task.isCancelled, !shuttingDown {
             await inserter.pressReturnAfterInsert(for: result)
@@ -757,18 +795,20 @@ final class DictationController {
     /// The inserter's read-back of a paste ended. Held until the attempt is wrapped up, so the row it updates exists
     /// and the card it may raise isn't taken down by the attempt's own wrap-up.
     private func verificationEnded(_ verification: PasteVerification) {
-        guard var pending = verifying, pending.id == verification.id else { return }
+        guard var pending = verifying[verification.id] else { return }
         guard pending.wrappedUp else {
             pending.arrived = verification
-            verifying = pending
+            verifying[verification.id] = pending
             return
         }
-        verifying = nil
+        verifying[verification.id] = nil
         let session = pending.session
         Task { await pipeline.recordVerdict(session, verification) }
         guard verification.verdict == .notLanded else { return }
         corrections?.pasteDidNotLand(dictationID: session.id)
-        guard phase != .recording, let card = DeliveryCard.forVerdict(verification.verdict, transcript: pending.text) else { return }
+        guard let card = DeliveryCard.forVerdict(verification.verdict, transcript: pending.text) else { return }
+        // A newer take owns the screen. The miss waits for it to end.
+        if phase == .recording || pendingJobs > 0 { deferredVerdictCard = card; return }
         cards.present(card)
     }
 
@@ -969,9 +1009,21 @@ final class DictationController {
         finished()
     }
 
+    /// A cancelled job can surface as the engine's own error (a dropped URLSession request, a wrapped throw) rather than
+    /// a `CancellationError`, so the task's own state counts too.
+    private static func isCancellation(_ error: Error) -> Bool {
+        Task.isCancelled || error is CancellationError || (error as? URLError)?.code == .cancelled
+    }
+
     /// A queued dictation that failed after its capture ended. The capture may be recording something newer, so it is
     /// left alone, and so is the pill.
     private func failJob(_ session: DictationSession, _ error: Error) async {
+        if Self.isCancellation(error) {
+            releasePrewarm(session)
+            await pipeline.finish(session, .cancelled)
+            if phase != .recording { pill.showMessage("Cancelled", duration: 2.5) }
+            return
+        }
         Log.app.error("dictation failed: \(String(describing: error), privacy: .public)")
         releasePrewarm(session)
         await pipeline.finish(session, .failed, errorMessage: String(describing: error))
@@ -1008,13 +1060,22 @@ final class DictationController {
         endHandsFree()
         session = nil
         phase = pendingJobs > 0 ? .processing : .idle
+        presentDeferredVerdict()
         onAttemptFinished?()
+    }
+
+    private func presentDeferredVerdict() {
+        guard phase == .idle, let card = deferredVerdictCard else { return }
+        deferredVerdictCard = nil
+        cards.present(card)
     }
 
     /// A queued job ended, whatever the outcome. A recording started meanwhile keeps the phase.
     private func jobFinished() {
         pendingJobs -= 1
+        reportProcessing()
         if phase != .recording { phase = pendingJobs > 0 ? .processing : .idle }
+        presentDeferredVerdict()
         onAttemptFinished?()
     }
 }

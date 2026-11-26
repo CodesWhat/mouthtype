@@ -81,7 +81,7 @@ enum TapPolicy {
     /// `swallowedKey` non-nil means Fn remap mode, which is also what turns on the Fn combo emulation.
     static func decide(
         _ sample: TapSample, role: TapRole, recording: Bool, swallowedKey: UInt16?,
-        hotkeyHeld: Bool = false, pending: TapPending? = nil, idleKeysReported: Bool = true,
+        hotkeyHeld: Bool = false, pending: TapPending? = nil, idleKeysReported: Bool = true, processing: Bool = false,
         shortcut: DictationShortcut? = nil, shortcutHeld: Bool = false
     ) -> TapDecision {
         // Our own posted events (the paste, the emulated combos) are none of the hotkey's business.
@@ -113,7 +113,8 @@ enum TapPolicy {
                 return TapDecision(swallow: true, deliver: !sample.isAutorepeat, replacement: combo)
             }
         }
-        return idleKeysReported || recording || hotkeyHeld ? .observe : .passThrough
+        // While a take is processing, Esc is reported (so it can cancel the take) but never swallowed.
+        return idleKeysReported || recording || processing || hotkeyHeld ? .observe : .passThrough
     }
 
     /// Whether the event is the user typing or clicking, for the paste-spacing fallback. Our own posted events, the
@@ -162,6 +163,8 @@ enum TapPolicy {
 /// State both taps and the main actor share. Atomics and one lock only the tap thread takes, so no callback waits on the main actor.
 final class TapShared: Sendable {
     let recording = Atomic<Bool>(false)
+    /// A take is past the release and still being transcribed or delivered.
+    let processing = Atomic<Bool>(false)
     /// The hotkey is physically down, as the tap thread saw it.
     let hotkeyHeld = Atomic<Bool>(false)
     let pending = Mutex<[UInt16: TapPending]>([:])

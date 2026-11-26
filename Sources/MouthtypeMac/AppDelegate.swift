@@ -574,6 +574,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             menuBar?.refresh(); self?.builtSettingsWindow?.model.home.refreshRecoverability()
         }
         dictation.onHandsFreeChanged = { [weak menuBar] active in menuBar?.setHandsFree(active) }
+        dictation.onProcessingChanged = { [weak self] on in self?.hotkeyService?.setProcessing(on) }
         dictation.onLockEnded = { [weak self] in self?.hotkeyService?.releaseLock() }
         dictation.onAutomationLock = { [weak self] in self?.hotkeyService?.adoptLockedRecording() }
         menuBar.onStopDictation = { [weak dictation] in dictation?.stopHandsFree() }

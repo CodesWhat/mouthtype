@@ -87,6 +87,8 @@ public final class HotkeyService {
 
     public var source: HotkeySource { options.source }
 
+    private var processing = false
+
     /// For the self-test: whether the key tap exists right now.
     var keyTapInstalled: Bool { slots[.keys]?.tap != nil }
 
@@ -312,6 +314,13 @@ public final class HotkeyService {
 
     func process(_ sample: TapSample) {
         sampleObserver?(sample)
+        // Past the release there is no gesture for Esc to cancel, so it goes straight to the controller.
+        if processing, !engine.isRecording, !mapper.hotkeyHeld, sample.kind == .keyDown, !sample.isAutorepeat,
+            sample.keyCode == TapPolicy.escapeKeyCode, sample.userData != SyntheticEvents.stamp
+        {
+            eventSink.yield(.cancelled(reason: .escape))
+            return
+        }
         if mouseHeld, !mapper.hotkeyHeld, engine.isRecording, !engine.isLocked, !sample.isAutorepeat,
             sample.kind == .keyDown, sample.userData != SyntheticEvents.stamp
         {
@@ -393,11 +402,31 @@ public final class HotkeyService {
             shared.recording.store(false, ordering: .relaxed)
         } else if let slot = slots[.keys] {
             shared.recording.store(false, ordering: .relaxed)
+            // A take still processing keeps the tap up so Esc can reach it.
+            if !processing {
+                slot.retry?.cancel()
+                slot.tap?.teardown()
+                slots[.keys] = nil
+            }
+        }
+        refreshHealth()
+    }
+
+    /// Takes are waiting on the engine after the key came up. While true the key tap stays installed, listen-only for
+    /// Esc, and an Esc press cancels them. Esc is never swallowed here: it still reaches the app in front.
+    public func setProcessing(_ on: Bool) {
+        guard on != processing else { return }
+        processing = on
+        shared.processing.store(on, ordering: .relaxed)
+        if on {
+            if thread != nil, slots[.keys]?.tap == nil, let keyTap = makeTap(.keys) {
+                slots[.keys] = Slot(tap: keyTap)
+            }
+        } else if !engine.isRecording, !keyTapStaysOn, let slot = slots[.keys] {
             slot.retry?.cancel()
             slot.tap?.teardown()
             slots[.keys] = nil
         }
-        refreshHealth()
     }
 
     /// Only differences between these dates matter to the gesture engine; `nanos` is a `CGEvent.timestamp`.
