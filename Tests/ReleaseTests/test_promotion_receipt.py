@@ -31,10 +31,29 @@ class PromotionReceiptTests(unittest.TestCase):
         self.git('commit', '-qm', name)
         return self.git('rev-parse', 'HEAD')
 
-    def test_receipt_for_head_or_ancestor_is_accepted(self):
-        for sha in (self.head, self.first):
-            body = f'## Verification\n\nFull suite receipt: {sha} 2,741 tests, 0 failures\n'
-            self.assertEqual(receipt.check(body, self.head, self.root), sha)
+    def body(self, sha):
+        return f'## Verification\n\nFull suite receipt: {sha} 2,741 tests, 0 failures\n'
+
+    def test_receipt_for_head_is_accepted(self):
+        self.assertEqual(receipt.check(self.body(self.head), self.head, self.root), self.head)
+
+    def test_receipt_older_than_code_changes_is_rejected(self):
+        with self.assertRaisesRegex(RuntimeError, 'non-documentation changes: f.txt'):
+            receipt.check(self.body(self.first), self.head, self.root)
+
+    def test_receipt_followed_only_by_docs_changes_is_accepted(self):
+        (self.root / 'docs').mkdir()
+        (self.root / 'docs/a.txt').write_text('x')
+        (self.root / 'README.md').write_text('x')
+        self.git('add', 'docs', 'README.md')
+        self.git('commit', '-qm', 'docs')
+        head = self.git('rev-parse', 'HEAD')
+        self.assertEqual(receipt.check(self.body(self.head), head, self.root), self.head)
+        (self.root / 'g.txt').write_text('x')
+        self.git('add', 'g.txt')
+        self.git('commit', '-qm', 'code')
+        with self.assertRaisesRegex(RuntimeError, 'non-documentation changes: g.txt'):
+            receipt.check(self.body(self.head), self.git('rev-parse', 'HEAD'), self.root)
 
     def test_missing_receipt_is_rejected(self):
         for body in ('', None, 'ran the tests, trust me'):
