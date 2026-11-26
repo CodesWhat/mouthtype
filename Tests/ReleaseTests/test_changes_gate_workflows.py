@@ -11,7 +11,6 @@ FAIL_OPEN = (
 )
 GATED_JOBS = {
     "docs-site.yml": ["docs-site"],
-    "swift.yml": ["build", "test"],
     "website.yml": ["website"],
 }
 

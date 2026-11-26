@@ -41,15 +41,42 @@ jobs:
             .swift-format
             .github/workflows/swift.yml
 
+  # Reuse a verified green run for the same tree (a merge push or a promotion PR) instead of rebuilding on macOS. verify
+  # outputs reuse=true only for a trusted push run of this workflow on an identical tree, so receipts never come from pull
+  # request runs. It gates build and test only. CodeQL, scans and release steps are other workflows and always run.
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: read
+      contents: read
+      pull-requests: read
+      statuses: read
+    outputs:
+      reuse: ${{ steps.receipt.outputs.reuse }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+
+      - id: receipt
+        uses: CodesWhat/.github/actions/tree-receipt/verify@b85ebce168f649bcd2fddf2ff0d433fb38e30866
+
   # build and test are required checks, and the macOS queue is the slow part of CI. A workflow-level paths filter would
   # leave both checks missing and block merges, so gate at job level instead: a skipped job with the same name still
   # satisfies the required check.
   build:
-    needs: changes
+    needs: [changes, verify]
     # Skip only on an explicit false. If change detection fails, or its output is missing or masked, build anyway rather
     # than report a skipped (passing) check. !cancelled() rather than always(), so a run superseded by a newer push
     # gives its macOS runner back.
-    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.run != 'false') }}
+    # Also run unless verify succeeded with reuse=true. A failed or missing verify must run the job, never skip it, because
+    # a plain reuse != 'true' check carries an implicit success().
+    if: >-
+      ${{ !cancelled() &&
+      (needs.changes.result != 'success' || needs.changes.outputs.run != 'false') &&
+      (needs.verify.result != 'success' || needs.verify.outputs.reuse != 'true') }}
     # The code uses Xcode 27 SDK APIs (for example the FoundationModels samplingMode label), and macos-26 only ships Xcode 26.6.
     runs-on: xcode-27
     timeout-minutes: 60
@@ -118,8 +145,13 @@ jobs:
 
   # Headless tests and offscreen Settings renders run on PRs and after merge. Desktop tests run locally.
   test:
-    needs: changes
-    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.run != 'false') }}
+    needs: [changes, verify]
+    # Also run unless verify succeeded with reuse=true. A failed or missing verify must run the job, never skip it, because
+    # a plain reuse != 'true' check carries an implicit success().
+    if: >-
+      ${{ !cancelled() &&
+      (needs.changes.result != 'success' || needs.changes.outputs.run != 'false') &&
+      (needs.verify.result != 'success' || needs.verify.outputs.reuse != 'true') }}
     permissions:
       contents: read
     # The code uses Xcode 27 SDK APIs (for example the FoundationModels samplingMode label), and macos-26 only ships Xcode 26.6.
@@ -219,3 +251,45 @@ jobs:
           use_oidc: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
           fail_ci_if_error: false
         continue-on-error: true
+
+  # Final job on push runs: writes the receipt a later verify looks for. It records only when build and test actually
+  # ran and passed, so a reused result is never re-recorded and its age never refreshed.
+  receipt:
+    needs: [verify, build, test]
+    # Push only: receipts are written from push runs, so pull request and manual runs never get a status-writing credential.
+    if: ${{ always() && github.event_name == 'push' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      statuses: write
+    steps:
+      - name: Fail on a failed job or an unverified skip
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+          EVENT: ${{ github.event_name }}
+          VERIFY_RESULT: ${{ needs.verify.result }}
+          REUSE: ${{ needs.verify.outputs.reuse }}
+          BUILD_RESULT: ${{ needs.build.result }}
+          TEST_RESULT: ${{ needs.test.result }}
+        run: |
+          # Pushes always build, so a skipped job there needs a verified reuse. Pull requests may skip on the changes gate.
+          if [ "$EVENT" != pull_request ] \
+              && { [ "$BUILD_RESULT" = skipped ] || [ "$TEST_RESULT" = skipped ]; } \
+              && { [ "$VERIFY_RESULT" != success ] || [ "$REUSE" != true ]; }; then
+            echo "build or test skipped without a verified reuse"; exit 1
+          fi
+          for result in $RESULTS; do
+            case "$result" in
+              success|skipped) ;;
+              *) echo "a needed job ended as $result"; exit 1 ;;
+            esac
+          done
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: ${{ needs.build.result == 'success' && needs.test.result == 'success' }}
+        with:
+          persist-credentials: false
+
+      - uses: CodesWhat/.github/actions/tree-receipt/record@b85ebce168f649bcd2fddf2ff0d433fb38e30866
+        if: ${{ needs.build.result == 'success' && needs.test.result == 'success' }}
