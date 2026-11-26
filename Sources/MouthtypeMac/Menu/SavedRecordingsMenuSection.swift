@@ -29,6 +29,8 @@ final class SavedRecordingsMenuSection: NSObject, MenuSection, NSMenuDelegate {
         showMessage("Open to load saved recordings")
     }
 
+    var refreshesAfterTake: Bool { true }
+
     func refresh() {
         let enabled = canRecover() && !recovery.isRecovering
         for item in submenu.items where item.representedObject is RecoverableDictation {

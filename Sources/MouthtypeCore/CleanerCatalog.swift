@@ -53,6 +53,11 @@ public enum CleanerCatalog {
             repo: "mlx-community/Qwen3-4B-Instruct-2507-4bit",
             revision: "50d427756c6b1b2fe0c0a10f67fbda1fc8e82c1b", quantization: "4-bit", promptFormat: .shared, license: nil),
         MLXCleaner.Spec(
+            id: "lfm3-1.7b-mlx-4bit", displayName: "LFM3 1.7B (MLX 4-bit, evaluation only)",
+            repo: "LiquidAI/LFM3-1.7B-MLX-4bit",
+            revision: "91f34088d6946482cbcae11b85d4657093618c34", quantization: "4-bit", promptFormat: .shared,
+            license: "LFM Open License v1.0 (free under 10 million USD annual revenue)", downloadSizeMB: 991, disablesThinking: true),
+        MLXCleaner.Spec(
             id: "llama-3.2-3b-instruct-4bit", displayName: "Llama 3.2 3B Instruct (MLX 4-bit)",
             repo: "mlx-community/Llama-3.2-3B-Instruct-4bit",
             revision: "7f0dc925e0d0afb0322d96f9255cfddf2ba5636e", quantization: "4-bit", promptFormat: .shared, license: nil),

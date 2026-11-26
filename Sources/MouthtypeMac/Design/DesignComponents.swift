@@ -161,7 +161,7 @@ extension DesignPageHeader where Trailing == EmptyView {
     }
 }
 
-/// A scrolling page: header, then sections 18 pt apart. Old `SettingsForm` pages hosted inside it stop scrolling on their own.
+/// A scrolling page: header, then sections 18 pt apart.
 struct DesignPage<Trailing: View, Content: View>: View {
     let title: String
     var summary: String?
@@ -177,7 +177,6 @@ struct DesignPage<Trailing: View, Content: View>: View {
             .padding(.horizontal, 32).padding(.top, 40).padding(.bottom, 24)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .environment(\.settingsFormScrolls, false)
         .background(DesignPalette.bg)
     }
 }

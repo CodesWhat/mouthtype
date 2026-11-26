@@ -33,13 +33,30 @@ public enum ProjectFiles {
     static func resetCache() { cache.reset() }
 
     private static func indexStamp(_ root: URL) -> Date? {
-        var gitDir = root.appendingPathComponent(".git")
-        if let text = try? String(contentsOf: gitDir, encoding: .utf8), text.hasPrefix("gitdir:") {
-            let path = text.dropFirst(7).trimmingCharacters(in: .whitespacesAndNewlines)
-            gitDir = URL(fileURLWithPath: path, relativeTo: root)
-        }
+        guard let gitDir = gitDirectory(of: root) else { return nil }
         let attributes = try? FileManager.default.attributesOfItem(atPath: gitDir.appendingPathComponent("index").path)
         return attributes?[.modificationDate] as? Date
+    }
+
+    /// The git directory of `root`: its `.git` folder, or where a `.git` file points. A pointer is only followed into a
+    /// linked worktree (`.git/worktrees/<name>`) or submodule (`.git/modules/<name>`) directory that holds a `HEAD`, so a
+    /// hostile `.git` file can't aim the `index` read at an arbitrary path. Nil means no cache stamp, so the listing is never cached.
+    static func gitDirectory(of root: URL) -> URL? {
+        let dotGit = root.appendingPathComponent(".git")
+        guard let text = try? String(contentsOf: dotGit, encoding: .utf8) else { return dotGit }
+        guard text.hasPrefix("gitdir:") else { return nil }
+        let path = text.dropFirst(7).trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !path.isEmpty, !path.contains("\0") else { return nil }
+        let target = URL(fileURLWithPath: path, relativeTo: root).standardizedFileURL.resolvingSymlinksInPath()
+        let parts = target.pathComponents
+        guard let dot = parts.lastIndex(of: ".git"), dot + 2 < parts.count,
+            ["worktrees", "modules"].contains(parts[dot + 1])
+        else { return nil }
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: target.appendingPathComponent("HEAD").path, isDirectory: &isDirectory),
+            !isDirectory.boolValue
+        else { return nil }
+        return target
     }
 
     /// Never `/usr/bin/git`: without developer tools it is a stub that opens an install prompt.

@@ -78,6 +78,7 @@ final class GlassPillView: NSView, PillSkinView {
     var isLocked: Bool { classic.isLocked }
     var messageScrollDistance: Int { classic.messageScrollDistance }
     var controlFrames: [PillControl: CGRect] { classic.controlFrames }
+    var bodyFrame: CGRect { classic.bodyFrame }
     var messageLines: [ClassicPillLayout.MessageLine] { classic.messageLines }
     var messageSize: CGSize { classic.messageSize }
 

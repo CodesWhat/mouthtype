@@ -279,6 +279,67 @@ import Testing
         controller.hide()
     }
 
+    @Test(arguments: PillSkinKind.allCases) func clickingTheProcessingPillFiresPillOnce(kind: PillSkinKind) {
+        let controller = makePillController(skin: kind)
+        var fired: [PillControl] = []
+        controller.onControl = { fired.append($0) }
+        controller.showProcessing(cancellable: true)
+        let body = controller.skin.bodyFrame
+        click(controller, at: CGPoint(x: body.midX, y: body.midY))
+        click(controller, at: CGPoint(x: 1, y: 1))
+        #expect(fired == [.pill])
+        #expect(controller.host.toolTip == PillController.processingHelp)
+        controller.hide()
+    }
+
+    @Test(arguments: PillSkinKind.allCases) func aNonCancellableProcessingPillHasNoClickTargetOrTooltip(kind: PillSkinKind) {
+        let controller = makePillController(skin: kind)
+        var fired: [PillControl] = []
+        controller.onControl = { fired.append($0) }
+        controller.showProcessing()
+        let body = controller.skin.bodyFrame
+        let centre = CGPoint(x: body.midX, y: body.midY)
+        click(controller, at: centre)
+        #expect(fired.isEmpty)
+        #expect(controller.host.toolTip == nil)
+        let screen = CGPoint(x: controller.panel.frame.minX + centre.x, y: controller.panel.frame.minY + centre.y)
+        controller.updateInteractivity(pointer: screen)
+        #expect(controller.panel.ignoresMouseEvents)
+        controller.hide()
+    }
+
+    @Test(arguments: PillSkinKind.allCases) func panelSeesTheMouseOverTheBodyWhileProcessing(kind: PillSkinKind) {
+        let controller = makePillController(skin: kind)
+        func screen(_ p: CGPoint) -> CGPoint {
+            CGPoint(x: controller.panel.frame.minX + p.x, y: controller.panel.frame.minY + p.y)
+        }
+        controller.showProcessing(cancellable: true)
+        let body = controller.skin.bodyFrame
+        controller.updateInteractivity(pointer: screen(CGPoint(x: body.midX, y: body.midY)))
+        #expect(!controller.panel.ignoresMouseEvents)
+        controller.updateInteractivity(pointer: screen(CGPoint(x: 1, y: 1)))
+        #expect(controller.panel.ignoresMouseEvents)
+        controller.updateInteractivity(pointer: screen(CGPoint(x: body.midX, y: body.midY)))
+        controller.showRecording()
+        controller.updateInteractivity(pointer: screen(CGPoint(x: body.midX, y: body.midY)))
+        #expect(controller.panel.ignoresMouseEvents)
+        controller.hide()
+    }
+
+    @Test(arguments: PillSkinKind.allCases) func clicksOnThePillBodyOutsideProcessingDoNothing(kind: PillSkinKind) {
+        let controller = makePillController(skin: kind)
+        var fired: [PillControl] = []
+        controller.onControl = { fired.append($0) }
+        controller.showRecording()
+        let body = controller.skin.bodyFrame
+        click(controller, at: CGPoint(x: body.midX, y: body.midY))
+        controller.showHandsFree()
+        click(controller, at: CGPoint(x: body.midX, y: body.midY))
+        #expect(fired.isEmpty)
+        #expect(controller.host.toolTip == nil)
+        controller.hide()
+    }
+
     @Test(arguments: PillSkinKind.allCases) func releasingOutsideCancelsTheClick(kind: PillSkinKind) {
         let controller = makePillController(skin: kind)
         var fired: [PillControl] = []
@@ -297,8 +358,6 @@ import Testing
         controller.showHandsFree()
         let stop = centre(controller, .stop)
         controller.showRecording()
-        click(controller, at: stop)
-        controller.showProcessing()
         click(controller, at: stop)
         #expect(fired.isEmpty)
         #expect(controller.host.hitTest(stop) == nil)

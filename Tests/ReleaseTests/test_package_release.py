@@ -96,6 +96,63 @@ class ReleaseGuardsTests(unittest.TestCase):
         self.assertEqual(marker.read_text(), 'preserve this artifact')
 
 
+class EvalReceiptTests(unittest.TestCase):
+    HEAD = 'a' * 40
+
+    def setUp(self):
+        self._temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._temp.cleanup)
+        self.directory = pathlib.Path(self._temp.name)
+        self.recognition = json.dumps({'clips': [{}, {}]}).encode()
+        (self.directory / 'recognition.json').write_bytes(self.recognition)
+
+    def write(self, **changes):
+        import hashlib
+        receipt = {'schema': 1, 'kind': 'real-model-eval', 'model': 'parakeet-tdt-v3', 'source_head': self.HEAD,
+                   'clips': 2, 'recognition_sha256': hashlib.sha256(self.recognition).hexdigest()}
+        receipt.update(changes)
+        path = self.directory / 'eval-receipt.json'
+        path.write_text(json.dumps(receipt))
+        return path
+
+    def test_matching_receipt_is_accepted(self):
+        self.assertEqual(release.verify_eval_receipt(self.write(), self.HEAD)['clips'], 2)
+
+    def test_receipt_for_another_commit_is_rejected(self):
+        with self.assertRaisesRegex(RuntimeError, 'different commit'):
+            release.verify_eval_receipt(self.write(source_head='b' * 40), self.HEAD)
+
+    def test_missing_or_garbled_receipt_is_rejected(self):
+        with self.assertRaisesRegex(RuntimeError, 'Unreadable'):
+            release.verify_eval_receipt(self.directory / 'missing.json', self.HEAD)
+        bad = self.directory / 'bad.json'
+        bad.write_text('[]')
+        with self.assertRaisesRegex(RuntimeError, 'Not a real-model'):
+            release.verify_eval_receipt(bad, self.HEAD)
+
+    def test_receipt_without_model_or_clips_is_rejected(self):
+        for change in ({'model': ''}, {'clips': 0}, {'clips': True}):
+            with self.subTest(change=change):
+                with self.assertRaises(RuntimeError):
+                    release.verify_eval_receipt(self.write(**change), self.HEAD)
+
+    def test_edited_or_failed_recognition_is_rejected(self):
+        path = self.write()
+        (self.directory / 'recognition.json').write_text('{"clips": []}')
+        with self.assertRaisesRegex(RuntimeError, 'does not match'):
+            release.verify_eval_receipt(path, self.HEAD)
+        self.recognition = json.dumps({'error': 'boom', 'clips': [{}, {}]}).encode()
+        (self.directory / 'recognition.json').write_bytes(self.recognition)
+        with self.assertRaisesRegex(RuntimeError, 'completed'):
+            release.verify_eval_receipt(self.write(), self.HEAD)
+
+    def test_missing_recognition_file_is_rejected(self):
+        path = self.write()
+        (self.directory / 'recognition.json').unlink()
+        with self.assertRaisesRegex(RuntimeError, 'recognition.json'):
+            release.verify_eval_receipt(path, self.HEAD)
+
+
 class NotaryAuthTests(unittest.TestCase):
     def setUp(self):
         self._temp = tempfile.TemporaryDirectory()

@@ -1,0 +1,30 @@
+name: Promotion receipt
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, edited, synchronize, reopened]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: promotion-receipt-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  full-suite-receipt:
+    # Promotion PRs come from a dev branch. Other PRs into main (hotfix, docs) keep the normal checks only.
+    if: ${{ startsWith(github.event.pull_request.head.ref, 'dev/') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Check the full-suite receipt
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+        run: python3 scripts/check-promotion-receipt.py --head "$PR_HEAD"

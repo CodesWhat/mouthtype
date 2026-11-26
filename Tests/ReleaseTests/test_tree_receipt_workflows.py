@@ -13,7 +13,7 @@ CHANGES_GATE = (
 FAIL_OPEN = (
     "(needs.verify.result != 'success' || needs.verify.outputs.reuse != 'true')"
 )
-REUSE_JOBS = ["build", "test"]
+REUSE_JOBS = ["build", "test", "bundle"]
 
 
 def job_block(text, job):
@@ -57,12 +57,15 @@ class TreeReceiptWorkflowTests(unittest.TestCase):
                 self.assertIn(FAIL_OPEN, condition)
                 self.assertIn(CHANGES_GATE, condition)
 
-    def test_record_runs_only_after_build_and_test_succeed(self):
+    def test_record_runs_only_after_build_test_and_bundle_succeed(self):
         block = job_block(self.text, "receipt")
-        self.assertIn("needs: [verify, build, test]", block)
+        self.assertIn("needs: [verify, build, test, bundle]", block)
         self.assertIn("statuses: write", block)
         self.assertEqual(
-            block.count("needs.build.result == 'success' && needs.test.result == 'success'"), 2
+            block.count(
+                "needs.build.result == 'success' && needs.test.result == 'success' && needs.bundle.result == 'success'"
+            ),
+            2,
         )
         self.assertIn("[ \"$REUSE\" != true ]", block)
 

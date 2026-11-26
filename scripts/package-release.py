@@ -48,6 +48,36 @@ def verify_source(root, version):
     return head
 
 
+def verify_eval_receipt(path, source):
+    """Require a real-model eval receipt for exactly this commit, with its recognition.json beside it.
+
+    scripts/evaluate-mac-daily-use.py writes the receipt only after the real speech model transcribed every clip.
+    """
+    path = Path(path)
+    try:
+        receipt = json.loads(path.read_text())
+    except (OSError, ValueError) as error:
+        raise RuntimeError(f'Unreadable eval receipt {path}: {error}')
+    if not isinstance(receipt, dict) or receipt.get('schema') != 1 or receipt.get('kind') != 'real-model-eval':
+        raise RuntimeError('Not a real-model eval receipt')
+    if receipt.get('source_head') != source:
+        raise RuntimeError('Eval receipt is for a different commit than the release source')
+    clips = receipt.get('clips')
+    if not receipt.get('model') or not isinstance(clips, int) or isinstance(clips, bool) or clips < 1:
+        raise RuntimeError('Eval receipt names no model or no evaluated clips')
+    recognition = path.parent / 'recognition.json'
+    try:
+        data = recognition.read_bytes()
+        report = json.loads(data)
+    except (OSError, ValueError) as error:
+        raise RuntimeError(f'Eval receipt has no readable recognition.json beside it: {error}')
+    if hashlib.sha256(data).hexdigest() != receipt.get('recognition_sha256'):
+        raise RuntimeError('recognition.json does not match the eval receipt')
+    if report.get('error') or len(report.get('clips', [])) != clips:
+        raise RuntimeError('recognition.json does not show a completed evaluation')
+    return receipt
+
+
 # Fixed so the path-dependent bytes in the binary match for anyone rebuilding the tag.
 # docs/REPEATABLE-BUILD.md and scripts/verify-repeatable-build.sh use the same path.
 RELEASE_SCRATCH_PATH = '/private/tmp/mouthtype-release-scratch'
@@ -187,12 +217,15 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--notary-profile', help='Keychain profile; overrides the default App Store Connect API key')
     parser.add_argument('--output-dir', required=True, type=Path)
+    parser.add_argument('--eval-receipt', required=True, type=Path,
+                        help='eval-receipt.json from scripts/evaluate-mac-daily-use.py run on this exact commit')
     args = parser.parse_args()
     auth = notary_auth(args.notary_profile)
     root = Path(__file__).resolve().parent.parent
     metadata = release_metadata(root)
     version = metadata['MouthtypeDisplayVersion']
     source = verify_source(root, version)
+    verify_eval_receipt(args.eval_receipt, source)
     if run(['uname', '-m']).strip() != 'arm64':
         raise RuntimeError('Build this release on an Apple Silicon Mac')
     output = create_output(args.output_dir.resolve(), version)

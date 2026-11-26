@@ -50,6 +50,7 @@ let package = Package(
             name: "mouthtype-bench",
             dependencies: [
                 "MouthtypeCore",
+                .product(name: "FluidAudio", package: "FluidAudio"),
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
             ],
             exclude: ["Fixtures/normalization-cases.json"],

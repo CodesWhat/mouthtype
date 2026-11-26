@@ -3,6 +3,8 @@ import AppKit
 /// The two cancel and stop controls a locked hands-free pill shows.
 enum PillControl: Hashable, Sendable {
     case cancel, stop
+    /// The whole pill, clickable only while a take is processing.
+    case pill
 }
 
 enum PillSkinKind: String, CaseIterable, Sendable {
@@ -234,6 +236,8 @@ protocol PillSkinView: NSView {
     var messageScrollDistance: Int { get }
     /// Drawn frames of the controls in this view's coordinates; empty unless a locked recording is showing.
     var controlFrames: [PillControl: CGRect] { get }
+    /// The pill's own capsule in this view's coordinates, which a click cancels while a take is processing.
+    var bodyFrame: CGRect { get }
     /// The capsule the current message is laid out in, zero for a skin whose pill doesn't change size with its text.
     var messageSize: CGSize { get }
 

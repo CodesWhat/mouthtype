@@ -290,6 +290,83 @@ import os
         #expect(box.replies == [true])
     }
 
+    @Test func aQuitWithdrawnAfterTheOpenSkippedItsQuarantineRunsTheOpenAgain() async {
+        let held = HeldStoreOpen(outcome: StoreOpenOutcome(failure: "skipped"), patience: .seconds(20))
+        defer { held.release() }
+        let seen = OSAllocatedUnfairLock<[StoreOpenActivity]>(initialState: [])
+        let delegate = AppDelegate()
+        let opens = OSAllocatedUnfairLock(initialState: 0)
+        delegate.openStore = { activity in
+            seen.withLock { $0.append(activity) }
+            if opens.withLock({
+                $0 += 1; return $0
+            }) > 1 {
+                return StoreOpenOutcome(quarantinedTo: URL(fileURLWithPath: "/tmp/moved"))
+            }
+            return held.open(activity)
+        }
+        delegate.storeQuitDeadline = .milliseconds(30)
+        // The quit is committed when the app asks the updater whether it may go ahead; that is the moment the stuck open
+        // reaches its quarantine step, so it is refused. The updater then says no, which cancels the quit.
+        delegate.appUpdater = AppUpdater(
+            driver: nil,
+            activity: {
+                if let activity = seen.withLock({ $0.first }), activity.state == .quitCommitted {
+                    #expect(!activity.beginQuarantine())
+                    held.release()
+                }
+                return .recovering
+            })
+        delegate.appUpdater.updateWillRelaunch()
+        let box = ReplyBox()
+        delegate.replyToTermination = { _, ready in box.replies.append(ready) }
+        var finished: [StoreOpenOutcome] = []
+        delegate.openStoreOffMain { finished.append($0) }
+        #expect(delegate.applicationShouldTerminate(NSApplication.shared) == .terminateLater)
+        await replies(1, in: box)
+        #expect(box.replies == [false])
+        for _ in 0..<400 where finished.isEmpty { try? await Task.sleep(for: .milliseconds(5)) }
+        #expect(opens.withLock { $0 } == 2)
+        #expect(finished.count == 1)
+        #expect(finished.first?.quarantinedTo != nil)
+        #expect(!delegate.storeOpenInFlight)
+    }
+
+    @Test func anOpenThatSkippedItsQuarantineWhileTheQuitIsStillCommittedRunsAgainOnceTheQuitIsWithdrawn() async {
+        let held = HeldStoreOpen(outcome: StoreOpenOutcome(failure: "skipped"), patience: .seconds(20))
+        defer { held.release() }
+        let seen = OSAllocatedUnfairLock<[StoreOpenActivity]>(initialState: [])
+        let opens = OSAllocatedUnfairLock(initialState: 0)
+        let delegate = AppDelegate()
+        delegate.openStore = { activity in
+            seen.withLock { $0.append(activity) }
+            if opens.withLock({
+                $0 += 1; return $0
+            }) > 1 {
+                return StoreOpenOutcome(quarantinedTo: URL(fileURLWithPath: "/tmp/moved"))
+            }
+            return held.open(activity)
+        }
+        var finished: [StoreOpenOutcome] = []
+        delegate.openStoreOffMain { finished.append($0) }
+        for _ in 0..<400 where seen.withLock({ $0.isEmpty }) { try? await Task.sleep(for: .milliseconds(5)) }
+        guard let activity = seen.withLock({ $0.first }) else { Issue.record("open never started"); return }
+        // The deadline committed the quit and a draft prompt is up; the open reaches its quarantine and is refused.
+        #expect(activity.commitQuit())
+        #expect(!activity.beginQuarantine())
+        held.release()
+        try? await Task.sleep(for: .milliseconds(150))
+        #expect(finished.isEmpty)
+        #expect(opens.withLock { $0 } == 1)
+        // Keep Editing.
+        activity.withdrawQuit()
+        for _ in 0..<400 where finished.isEmpty { try? await Task.sleep(for: .milliseconds(5)) }
+        #expect(opens.withLock { $0 } == 2)
+        #expect(finished.count == 1)
+        #expect(finished.first?.quarantinedTo != nil)
+        #expect(!delegate.storeOpenInFlight)
+    }
+
     @Test func aQuitCancelledDuringAnUpdateInstallUnblocksNewWork() {
         let delegate = AppDelegate()
         var activity = UpdateActivity.recovering
@@ -419,6 +496,27 @@ private final class HeldStoreOpen: Sendable {
 }
 
 @Suite struct PhrasesHealthTests {
+    @Test func aTakeReadsThePhrasesOnlyWhenTheFileChanges() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("phrases-snippets-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let url = dir.appendingPathComponent("phrases.json")
+        let phrases = FilePhrases(url: url)
+        #expect(phrases.snippets().isEmpty)
+        #expect(phrases.snippets().isEmpty)
+        #expect(phrases.snippetReads.withLock { $0 } == 1)
+        try phrases.save(original: nil, phrase: Snippet(trigger: "my email", expansion: "a@b.co"))
+        let saved = phrases.snippets()
+        #expect(saved.count == 1)
+        #expect(phrases.snippets() == saved)
+        #expect(phrases.snippetReads.withLock { $0 } == 2)
+        // A file broken by hand keeps the last good list and is not re-read until it changes again.
+        try Data("not json at all".utf8).write(to: url)
+        #expect(phrases.snippets() == saved)
+        #expect(phrases.snippets() == saved)
+        #expect(phrases.snippetReads.withLock { $0 } == 3)
+    }
+
     @Test func theFileIsReadAgainOnlyWhenItChanges() throws {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("phrases-health-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)

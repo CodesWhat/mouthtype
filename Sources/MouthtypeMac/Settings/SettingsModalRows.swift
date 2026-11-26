@@ -26,6 +26,3 @@ struct ModalCardNote: View {
             .padding(.horizontal, 14).padding(.vertical, 9).frame(maxWidth: .infinity, alignment: .leading)
     }
 }
-
-/// Wraps an optional string as a popup choice list for enum-backed settings.
-func modalChoices<Value: Hashable>(_ pairs: [(String, Value)]) -> [DesignChoice<Value>] { pairs.map { DesignChoice($0.0, $0.1) } }

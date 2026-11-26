@@ -18,8 +18,11 @@ class SwiftCoverageTests(unittest.TestCase):
             codecov = products / 'codecov'
             codecov.mkdir(parents=True)
             profiles = []
-            for name in ('First', 'Second'):
-                source = directory / f'{name}.c'
+            sources = {'First': 'First.c', 'Second': 'Second.c', 'Bench': 'mouthtype-bench/Bench.c',
+                       'Pipeline': 'PipelineSelfTest.c'}
+            for name, relative in sources.items():
+                source = directory / relative
+                source.parent.mkdir(exist_ok=True)
                 source.write_text('int main(void) { return 0; }\n')
                 binary = products / f'{name}.xctest' / 'Contents/MacOS' / name
                 binary.parent.mkdir(parents=True)
@@ -50,6 +53,9 @@ class SwiftCoverageTests(unittest.TestCase):
             report = (directory / 'coverage-report.txt').read_text()
             self.assertIn('First.c', report)
             self.assertIn('Second.c', report)
+            self.assertNotIn('Bench.c', report)
+            self.assertNotIn('PipelineSelfTest.c', report)
+            self.assertNotIn('Bench.c', (directory / 'coverage.lcov').read_text())
             self.assertIn('SF:', (directory / 'coverage.lcov').read_text())
             self.assertIn('Total line coverage: 100.00%', (directory / 'summary.md').read_text())
             self.assertIn('Swift_line_coverage-100.00%25-blue', (directory / 'summary.md').read_text())

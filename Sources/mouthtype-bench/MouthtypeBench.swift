@@ -15,11 +15,14 @@ struct MouthtypeBench: AsyncParsableCommand {
 }
 
 struct List: ParsableCommand {
-    static let configuration = CommandConfiguration(abstract: "Print the engine catalog.")
+    static let configuration = CommandConfiguration(abstract: "Print the engine catalog and the bench-only bake-off candidates.")
 
     func run() {
         for entry in EngineCatalog.entries {
             print("\(entry.id)\t\(entry.displayName)")
+        }
+        for id in BenchEngines.extraIDs {
+            print("\(id)\t\((try? BenchEngines.make(id: id).displayName) ?? id)\t(bench only)")
         }
     }
 }
@@ -47,6 +50,7 @@ struct Run: AsyncParsableCommand {
     @Option(help: "Timed runs per clip.") var runs: Int = 5
     @Option(help: "Report output directory.") var out: String = "docs/benchmarks"
     @Option(help: "Comma-separated names to bias recognition toward, for engines that support it (Parakeet, Whisper).") var boostTerms: String?
+    @Flag(help: "Use the English hint enabled by the Mac app.") var englishHint = false
 
     private static let warmups = 1
     private static let coldTimeout: TimeInterval = 20 * 60
@@ -56,7 +60,7 @@ struct Run: AsyncParsableCommand {
         let ids =
             engines.map { $0.split(separator: ",").map { String($0).trimmingCharacters(in: .whitespaces) } }
             ?? EngineCatalog.ids
-        for id in ids { _ = try EngineCatalog.make(id: id) }
+        for id in ids { _ = try BenchEngines.make(id: id) }
 
         let corpusURL = URL(fileURLWithPath: corpus)
         if corpus == Corpus.defaultDirectory, !FileManager.default.fileExists(atPath: corpusURL.path) {
@@ -126,7 +130,7 @@ struct Run: AsyncParsableCommand {
             [
                 "engine-worker", id, "--mode", mode, "--corpus", corpus,
                 "--runs", String(runs), "--warmups", String(Self.warmups), "--result", resultURL.path,
-            ] + (boostTerms.map { ["--boost-terms", $0] } ?? [])
+            ] + (boostTerms.map { ["--boost-terms", $0] } ?? []) + (englishHint ? ["--english-hint"] : [])
         do {
             let outcome = try await runChild(executable: executable, arguments: arguments, logURL: logURL, timeout: timeout)
             if outcome.timedOut {
