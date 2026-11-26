@@ -1941,16 +1941,52 @@ private final class FakeCorrections: CorrectionObserving {
         #expect(rig.store.verdicts.map(\.outcome) == ["confirmed"] && rig.cards.presented.isEmpty)
     }
 
-    @Test func aNewDictationCancelsThePendingReadBack() async {
+    @Test func aNewDictationLeavesThePendingReadBackRunning() async {
         let rig = Rig()
         rig.inserter.result = pastedResult()
         await rig.dictate()
         let before = rig.inserter.cancelledVerifications
         await rig.controller.handle(.pressed(at: 1))
-        #expect(rig.inserter.cancelledVerifications == before + 1)
+        #expect(rig.inserter.cancelledVerifications == before)
+    }
+
+    @Test func aMissThatArrivesDuringTheNextTakeIsRecordedAndShownOnceTheTakeEnds() async {
+        let rig = Rig()
+        rig.inserter.result = pastedResult()
+        await rig.dictate()
+        await rig.controller.handle(.pressed(at: keyDown + 1))
         rig.inserter.verify(PasteVerification(id: 1, verdict: .notLanded, receiptMs: nil))
-        await rig.settle()
-        #expect(rig.store.verdicts.isEmpty && rig.cards.presented.isEmpty)
+        await rig.until { rig.store.verdicts.map(\.outcome) == ["not landed"] }
+        #expect(rig.cards.presented.filter { $0.kind == .pasteFailed }.isEmpty)
+        rig.inserter.result = pastedResult(id: 2)
+        await rig.controller.handle(.released(at: keyUp + 1))
+        await rig.controller.waitForProcessing()
+        await rig.until { rig.cards.presented.contains(.notLanded(" Hello world.")) }
+    }
+
+    @Test func escapeWhileProcessingCancelsTheTakeWithoutDelivering() async {
+        let rig = Rig()
+        rig.engine.holds = 1
+        await rig.controller.handle(.pressed(at: keyDown))
+        await rig.controller.handle(.released(at: keyUp))
+        await rig.engine.waitForHeld()
+        await rig.controller.handle(.cancelled(reason: .escape))
+        rig.engine.releaseHeld()
+        await rig.controller.waitForProcessing()
+        #expect(rig.inserter.delivered.isEmpty)
+        #expect(rig.store.finishes.map(\.0).last == .cancelled)
+        #expect(rig.controller.phase == .idle)
+    }
+
+    @Test func dismissingTheMicrophoneCardReleasesTheHeldInterruption() async {
+        let rig = Rig()
+        await rig.controller.handle(.pressed(at: keyDown))
+        rig.capture.interrupt()
+        await rig.until { rig.controller.phase == .idle }
+        rig.cards.onDismissed?(.micDisconnected(seconds: 2))
+        await rig.controller.insertInterrupted()
+        #expect(rig.inserter.delivered.isEmpty)
+        #expect(rig.store.finishes.map(\.0) == [.failed])
     }
 
     @Test func aPasteWithNoReadBackWritesNoVerdict() async {
