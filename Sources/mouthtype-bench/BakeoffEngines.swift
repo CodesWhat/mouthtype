@@ -80,7 +80,7 @@ actor NemotronUnifiedEngine: MeasuredTranscriber {
         manager = UnifiedAsrManager(config: config)
         modelDirectory = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("FluidAudio/Models", isDirectory: true)
-            .appendingPathComponent("nemotron-labs-unified-asr-0.6b-coreml/coreml", isDirectory: true)
+            .appendingPathComponent("nemotron-labs-unified-asr/coreml", isDirectory: true)
     }
 
     func prepare() async throws { _ = try await prepareMeasured() }
