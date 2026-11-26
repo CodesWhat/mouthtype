@@ -204,7 +204,7 @@ import Testing
         #expect(try store.dictation(id: "x")?.audioPath != nil)
     }
 
-    @Test func pruneKeepsAStalePartialWhoseRowIsGone() throws {
+    @Test func pruneRemovesAStalePartialWhoseRowIsGone() throws {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("mouthtype-retention-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: dir) }
         let store = try TranscriptStore(url: dir.appendingPathComponent("store.sqlite"))
@@ -213,7 +213,7 @@ import Testing
         try archive.appendPartial(samples: [0.1, 0.2], id: "no-row")
         try FileManager.default.setAttributes([.modificationDate: now.addingTimeInterval(-400 * 86_400)], ofItemAtPath: archive.partialURL(for: "no-row").path)
         try AudioRetentionMaintenance.prune(archive: archive, store: store, policy: AudioRetentionPolicy(age: .days14), now: now)
-        #expect(FileManager.default.fileExists(atPath: archive.partialURL(for: "no-row").path))
+        #expect(!FileManager.default.fileExists(atPath: archive.partialURL(for: "no-row").path))
     }
 
     @Test func pruneLeavesPointersAloneWhenTheArchiveDirectoryIsEmpty() throws {

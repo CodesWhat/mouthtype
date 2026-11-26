@@ -89,7 +89,7 @@ public struct AudioArchive: Sendable {
 
     /// Deletes files older than `cutoff`, then the oldest of the rest until the total fits `maxTotalBytes`.
     /// When supplied, only `eligibleIDs` are counted or removed. `recoveryIDs` (failed and unfinished takes) and crash
-    /// partials join them only once their file is older than `recoveryCutoff`. A file with no matching row (an id missing from `knownIDs`, every id with a row) counts like a failed take: kept until
+    /// partials join them only once their file is older than `recoveryCutoff`. A file with no matching row (an id missing from `knownIDs`), finished or in progress, counts like a failed take: kept until
     /// `recoveryCutoff`, then subject to the age and size limit. Without `knownIDs` such files are left alone. A delete that fails leaves its file for the next sweep, and the rest still run. Returns the ids of rows
     /// whose WAV was actually removed so the caller can null `audio_path` (partials are not reported); throws only when a
     /// delete failed and none succeeded.
@@ -108,7 +108,7 @@ public struct AudioArchive: Sendable {
             var id = url.deletingPathExtension().lastPathComponent
             if isPartial {
                 id = String(id.dropLast(".partial".count))
-                guard let recoveryCutoff, date < recoveryCutoff, knownIDs?.contains(id) != false else { continue }
+                guard let recoveryCutoff, date < recoveryCutoff else { continue }
             } else if let eligibleIDs, !eligibleIDs.contains(id) {
                 // A WAV with no row (the store was missing, `begin` failed, or the database was replaced) is held for the same
                 // grace as a failed take, then follows the age and size limit instead of living forever.
