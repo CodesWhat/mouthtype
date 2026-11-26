@@ -239,7 +239,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private let micCapture = MicCapture()
-    private let audioQuiet = RecordingAudioQuiet(output: CoreAudioQuietOutput(), enabled: { QuietAudioPreference.isEnabled() })
+    private let audioQuiet = RecordingAudioQuiet(
+        output: CoreAudioQuietOutput(), enabled: { QuietAudioPreference.isEnabled() }, marker: DefaultsQuietMuteMarker())
     private let microphoneSection = MicrophoneMenuSection()
     private let systemSection = SystemAccessMenuSection()
     private let accessibility = AccessibilityAccess()
@@ -448,6 +449,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     private func completeLaunch(arguments: [String], menuBar: MenuBarController) {
         // Undo a Fn remap a previous run died with before anything reads the keyboard.
         _ = fnRemap.restoreIfStale()
+        // Unmute an output a previous run muted and died before restoring.
+        audioQuiet.recoverFromCrash()
         // Nothing that reads history exists yet: no pill, hotkey, menu sections or recovery. URLs queue until finishLaunch,
         // a quit waits in beginTermination, and a Home window built early shows no takes until finishLaunch re-wires it.
         openStoreOffMain { [self] opened in continueLaunch(arguments: arguments, menuBar: menuBar, opened: opened) }
@@ -584,7 +587,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         historySection = history
         dictation.onAttemptFinished = { [weak self, weak menuBar] in
-            menuBar?.refresh(); self?.builtSettingsWindow?.model.home.refreshRecoverability()
+            menuBar?.refreshAfterTake(); self?.builtSettingsWindow?.model.home.refreshRecoverability()
         }
         dictation.onHandsFreeChanged = { [weak menuBar] active in menuBar?.setHandsFree(active) }
         dictation.onProcessingChanged = { [weak self] on in self?.hotkeyService?.setProcessing(on) }

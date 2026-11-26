@@ -155,7 +155,7 @@ Preview input is bounded to eight seconds of audio; that is not an eight-second 
 A device that was already muted is left alone. Mouthtype never changes volume. An observed later mute or volume change gives control back to the user, so Mouthtype does not unmute that device. It checks the device UID again before restoring, rather than writing to an unrelated device that reused its numeric ID. Switching output during a recording can make the new output audible; Mouthtype only owns the original output. Outputs without a settable master mute are left unchanged and dictation continues.
 
 > [!WARNING]
-> A crash or force-quit cannot run normal restoration. Check macOS output mute if that happens.
+> A crash or force-quit cannot run normal restoration. Mouthtype records the muted output, and the next launch unmutes it if it is still the default output and still muted, then notes that in the log. If you changed outputs in the meantime, check macOS output mute yourself.
 
 > [!NOTE]
 > Core Audio exposes property notifications, not the identity of the person or app making a change, or an atomic compare-and-set. Mouthtype registers its change listener after its own mute write and restores only if no later change was observed and the original device is still muted. Same-value writes and changes inside the registration/restore windows cannot be attributed exactly. This option does not pause media players or prevent call apps from hearing the microphone. Physical device behavior still needs coordinated testing.
