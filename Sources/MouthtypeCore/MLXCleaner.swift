@@ -23,6 +23,8 @@ public actor MLXCleaner: MeasuredCleaner {
         public let license: String?
         /// Size of the snapshot on disk, to show before a download.
         public var downloadSizeMB: Int = 0
+        /// Passes `enable_thinking: false` to the chat template on the shared prompt, for models that reason by default.
+        public var disablesThinking: Bool = false
     }
 
     public nonisolated let id: String
@@ -207,17 +209,23 @@ public actor MLXCleaner: MeasuredCleaner {
     }
 
     private nonisolated func promptInput(_ transcript: String, context: CleanupContext) throws -> UserInput {
+        let sharedContext: [String: any Sendable]? = spec.disablesThinking ? ["enable_thinking": false] : nil
         switch spec.promptFormat {
         case .shared where context.voiceEdit != nil:
-            return UserInput(chat: [.system(context.voiceEdit!.system), .user(context.voiceEdit!.user)])
+            return UserInput(
+                chat: [.system(context.voiceEdit!.system), .user(context.voiceEdit!.user)], additionalContext: sharedContext)
         case .s1Mini where context.voiceEdit != nil:
             throw CleanerError.unavailable(reason: "\(displayName) can't run voice edits.")
         case .shared where context.transform != nil:
-            return UserInput(chat: [.system(context.transform!.systemPrompt()), .user(TextTransform.userMessage(transcript))])
+            return UserInput(
+                chat: [.system(context.transform!.systemPrompt()), .user(TextTransform.userMessage(transcript))],
+                additionalContext: sharedContext)
         case .s1Mini where context.transform != nil:
             throw CleanerError.unavailable(reason: "\(displayName) can't run text transforms.")
         case .shared:
-            return UserInput(chat: [.system(CleanupPrompt.system(for: context)), .user(CleanupPrompt.user(transcript, context: context))])
+            return UserInput(
+                chat: [.system(CleanupPrompt.system(for: context)), .user(CleanupPrompt.user(transcript, context: context))],
+                additionalContext: sharedContext)
         case .s1Mini:
             return UserInput(
                 chat: [.system(S1MiniPrompt.system), .user(S1MiniPrompt.user(transcript, controls: context.s1Controls))],
