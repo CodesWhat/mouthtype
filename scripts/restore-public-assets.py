@@ -27,6 +27,29 @@ def sha256(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def derive_source_evidence(version, staged, temporary):
+    """Rebuild what stage-public-release.py adds around the source archive.
+
+    The manifest attached to a GitHub release comes from package-release.py and has no
+    sourceArchive/sourceSHA256, and the source .sha256 may not be attached. publish-website.py needs
+    all three, so derive them from the verified source archive the same way staging does.
+    """
+    name = f'Mouthtype-{version}-source.tar.gz'
+    if name not in staged or 'release-manifest.json' not in staged:
+        return
+    digest = sha256(staged[name])
+    if f'{name}.sha256' not in staged:
+        checksum = temporary / f'{name}.sha256'
+        checksum.write_text(f'{digest}  {name}\n')
+        staged[f'{name}.sha256'] = checksum
+    manifest = json.loads(staged['release-manifest.json'].read_text())
+    if 'sourceArchive' in manifest and 'sourceSHA256' in manifest:
+        return
+    public_manifest = temporary / 'public-release-manifest.json'
+    public_manifest.write_text(json.dumps({**manifest, 'sourceArchive': name, 'sourceSHA256': digest}, indent=2) + '\n')
+    staged['release-manifest.json'] = public_manifest
+
+
 def restore(releases, public_dir, download, versions=None):
     restored = []
     for release in releases:
@@ -47,9 +70,6 @@ def restore(releases, public_dir, download, versions=None):
                 download(tag, item['name'], path)
                 if item.get('digest') != 'sha256:' + sha256(path) or item.get('size') != path.stat().st_size:
                     raise RuntimeError(f'{tag}/{item["name"]} does not match the digest GitHub reports')
-                existing = target / item['name']
-                if existing.exists() and sha256(existing) != sha256(path):
-                    raise RuntimeError(f'Retained release files are immutable: {version}/{item["name"]}')
                 staged[item['name']] = path
             if 'release-manifest.json' in staged:
                 manifest = json.loads(staged['release-manifest.json'].read_text())
@@ -57,6 +77,11 @@ def restore(releases, public_dir, download, versions=None):
                                   ('sourceSHA256', manifest.get('sourceArchive'))):
                     if name in staged and manifest.get(key) != sha256(staged[name]):
                         raise RuntimeError(f'{tag}/{name} does not match release-manifest.json')
+            derive_source_evidence(version, staged, Path(temporary))
+            for name, path in staged.items():
+                existing = target / name
+                if existing.exists() and sha256(existing) != sha256(path):
+                    raise RuntimeError(f'Retained release files are immutable: {version}/{name}')
             target.mkdir(parents=True, exist_ok=True)
             for name, path in staged.items():
                 if not (target / name).exists():
