@@ -33,8 +33,30 @@ import Testing
         #expect(FileManager.default.fileExists(atPath: active.url.path))
         #expect(FileManager.default.fileExists(atPath: unknown.url.path))
         #expect(try store.dictation(id: "new-take")?.status == .recorded)
-        #expect(try AudioRetentionMaintenance.prune(archive: archive, store: store, policy: policy, now: now).isEmpty)
+        // The old row-less file is past the grace and the age limit, so the sweep takes it; the active take stays.
+        #expect(try AudioRetentionMaintenance.prune(archive: archive, store: store, policy: policy, now: now) == ["unknown"])
+        #expect(!FileManager.default.fileExists(atPath: unknown.url.path))
         #expect(try store.dictation(id: "new-take")?.audioPath == active.url.path)
+    }
+
+    @Test func audioWithNoRowIsKeptThroughTheGraceThenPrunedByAge() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("mouthtype-orphan-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let store = try TranscriptStore(url: dir.appendingPathComponent("store.sqlite"))
+        let archive = AudioArchive(supportDirectory: dir)
+        let now = Date()
+        let policy = AudioRetentionPolicy(age: .days14)
+        let fresh = try archive.write(samples: [0.1, 0.2], id: "fresh")
+        let aged = try archive.write(samples: [0.1, 0.2], id: "aged")
+        try FileManager.default.setAttributes([.modificationDate: now.addingTimeInterval(-20 * 86_400)], ofItemAtPath: aged.url.path)
+        // Past the retention age but inside the recovery grace: still recoverable.
+        #expect(try AudioRetentionMaintenance.prune(archive: archive, store: store, policy: policy, now: now).isEmpty)
+        #expect(FileManager.default.fileExists(atPath: aged.url.path))
+        try FileManager.default.setAttributes(
+            [.modificationDate: now.addingTimeInterval(-(AudioArchive.recoveryGrace + 86_400))], ofItemAtPath: aged.url.path)
+        #expect(try AudioRetentionMaintenance.prune(archive: archive, store: store, policy: policy, now: now) == ["aged"])
+        #expect(!FileManager.default.fileExists(atPath: aged.url.path))
+        #expect(FileManager.default.fileExists(atPath: fresh.url.path))
     }
 
     @Test func pruningCompletedAudioClearsOnlyDeletedPointersAndKeepsTextAndTimings() throws {
@@ -154,20 +176,6 @@ import Testing
         try store.delete("gone", archive: archive)
         #expect(!FileManager.default.fileExists(atPath: archive.url(for: "gone").path))
         #expect(!FileManager.default.fileExists(atPath: archive.partialURL(for: "gone").path))
-    }
-
-    @Test func pruneNeverRemovesAudioThatHasNoRow() throws {
-        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("mouthtype-retention-\(UUID().uuidString)")
-        defer { try? FileManager.default.removeItem(at: dir) }
-        let store = try TranscriptStore(url: dir.appendingPathComponent("store.sqlite"))
-        let archive = AudioArchive(supportDirectory: dir)
-        let now = Date()
-        var urls: [URL] = []
-        for id in ["a", "b"] { urls.append(try archive.write(samples: [0.1, 0.2], id: id).url) }
-        // An emptied or restored database has no rows for any of it.
-        for url in urls { try FileManager.default.setAttributes([.modificationDate: now.addingTimeInterval(-400 * 86_400)], ofItemAtPath: url.path) }
-        try AudioRetentionMaintenance.prune(archive: archive, store: store, policy: AudioRetentionPolicy(age: .days14), now: now)
-        for url in urls { #expect(FileManager.default.fileExists(atPath: url.path)) }
     }
 
     @Test func prunePutsStalePartialsThroughTheRetentionPolicy() throws {

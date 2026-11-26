@@ -71,7 +71,9 @@ final class CrashRecovery {
         defer { isRecovering = false; onFinished?() }
         offered = nil
         // A finished take keeps its row as it was: a closed session turns every store write into a no-op.
-        let session = DictationSession(id: item.id, startedAt: item.startedAt, keyDownAt: clock.nowNanos(), rowOpen: !item.isCompleted)
+        var session = DictationSession(id: item.id, startedAt: item.startedAt, keyDownAt: clock.nowNanos(), rowOpen: !item.isCompleted && !item.isOrphan)
+        // The take is read in the language it was recorded in, not whatever the setting says today.
+        session.languageRequest = item.language.flatMap { DictationLanguage(code: $0) }.map { .explicit($0) }
         pill.showProcessing()
         do {
             let url = item.audioURL
@@ -158,7 +160,7 @@ final class CrashRecovery {
         guard let item = offered else { return }
         offered = nil
         await pipeline.finish(
-            DictationSession(id: item.id, startedAt: item.startedAt, keyDownAt: clock.nowNanos(), rowOpen: !item.isCompleted), .cancelled
+            DictationSession(id: item.id, startedAt: item.startedAt, keyDownAt: clock.nowNanos(), rowOpen: !item.isCompleted && !item.isOrphan), .cancelled
         )
         onFinished?()
     }

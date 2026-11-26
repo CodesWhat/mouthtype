@@ -89,8 +89,8 @@ public struct AudioArchive: Sendable {
 
     /// Deletes files older than `cutoff`, then the oldest of the rest until the total fits `maxTotalBytes`.
     /// When supplied, only `eligibleIDs` are counted or removed. `recoveryIDs` (failed and unfinished takes) and crash
-    /// partials join them only once their file is older than `recoveryCutoff`. Files with no matching row are never
-    /// removed (a partial is checked against `knownIDs`, every id with a row, when supplied). A delete that fails leaves its file for the next sweep, and the rest still run. Returns the ids of rows
+    /// partials join them only once their file is older than `recoveryCutoff`. A file with no matching row (an id missing from `knownIDs`, every id with a row) counts like a failed take: kept until
+    /// `recoveryCutoff`, then subject to the age and size limit. Without `knownIDs` such files are left alone. A delete that fails leaves its file for the next sweep, and the rest still run. Returns the ids of rows
     /// whose WAV was actually removed so the caller can null `audio_path` (partials are not reported); throws only when a
     /// delete failed and none succeeded.
     public func purge(
@@ -110,7 +110,10 @@ public struct AudioArchive: Sendable {
                 id = String(id.dropLast(".partial".count))
                 guard let recoveryCutoff, date < recoveryCutoff, knownIDs?.contains(id) != false else { continue }
             } else if let eligibleIDs, !eligibleIDs.contains(id) {
-                guard recoveryIDs.contains(id), let recoveryCutoff, date < recoveryCutoff else { continue }
+                // A WAV with no row (the store was missing, `begin` failed, or the database was replaced) is held for the same
+                // grace as a failed take, then follows the age and size limit instead of living forever.
+                let isOrphan = knownIDs.map { !$0.contains(id) } ?? false
+                guard recoveryIDs.contains(id) || isOrphan, let recoveryCutoff, date < recoveryCutoff else { continue }
             }
             files.append((id, url, date, values.fileSize ?? 0, isPartial))
         }
