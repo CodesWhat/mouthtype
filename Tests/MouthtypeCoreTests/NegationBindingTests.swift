@@ -22,6 +22,11 @@ import Testing
         #expect(reason("I do not like the new design at all", "I don't like the new design at all.") == nil)
     }
 
+    @Test func aDroppedModifierBetweenNegatorAndTargetPasses() {
+        #expect(reason("it's not quite ready for customers", "It's not ready for customers.") == nil)
+        #expect(reason("we shouldn't honestly send it to customers", "We shouldn't send it to customers.") == nil)
+    }
+
     @Test func correctionCuesAreNotNegations() {
         #expect(reason("Send it to Dana, no wait, send it to Priya.", "Send it to Priya.") == nil)
     }

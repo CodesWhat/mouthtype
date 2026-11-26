@@ -299,15 +299,22 @@ public enum SmartCleanupGuard {
     /// The content word each negation in `text` applies to: the first content word after it, within three words.
     /// A "no wait", "no sorry" or "never mind" is a correction cue, not a negation, and binds nothing.
     static func negatedWords(_ text: String) -> [String] {
+        negationTargets(text).compactMap(\.first)
+    }
+
+    /// Every content word inside each negation's three-word window, in order. The first one is the binding target;
+    /// the rest are words a dropped modifier ("not quite ready" to "not ready") may legitimately hand the negation to.
+    static func negationTargets(_ text: String) -> [[String]] {
         let words = TextMetrics.normalizedWords(text)
-        var bound: [String] = []
+        var bound: [[String]] = []
         for (index, word) in words.enumerated() {
             let next = index + 1 < words.count ? words[index + 1] : ""
             if word == "no", ["wait", "sorry"].contains(next) { continue }
             if word == "never", next == "mind" { continue }
             guard negators.contains(word) || word.hasSuffix("n't") else { continue }
             let window = words[(index + 1)...].prefix(3)
-            if let target = contentWords(window.joined(separator: " ")).first { bound.append(target) }
+            let targets = contentWords(window.joined(separator: " "))
+            if !targets.isEmpty { bound.append(targets) }
         }
         return bound
     }
@@ -319,8 +326,11 @@ public enum SmartCleanupGuard {
         let outputBound = negatedWords(output)
         let inputWords = contentWords(input)
         let outputWords = contentWords(output)
-        for word in inputBound where present(word, in: outputWords) && !present(word, in: outputBound) { return true }
-        for word in outputBound where present(word, in: inputWords) && !present(word, in: inputBound) { return true }
+        // A word still inside a negation's window on the other side is not moved, only re-bound past a dropped modifier.
+        let inputScope = negationTargets(input).flatMap { $0 }
+        let outputScope = negationTargets(output).flatMap { $0 }
+        for word in inputBound where present(word, in: outputWords) && !present(word, in: outputScope) { return true }
+        for word in outputBound where present(word, in: inputWords) && !present(word, in: inputScope) { return true }
         return false
     }
 
