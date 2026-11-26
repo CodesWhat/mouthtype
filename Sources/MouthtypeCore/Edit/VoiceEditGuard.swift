@@ -62,6 +62,9 @@ public enum VoiceEditGuard {
     /// week." carries on, so it's a sentence and not a refusal. A lookahead keeps the punctuation out of the match.
     private static let phraseEnd = #"(?=\s*[.,!?]|\s*$)"#
 
+    /// An inability phrase anywhere in a sentence.
+    private static let inabilityClause: [NSRegularExpression] = [compileMarker(#"\bINABILITY\b"#)].compactMap { $0 }
+
     /// Phrases only a model refusing the request says, wherever they fall in the output: AI framing, a first-person
     /// refusal to help or comply, the same with the subject dropped at a sentence start, and a first-person refusal to
     /// act on the text or the request, and a flat "that isn't possible". One pattern per marker, so the selection can be
@@ -73,9 +76,17 @@ public enum VoiceEditGuard {
         #"\bi(?:'m| am)? INABILITY (?:(?:comply|fulfill|do (?:that|this))\b|(?:help|assist)(?: you)?(?: with (?:that|this|it|(?:your|that|the) request))?END)"#,
         #"(?:^|[.!?,;:]\s*|[\r\n][^\S\r\n]*)INABILITY (?:help|assist)(?: you)?(?: with (?:that|this|it))?END"#,
         #"\bi(?:'m| am)? INABILITY (?:edit|rewrite|rephrase|reword|revise|change|modify|provide|answer|write|generate|create|process|complete) (?:(?:this|that|it)END|(?:the|your|that|this)(?: following)? (?:text|selection|request)\b)"#,
-        #"\b(?:that|this|it|(?:your|the|that|this) request) (?:isn't|is not|wasn't|was not) (?:possibleEND|something i can (?:do|help with)\b)"#,
-    ].compactMap {
-        try? NSRegularExpression(pattern: $0.replacingOccurrences(of: "INABILITY", with: inability).replacingOccurrences(of: "END", with: phraseEnd))
+    ].compactMap(compileMarker)
+
+    /// "That isn't possible" and its kin. Unlike `refusalMarkers`, a faithful rewrite can say it ("We can't deliver by
+    /// Friday." becomes "Delivery by Friday? That isn't possible."), so it only declines when the rest of the output
+    /// keeps little of the selection.
+    private static let impossibilityMarker: NSRegularExpression? = compileMarker(
+        #"\b(?:that|this|it|(?:your|the|that|this) request) (?:isn't|is not|wasn't|was not) (?:possibleEND|something i can (?:do|help with)\b)"#)
+
+    private static func compileMarker(_ pattern: String) -> NSRegularExpression? {
+        try? NSRegularExpression(
+            pattern: pattern.replacingOccurrences(of: "INABILITY", with: inability).replacingOccurrences(of: "END", with: phraseEnd))
     }
 
     /// Opening phrases of an apology, a refusal or a regret, grouped by what they say. A faithful edit of a selection that
@@ -117,11 +128,12 @@ public enum VoiceEditGuard {
         Set(text.split(whereSeparator: { !$0.isLetter && !$0.isNumber }).map(String.init))
     }
 
-    /// How many of the selection's content words the output kept. A word counts as kept when the output has it, or has a
-    /// word of four or more characters that it starts or that starts it, or one sharing its first five characters, so
-    /// "reply" is kept by "replying" and "cancel" by "canceled". A synonym keeps nothing.
-    private static func keptCount(of content: Set<String>, in output: Set<String>) -> Int {
-        let long = output.filter { $0.count >= 4 }
+    /// How many of the selection's content words the output kept. A word counts as kept when the output has it, or when a
+    /// word of `stemSource` (the output's words by default) is four or more characters and starts it or is started by it,
+    /// or shares its first five characters, so "reply" is kept by "replying" and "cancel" by "canceled". A synonym keeps
+    /// nothing.
+    private static func keptCount(of content: Set<String>, in output: Set<String>, stemSource: Set<String>? = nil) -> Int {
+        let long = (stemSource ?? output).filter { $0.count >= 4 }
         var stems = Set<Substring>()
         for word in long {
             for length in 4...word.count { stems.insert(word.prefix(length)) }
@@ -134,6 +146,20 @@ public enum VoiceEditGuard {
         }
     }
 
+    /// The sentences of already normalized `text`, split at ".", "!", "?" and line breaks.
+    private static func sentences(of text: String) -> [String] {
+        text.split(whereSeparator: { ".!?\n\r".contains($0) }).map(String.init)
+    }
+
+    /// The clauses of already normalized `text`: sentences, further split at commas, semicolons and colons.
+    private static func clauses(of text: String) -> [String] {
+        text.split(whereSeparator: { ".!?\n\r,;:".contains($0) }).map(String.init)
+    }
+
+    private static func matches(_ marker: NSRegularExpression, _ value: String) -> Bool {
+        marker.firstMatch(in: value, range: NSRange(value.startIndex..., in: value)) != nil
+    }
+
     /// An output is a decline when it carries the unsupported-request sentinel, when it introduces a refusal marker the
     /// selection has no match for, or when it newly opens with an apology, refusal or regret and keeps little of what the
     /// selection said. The opening alone doesn't decide it: "make this more apologetic" yields an edit that opens with an
@@ -142,14 +168,24 @@ public enum VoiceEditGuard {
         if text.contains(VoiceEditPrompt.unsupportedSentinel) { return true }
         let outputText = normalized(text)
         let sourceText = normalized(selection)
-        let matches = { (marker: NSRegularExpression, value: String) in
-            marker.firstMatch(in: value, range: NSRange(value.startIndex..., in: value)) != nil
-        }
         if refusalMarkers.contains(where: { matches($0, outputText) && !matches($0, sourceText) }) { return true }
-        guard let family = declineFamily(of: outputText), declineFamily(of: sourceText) != family else { return false }
         let content = words(in: sourceText).filter { $0.count >= 3 && !stopwords.contains($0) }
+        if let impossibility = impossibilityMarker, matches(impossibility, outputText), !matches(impossibility, sourceText) {
+            // Judge overlap on the sentences that aren't the impossibility statement itself.
+            let rest = words(in: sentences(of: outputText).filter { !matches(impossibility, $0) }.joined(separator: ". "))
+            if content.count < 2 || Double(keptCount(of: content, in: rest)) / Double(content.count) < minimumKeptShare {
+                return true
+            }
+        }
+        guard let family = declineFamily(of: outputText), declineFamily(of: sourceText) != family else { return false }
         guard content.count >= 2 else { return false }
-        let kept = keptCount(of: content, in: words(in: outputText))
+        // Words inside an inability clause, up to the nearest comma ("I can't process this input.") match the selection's words only exactly. A
+        // stem match there is the refusal's own verb, not the selection's content.
+        let outside = words(
+            in: clauses(of: outputText).filter { clause in
+                !inabilityClause.contains { matches($0, clause) }
+            }.joined(separator: ". "))
+        let kept = keptCount(of: content, in: words(in: outputText), stemSource: outside)
         return Double(kept) / Double(content.count) < minimumKeptShare
     }
 
