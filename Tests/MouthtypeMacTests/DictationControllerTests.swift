@@ -1991,6 +1991,27 @@ private final class FakeCorrections: CorrectionObserving {
         #expect(rig.store.finishes.map(\.0).contains(.cancelled) == false)
     }
 
+    @Test func cancellingProcessingFromThePillEndsTheTakeAsCancelled() async {
+        let rig = Rig()
+        rig.engine.holds = 1
+        await rig.controller.handle(.pressed(at: keyDown))
+        await rig.controller.handle(.released(at: keyUp))
+        await rig.engine.waitForHeld()
+        #expect(rig.controller.phase == .processing)
+        rig.controller.cancelProcessing()
+        rig.engine.releaseHeld()
+        await rig.controller.waitForProcessing()
+        #expect(rig.inserter.delivered.isEmpty)
+        #expect(rig.store.finishes.map(\.0) == [.cancelled])
+    }
+
+    @Test func cancellingProcessingWhileIdleDoesNothing() async {
+        let rig = Rig()
+        rig.controller.cancelProcessing()
+        #expect(rig.controller.phase == .idle)
+        #expect(rig.store.finishes.isEmpty)
+    }
+
     @Test func escapeStopsQueuedTakesBehindTheRunningOne() async {
         let rig = Rig()
         rig.engine.holds = 1

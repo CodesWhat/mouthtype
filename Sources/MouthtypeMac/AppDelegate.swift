@@ -587,6 +587,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             switch control {
             case .stop: dictation.stopHandsFree()
             case .cancel: Task { await dictation.cancelHandsFree() }
+            case .pill: dictation.cancelProcessing()
             }
         }
         systemSection.onToggleRemap = { [weak self] in self?.toggleRemap() }

@@ -85,6 +85,8 @@ final class ClassicPillView: NSView, PillSkinView {
     /// How far a message too tall for the panel has to scroll, 0 when it all fits.
     var messageScrollDistance: Int { Int(block.overflow.rounded(.up)) }
 
+    var bodyFrame: CGRect { capsule(width: width) }
+
     var controlFrames: [PillControl: CGRect] {
         guard isLocked, mode == .locked else { return [:] }
         return ClassicPillLayout.controlFrames(capsule: capsule(width: width), metrics: metrics)
@@ -346,9 +348,9 @@ final class ClassicPillView: NSView, PillSkinView {
         case (.cancel, true, _): NSColor(hex: 0x5C5C5A).cgColor
         case (.cancel, _, true): NSColor(hex: 0x858582).cgColor
         case (.cancel, _, _): NSColor(hex: 0x71716E).cgColor
-        case (.stop, true, _): NSColor(hex: 0xD2D2CF).cgColor
-        case (.stop, _, true): NSColor(hex: 0xEDEDEB).cgColor
-        case (.stop, _, _): NSColor(hex: 0xFCFCFB).cgColor
+        case (_, true, _): NSColor(hex: 0xD2D2CF).cgColor
+        case (_, _, true): NSColor(hex: 0xEDEDEB).cgColor
+        case (_, _, _): NSColor(hex: 0xFCFCFB).cgColor
         }
     }
 
