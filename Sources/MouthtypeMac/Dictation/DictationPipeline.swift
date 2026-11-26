@@ -134,8 +134,12 @@ struct DictationPipeline: Sendable {
     }
 
     /// Cleanup slower than this is thrown away and the guarded text (after TranscriptGuard, before cleanup) goes out.
+    /// The base covers a short take; each word of the take adds `cleanupBudgetPerWordMs`, because the deterministic
+    /// pass scales with length and a flat 50 ms threw cleanup away on long takes.
     static let cleanupBudgetMs = 50.0
+    static let cleanupBudgetPerWordMs = 0.25
     var cleanupBudget = Self.cleanupBudgetMs
+    var cleanupBudgetPerWord = Self.cleanupBudgetPerWordMs
 
     func begin(_ session: DictationSession, target: DictationTarget) async -> Bool {
         let version = ProcessInfo.processInfo.operatingSystemVersion
@@ -395,6 +399,7 @@ struct DictationPipeline: Sendable {
             return (result, expanded, expected, ms)
         }
 
+        let budget = cleanupBudget + cleanupBudgetPerWord * Double(TextMetrics.wordCount(transcribed.text))
         let dictionary = inputs.dictionary.filter { !settings.level.needsModel || smart == nil || !$0.isJoinedSpelling }
         let (result, expanded, expected, ms) = deterministic(dictionary, startedAt: start)
         var record = CleanupRecord(
@@ -407,7 +412,7 @@ struct DictationPipeline: Sendable {
             return CleanedDictation(
                 text: expanded.text, edits: transcribed.guardEdits + heard.edits + expanded.edits, cleanup: record)
         }
-        if ms > cleanupBudget {
+        if ms > budget {
             Log.app.error("cleanup took \(ms, format: .fixed(precision: 1)) ms; delivering the guarded text")
             record.outcome = "timeout"
             return timedOut()
@@ -427,7 +432,7 @@ struct DictationPipeline: Sendable {
             let fallback = deterministic(inputs.dictionary, startedAt: clock.now)
             let totalMs = ms + fallback.ms
             record.ms = Int(totalMs.rounded()) + modelMs
-            if totalMs > cleanupBudget {
+            if totalMs > budget {
                 Log.app.error("Basic fallback took \(totalMs, format: .fixed(precision: 1)) ms; delivering the guarded text")
                 record.outcome = "timeout"
                 return timedOut()

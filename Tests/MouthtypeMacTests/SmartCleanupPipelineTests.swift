@@ -495,11 +495,20 @@ private struct CleanupDiagnosticFixtureError: Error, CustomStringConvertible {
         let cleaner = ScriptedCleaner { text, _ in text }
         var (pipeline, _) = pipeline(cleaner, level: level, snippets: [Snippet(trigger: "um holy shit", expansion: "Oh dear")])
         pipeline.cleanupBudget = -1
+        pipeline.cleanupBudgetPerWord = 0
         let cleaned = await clean(pipeline, text: "um holy shit this is fucking broken")
         #expect(cleaned.text == "Oh dear this is broken")
         #expect(cleaned.cleanup.outcome == "timeout")
         #expect(cleaned.edits.contains { $0.stage == "snippet" })
         #expect(cleaner.calls == 0)
+    }
+
+    @Test func theCleanupBudgetGrowsWithTheLengthOfTheTake() async {
+        var (pipeline, _) = pipeline(ScriptedCleaner { text, _ in text }, level: .basic)
+        pipeline.cleanupBudget = -1
+        pipeline.cleanupBudgetPerWord = 10_000
+        let cleaned = await clean(pipeline, text: "um this is a longer take with a few words in it")
+        #expect(cleaned.cleanup.outcome == "ok")
     }
 
     @Test func aRejectedModelOutputStillLeavesNoSwearing() async {
@@ -546,6 +555,7 @@ private struct CleanupDiagnosticFixtureError: Error, CustomStringConvertible {
         let rules = [DictionaryRule(heard: "en pee em", written: "npm")]
         var (pipeline, _) = pipeline(ScriptedCleaner { text, _ in text }, level: .basic, rules: rules)
         pipeline.cleanupBudget = -1
+        pipeline.cleanupBudgetPerWord = 0
         let cleaned = await clean(pipeline, text: "um hello. Fuck, npm failed.")
         #expect(cleaned.cleanup.outcome == "timeout")
         #expect(cleaned.text == "um hello. npm failed.")
