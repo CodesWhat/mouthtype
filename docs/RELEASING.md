@@ -53,6 +53,8 @@ After the tagged release is packaged and checked, run `scripts/stage-public-rele
 
 The ZIP enclosure is EdDSA signed; the DMG is not part of the feed. The feed must remain byte-for-byte signed; re-sign after any change. New source archives contain committed source only, never local planning, credentials, recordings or worktrees.
 
+If the retained directory is lost, rebuild it with `python3 scripts/restore-public-assets.py --public-dir build/public-release-assets`. It downloads each published release's ZIP, DMG, source archive, checksums and manifest, checks them against GitHub's digests, and refuses to replace a file that differs. The signed `updates/appcast.xml` is not a release asset and needs a backup.
+
 Keep `build/public-release-assets` across releases. Staging preserves older versioned downloads, refuses changes to an existing versioned file and replaces only the current signed feed. Back up published release outputs; the retained directory is deployment state, not disposable compiler scratch. The website’s `/download/file` redirect must point at the release’s `.dmg` (not the ZIP), and `/source` at its source tarball, for the same release and build as the signed appcast. `publish-website.py` rejects a release whose manifest has a DMG when `/download/file` targets anything else, and validates every retained DMG’s checksum and notarization record.
 
 `stage-public-release.py` also requires HEAD checked out at the exact release tag, because it runs the same source check as packaging.
