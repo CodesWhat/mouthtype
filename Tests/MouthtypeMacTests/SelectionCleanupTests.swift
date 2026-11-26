@@ -309,18 +309,18 @@ import MouthtypeCore
         #expect(seen == 77 && model.result == "okay that is fine")
     }
 
-    @Test func menuCaptureReportsReadyAndUnavailableFields() {
+    @Test func menuCaptureReportsReadyAndUnavailableFields() async {
         let editor = SelectionFixture()
         let model = SelectionCleanupModel(editor: editor)
-        #expect(model.captureForMenu() == .ready)
+        #expect(await model.captureForMenuOffMain() == .ready)
         editor.unavailable = true
-        #expect(model.captureForMenu() == .unavailable)
+        #expect(await model.captureForMenuOffMain() == .unavailable)
     }
 
     @Test func panelAdoptsTheSelectionWhenItMatchesTheMenuSnapshot() async {
         let editor = SelectionFixture()
         let model = SelectionCleanupModel(editor: editor)
-        #expect(model.captureForMenu() == .ready)
+        #expect(await model.captureForMenuOffMain() == .ready)
         await model.prepare()
         #expect(model.hasPreview && !model.refused && model.original == "um hello  world")
     }
@@ -333,7 +333,7 @@ import MouthtypeCore
         ] {
             let editor = SelectionFixture()
             let model = SelectionCleanupModel(editor: editor, appName: { _ in "Notes" })
-            #expect(model.captureForMenu() == .ready)
+            #expect(await model.captureForMenuOffMain() == .ready)
             var changed = editor.selected
             change(&changed)
             editor.current = changed
@@ -352,7 +352,7 @@ import MouthtypeCore
         await model.prepare()
         #expect(model.hasPreview && !model.refused)
         // The snapshot is consumed by one prepare, so a later open compares against nothing.
-        #expect(model.captureForMenu() == .ready)
+        #expect(await model.captureForMenuOffMain() == .ready)
         await model.prepare()
         editor.current = SelectedText(pid: 123, element: nil, range: NSRange(location: 0, length: 5), text: "later")
         await model.prepare()

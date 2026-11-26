@@ -132,10 +132,6 @@ final class CrashRecovery {
         return await Task.detached { DictationRecovery.completed(rows: rows, now: now, archive: archive) }.value
     }
 
-    func savedRecordings() throws -> [RecoverableDictation] {
-        try DictationRecovery.saved(store: store, archive: archive, now: clock.now(), launchedAt: launchedAt)
-    }
-
     func offerSaved(_ item: RecoverableDictation) {
         guard !isRecovering else { return }
         offered = item
