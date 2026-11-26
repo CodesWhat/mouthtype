@@ -50,7 +50,7 @@ import Testing
         #expect(outcome.store == nil)
         #expect(outcome.quarantinedTo == nil)
         #expect(outcome.failure?.contains("newer version") == true)
-        #expect(try pool.read { try Int.fetchOne($0, sql: "SELECT COUNT(*) FROM grdb_migrations") } == 6)
+        #expect(try pool.read { try Int.fetchOne($0, sql: "SELECT COUNT(*) FROM grdb_migrations") } == 7)
     }
 
     @Test func theActivityFlagCoversEveryQuarantineMoveAndNothingElse() throws {
