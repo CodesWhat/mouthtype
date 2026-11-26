@@ -116,14 +116,14 @@ private struct Rig {
         let transcribed = Transcription(text: "hola", words: [], processingSeconds: 0.1, engineID: "t")
         let spanish = try rig.seed(ago: 60)
         try rig.store.recordTranscription(spanish, TranscriptionRecord(transcription: transcribed, rawText: "hola", language: "es"))
-        let item = try #require(try rig.recovery.savedRecordings().first { $0.id == spanish })
+        let item = try #require(try await rig.recovery.loadSavedRecordings().first { $0.id == spanish })
         rig.recovery.offerSaved(item)
         await rig.recovery.recover()
         #expect(rig.engine.languages == [.explicit(try #require(DictationLanguage(code: "es")))])
 
         let junk = try rig.seed(ago: 30)
         try rig.store.recordTranscription(junk, TranscriptionRecord(transcription: transcribed, rawText: "x", language: "not-a-language"))
-        rig.recovery.offerSaved(try #require(try rig.recovery.savedRecordings().first { $0.id == junk }))
+        rig.recovery.offerSaved(try #require(try await rig.recovery.loadSavedRecordings().first { $0.id == junk }))
         await rig.recovery.recover()
         #expect(rig.engine.languages.last == .english)
     }
@@ -138,7 +138,7 @@ private struct Rig {
         for name in ["lost-a.wav", "lost-b.partial.wav"] {
             try FileManager.default.setAttributes([.modificationDate: old], ofItemAtPath: rig.archive.directory.appendingPathComponent(name).path)
         }
-        let orphans = try rig.recovery.savedRecordings().filter(\.isOrphan)
+        let orphans = try await rig.recovery.loadSavedRecordings().filter(\.isOrphan)
         #expect(Set(orphans.map(\.id)) == ["lost-a", "lost-b"])
 
         rig.recovery.offerSaved(try #require(orphans.first { $0.id == "lost-a" }))
@@ -149,7 +149,7 @@ private struct Rig {
         rig.recovery.offerSaved(try #require(orphans.first { $0.id == "lost-b" }))
         await rig.recovery.discard()
         #expect(try rig.store.dictation(id: "lost-b")?.status == .cancelled)
-        #expect(try rig.recovery.savedRecordings().isEmpty)
+        #expect(try await rig.recovery.loadSavedRecordings().isEmpty)
         #expect(FileManager.default.fileExists(atPath: rig.archive.partialURL(for: "lost-b").path))
     }
 
