@@ -272,6 +272,25 @@ private let paragraph =
                 == .refused(.modelDeclined))
     }
 
+    @Test func aStemSharedWithTheRefusalClauseDoesNotKeepTheSelection() {
+        #expect(
+            judge("I'm sorry, I can't process this input.", selection: "The processor overheated.", instruction: "make it formal")
+                == .refused(.modelDeclined))
+        // An exact word in the clause still counts, and a stem in the rest of the output still keeps the selection.
+        #expect(
+            judge("Sorry, I can't deliver the reply, but the processor overheating is fixed.", selection: "The processor overheated.", instruction: "make it formal")
+                == .accepted("Sorry, I can't deliver the reply, but the processor overheating is fixed."))
+    }
+
+    @Test func anImpossibilityStatementInAFaithfulRewriteIsNotADecline() {
+        #expect(
+            judge("Delivery by Friday? That isn't possible.", selection: "We can't deliver by Friday.", instruction: "rephrase it")
+                == .accepted("Delivery by Friday? That isn't possible."))
+        #expect(
+            judge("That isn't possible.", selection: "We can't deliver by Friday.", instruction: "rephrase it")
+                == .refused(.modelDeclined))
+    }
+
     @Test func anApologyInAnotherLanguageOpensWithNoFamily() {
         #expect(
             judge("Lo siento, gracias por la actualización.", selection: "Thanks for the update.")
