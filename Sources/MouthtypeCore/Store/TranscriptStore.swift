@@ -6,6 +6,18 @@ public enum TranscriptStoreError: Error, Equatable {
     case unknownDictation(String)
     case notTerminal(DictationStatus)
     case notCancelled(DictationStatus)
+    /// The database was written by a newer Mouthtype. Opening it here would run old code against a schema it doesn't know.
+    case newerSchema
+}
+
+extension TranscriptStoreError: LocalizedError {
+    public var errorDescription: String? {
+        switch self {
+        case .newerSchema:
+            "History was saved by a newer version of Mouthtype. Update Mouthtype to open it; this version leaves it untouched."
+        default: nil
+        }
+    }
 }
 
 /// Stops a `TranscriptStore.observeRecentTakes` observation when cancelled or released.
@@ -41,7 +53,9 @@ public final class TranscriptStore: Sendable {
     public init(url: URL = TranscriptStore.defaultURL()) throws {
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         pool = try DatabasePool(path: url.path)
-        try Self.migrator.migrate(pool)
+        let migrator = Self.migrator
+        guard try !pool.read({ try migrator.hasBeenSuperseded($0) }) else { throw TranscriptStoreError.newerSchema }
+        try migrator.migrate(pool)
         try pool.write { db in
             do {
                 try db.execute(sql: "INSERT INTO take_search(take_search) VALUES ('integrity-check')")
