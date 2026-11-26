@@ -189,6 +189,16 @@ public final class TranscriptStore: Sendable {
                     DELETE FROM take_search WHERE rowid IN (SELECT rowid FROM dictation WHERE is_secure = 1);
                     """)
         }
+        migrator.registerMigration("v6-achievement-covering-index") { db in
+            // The achievement scans also read app_name, mode and utc_offset_s, which v3 left out, so they went to the table.
+            try db.execute(
+                sql: """
+                    DROP INDEX dictation_stats;
+                    CREATE INDEX dictation_stats ON dictation(
+                        local_day, words_final, started_at, voiced_ms, audio_ms, is_secure, app_name, mode, utc_offset_s)
+                    WHERE words_final > 0 AND COALESCE(is_secure, 0) = 0;
+                    """)
+        }
         return migrator
     }
 

@@ -267,6 +267,25 @@ import Testing
         #expect(UpdateMenuSection(updater: updater).items.first?.title == "Check for Updates…")
     }
 
+    @Test func updateAvailableAppearsWhenAnUpdateArrivesAndRoutesToTheCheck() throws {
+        let activity = Activity(), driver = Driver()
+        let updater = AppUpdater(driver: driver, activity: { activity.value })
+        updater.start()
+        let section = UpdateAvailableMenuSection(updater: updater)
+        #expect(section.items.isEmpty)
+        updater.updateAvailable()
+        let item = try #require(section.items.first)
+        #expect(item.title == "Update Available…" && item.isEnabled && !item.isHidden)
+        _ = item.target?.perform(item.action, with: item)
+        #expect(driver.checks == 1)
+        activity.value = .recording
+        updater.refreshActivity()
+        section.refresh()
+        #expect(!item.isEnabled)
+        updater.updateFinished(error: nil)
+        #expect(section.items.isEmpty)
+    }
+
     @Test func menuUsesActualEnablementAndRoutesExplicitChecks() throws {
         let activity = Activity(), driver = Driver()
         let updater = AppUpdater(driver: driver, activity: { activity.value })

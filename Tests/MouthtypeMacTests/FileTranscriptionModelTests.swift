@@ -68,6 +68,27 @@ private struct ImportEngine: Transcriber {
         #expect(model.text.isEmpty)
         #expect(!model.isBusy)
     }
+    @Test func cancellingANewRunKeepsTheLastCompletedResult() async {
+        let gate = ImportGate()
+        var runs = 0
+        let model = FileTranscriptionModel(
+            makeJob: {
+                runs += 1
+                return AudioFileTranscription(decoder: ImportDecoder(), engine: ImportEngine(gate: runs == 1 ? nil : gate))
+            }, copy: { _ in })
+        model.start(URL(fileURLWithPath: "/first.wav"))
+        await settled(model)
+        let kept = model.text
+        #expect(model.state == .finished && !kept.isEmpty)
+        model.start(URL(fileURLWithPath: "/second.wav"))
+        for _ in 0..<200 where await !gate.entered { await Task.yield() }
+        model.cancel()
+        await gate.release()
+        await settled(model)
+        #expect(model.state == .cancelled)
+        #expect(model.text == kept && model.filename == "first.wav" && model.hasResult)
+        #expect(model.failedFilename == nil)
+    }
     @Test func busyAppDoesNotCreateJobAndEmptySpeechIsTruthful() async {
         var jobs = 0
         let blocked = FileTranscriptionModel(

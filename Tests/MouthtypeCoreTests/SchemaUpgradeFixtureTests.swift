@@ -48,7 +48,7 @@ import Testing
 
         try store.pool.read { db in
             let migrator = TranscriptStore.migrator
-            try #expect(migrator.appliedMigrations(db) == ["v1", "v2", "v3", "v4-history-search", "v5-scrub-secure-takes"])
+            try #expect(migrator.appliedMigrations(db) == ["v1", "v2", "v3", "v4-history-search", "v5-scrub-secure-takes", "v6-achievement-covering-index"])
             try #expect(migrator.appliedMigrations(db) == migrator.migrations)
             try #expect(!migrator.hasBeenSuperseded(db))
             let eligible = try SavedData.eligibleRowids(db)
@@ -193,7 +193,7 @@ import Testing
         try older.migrate(pool)
         try pool.read { db in
             try #expect(older.hasBeenSuperseded(db))
-            try #expect(older.appliedIdentifiers(db) == ["v1", "v2", "v3", "v4-history-search", "v5-scrub-secure-takes"])
+            try #expect(older.appliedIdentifiers(db) == ["v1", "v2", "v3", "v4-history-search", "v5-scrub-secure-takes", "v6-achievement-covering-index"])
         }
         try pool.write { db in
             try db.execute(

@@ -45,6 +45,22 @@ import Testing
         model.deactivate()
     }
 
+    @Test func typingIsDebouncedAndClearingIsImmediate() async throws {
+        let model = HomeLogModel(store: nil, observing: false)
+        model.searchDebounce = .milliseconds(80)
+        model.searchText = "a"
+        model.searchText = "ag"
+        model.searchText = "age"
+        #expect(model.query.isEmpty)
+        await waitUntil { model.query == "age" }
+        #expect(model.query == "age")
+        model.searchText = "agen"
+        model.searchText = ""
+        #expect(model.query.isEmpty)
+        try await Task.sleep(for: .milliseconds(200))
+        #expect(model.query.isEmpty)
+    }
+
     private let base = Date(timeIntervalSince1970: 1_791_806_400)
 
     private func makeStore() throws -> (TranscriptStore, URL) {

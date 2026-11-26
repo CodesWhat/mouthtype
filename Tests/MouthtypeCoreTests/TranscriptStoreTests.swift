@@ -198,7 +198,7 @@ import Testing
         }
         #expect(tables.contains("dictation") && tables.contains("edit_op"))
         #expect(indexes.contains("dictation_local_day") && indexes.contains("dictation_started_at") && indexes.contains("dictation_status"))
-        #expect(migrations == ["v1", "v2", "v3", "v4-history-search", "v5-scrub-secure-takes"])
+        #expect(migrations == ["v1", "v2", "v3", "v4-history-search", "v5-scrub-secure-takes", "v6-achievement-covering-index"])
         #expect(indexes.contains("dictation_stats"))
         #expect(tables.contains("correction"))
         for column in [
@@ -286,7 +286,7 @@ import Testing
         let reopened = try TranscriptStore(url: dir.appendingPathComponent("nested/mouthtype.sqlite"))
         #expect(try reopened.dictation(id: id) == before)
         let migrations = try reopened.pool.read { try String.fetchAll($0, sql: "SELECT identifier FROM grdb_migrations") }
-        #expect(migrations == ["v1", "v2", "v3", "v4-history-search", "v5-scrub-secure-takes"])
+        #expect(migrations == ["v1", "v2", "v3", "v4-history-search", "v5-scrub-secure-takes", "v6-achievement-covering-index"])
     }
 
     @Test func stagedLifecycleRoundTrips() throws {
@@ -524,6 +524,22 @@ import Testing
             ).map { $0["detail"] as String }.joined(separator: " ")
         }
         #expect(plan.contains("dictation_stats"))
+        _ = store
+    }
+
+    @Test func achievementScansReadTheCoveringStatsIndex() throws {
+        let (store, dir) = try makeStore()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let pool = try DatabasePool(path: dir.appendingPathComponent("nested/mouthtype.sqlite").path)
+        let queries = [
+            TranscriptStore.achievementAppsSQL, TranscriptStore.achievementHandsFreeSQL, TranscriptStore.achievementNightOwlSQL,
+        ]
+        for sql in queries {
+            let plan = try pool.read { db in
+                try Row.fetchAll(db, sql: "EXPLAIN QUERY PLAN " + sql).map { $0["detail"] as String }.joined(separator: " ")
+            }
+            #expect(plan.contains("COVERING INDEX dictation_stats"), "\(plan)")
+        }
         _ = store
     }
 

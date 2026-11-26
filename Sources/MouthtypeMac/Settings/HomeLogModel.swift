@@ -35,6 +35,29 @@ struct HomeTake: Identifiable, Equatable {
         }
     }
 
+    /// What the search field edits. Typing applies to `query` after `searchDebounce` of quiet so each keystroke does not
+    /// restart the store read; clearing the field applies at once.
+    var searchText = "" {
+        didSet {
+            guard searchText != oldValue else { return }
+            searchTask?.cancel()
+            searchTask = nil
+            if searchText.isEmpty {
+                query = ""
+                return
+            }
+            let text = searchText, delay = searchDebounce
+            searchTask = Task { @MainActor [weak self] in
+                try? await Task.sleep(for: delay)
+                guard !Task.isCancelled, let self else { return }
+                self.searchTask = nil
+                self.query = text
+            }
+        }
+    }
+    @ObservationIgnored var searchDebounce: Duration = .milliseconds(200)
+    @ObservationIgnored private var searchTask: Task<Void, Never>?
+
     @ObservationIgnored var store: TranscriptStore? {
         didSet { if store !== oldValue, isActive { observe() } }
     }
