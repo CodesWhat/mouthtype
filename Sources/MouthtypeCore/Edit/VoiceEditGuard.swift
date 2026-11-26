@@ -151,6 +151,11 @@ public enum VoiceEditGuard {
         text.split(whereSeparator: { ".!?\n\r".contains($0) }).map(String.init)
     }
 
+    /// The clauses of already normalized `text`: sentences, further split at commas, semicolons and colons.
+    private static func clauses(of text: String) -> [String] {
+        text.split(whereSeparator: { ".!?\n\r,;:".contains($0) }).map(String.init)
+    }
+
     private static func matches(_ marker: NSRegularExpression, _ value: String) -> Bool {
         marker.firstMatch(in: value, range: NSRange(value.startIndex..., in: value)) != nil
     }
@@ -174,11 +179,11 @@ public enum VoiceEditGuard {
         }
         guard let family = declineFamily(of: outputText), declineFamily(of: sourceText) != family else { return false }
         guard content.count >= 2 else { return false }
-        // Words inside an inability clause ("I can't process this input.") match the selection's words only exactly. A
+        // Words inside an inability clause, up to the nearest comma ("I can't process this input.") match the selection's words only exactly. A
         // stem match there is the refusal's own verb, not the selection's content.
         let outside = words(
-            in: sentences(of: outputText).filter { sentence in
-                !inabilityClause.contains { matches($0, sentence) }
+            in: clauses(of: outputText).filter { clause in
+                !inabilityClause.contains { matches($0, clause) }
             }.joined(separator: ". "))
         let kept = keptCount(of: content, in: words(in: outputText), stemSource: outside)
         return Double(kept) / Double(content.count) < minimumKeptShare

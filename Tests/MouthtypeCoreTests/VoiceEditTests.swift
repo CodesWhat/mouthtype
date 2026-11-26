@@ -276,10 +276,14 @@ private let paragraph =
         #expect(
             judge("I'm sorry, I can't process this input.", selection: "The processor overheated.", instruction: "make it formal")
                 == .refused(.modelDeclined))
-        // An exact word in the clause still counts, and a stem in the rest of the output still keeps the selection.
+        // A stem in a separate sentence keeps the selection.
         #expect(
-            judge("Sorry, I can't deliver the reply, but the processor overheating is fixed.", selection: "The processor overheated.", instruction: "make it formal")
-                == .accepted("Sorry, I can't deliver the reply, but the processor overheating is fixed."))
+            judge("Sorry, I can't deliver the reply. The processors overheating is fixed.", selection: "The processor overheated.", instruction: "make it formal")
+                == .accepted("Sorry, I can't deliver the reply. The processors overheating is fixed."))
+        // So does a stem in the same sentence, past the comma that ends the refusal clause.
+        #expect(
+            judge("Sorry, I can't say more, but processors overheating is fixed.", selection: "The processor overheated.", instruction: "make it formal")
+                == .accepted("Sorry, I can't say more, but processors overheating is fixed."))
     }
 
     @Test func anImpossibilityStatementInAFaithfulRewriteIsNotADecline() {
