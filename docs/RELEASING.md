@@ -16,6 +16,9 @@ Update these together:
 - `docs/READ-ME.md`
 - Affected usage guides
 - Website build labels and redirects (`/download/file` to the new `.dmg`), and their existing browser checks
+- `docs/RELEASE-READINESS.md` (title and a `Stable X.Y.Z (build N)` entry), `docs/KNOWN-LIMITS.md` and `CHANGELOG.md`
+
+`python3 scripts/check-version-strings.py` compares all of these with `packaging/Version.plist`; CI runs it through the release helper tests.
 
 `SECURITY.md` must name the supported prerelease and retire the previous line. Keep publication on hold until the app, source, feed and website all select that exact version/build.
 

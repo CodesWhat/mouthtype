@@ -1,7 +1,13 @@
-# Mac 0.9.1 release readiness
+# Mac 0.12.3 release readiness
 
 What each stable release added:
 
+- Stable 0.12.3 (build 30) keeps no transcript, timings, edits, search entry or audio for a take dictated into a secure field and scrubs existing secure takes on upgrade, pins and verifies the Whisper tokenizer, stops fetching favicons for built-in Style sites, tightens Press Return after inserting, and fixes dictation staying blocked after a cancelled update quit, a locked hands-free recording blocking its stop shortcut, microphone ownership between setup and dictation, and the audio converter tail on a mid-take format change.
+- Stable 0.12.2 (build 29) fixes Fn/Globe dictation that stopped responding when macOS reported the Power key as held.
+- Stable 0.12.1 (build 28) makes Mouthtype paste only when it can confirm a normal text field while Secure Input is on, and otherwise keeps the text on the card with a note.
+- Stable 0.12.0 (build 27) adds Achievements (27 trophies on the Stats page, with an off switch in Settings > Mac) and Support Mouthtype links, and fixes profanity cleanup after a fronted place.
+- Stable 0.11.0 (build 26) adds Edit Selection by Voice and typing calibration on the Stats page, updates FluidAudio to 0.18.0, and fixes profanity cleanup after a locative "there" and the Transform Selection focus check before Accept.
+- Stable 0.10.0 (build 25) adds search across retained raw and final transcripts and app names from Home, and playing a take's retained audio, and fixes profanity cleanup after forms of "be" and the accessibility labels on delivery card buttons.
 - Stable 0.9.1 (build 24) fixes the first Press Return after inserting in a listed Electron app like the Claude desktop app, which now waits briefly for the app's accessibility to come up, and updates Sparkle to 2.10.1, which fixes an update installing before the app quit when Mouthtype sits in an NFC Unicode path.
 - Stable 0.9.0 (build 23) makes Press Return after inserting work in terminals you add (Terminal, iTerm2, Ghostty, WezTerm, Warp, kitty, Alacritty, Hyper and Orca), where Mouthtype can't confirm a paste and presses Return a moment after it without checking, and in Electron apps like the Claude desktop app with context names off, by turning on their accessibility when a recording starts. The guards stay: never in password fields or secure input, after a recovered take or Paste Last, or if you typed or clicked after the paste.
 - Stable 0.8.0 (build 22) adds Press Return after inserting, an opt-in list in Settings > Advanced of apps where Mouthtype presses Return once after a confirmed paste (off by default, never in password fields or secure input, and never for recovered takes or Paste Last; Apple Terminal can't confirm a paste, so it never sends there, and other apps send only when Mouthtype can confirm the text landed), and a narrow Formal cleanup fix: a swear word used as a verb after he, she or I with a form of "be" and before a word for people such as women, men or guys now becomes "sleeping with" instead of being dropped.
@@ -13,7 +19,7 @@ What each stable release added:
 - Stable 0.2.0 (build 16) added selected-text transforms, optional saved-word boosting during recognition, cleanup levels in app and website rules, the Formal swearing change, Settings keyboard access and the Appearance preview change.
 - Stable 0.1.0 (build 15) was cut from the rc.4 tree plus the quit-recovery fix and a docs correction.
 
-Not verified on a device for stable 0.9.1:
+Not verified on a device for stable 0.12.3:
 
 - Fresh install on a Mac that has never run Mouthtype.
 - VoiceOver.
