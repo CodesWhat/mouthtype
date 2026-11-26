@@ -181,6 +181,7 @@ private final class FakeSystem: HotkeySystem {
         #expect(throws: HotkeyService.StartError.tapCreateFailed) { try service.switchRecordingMode(.toggle) }
         #expect(service.health == .off)
         system.refused = []
+        try service.start()
         try service.switchRecordingMode(.toggle)
         #expect(service.health == .listening)
         service.stop()
@@ -194,6 +195,7 @@ private final class FakeSystem: HotkeySystem {
         #expect(throws: HotkeyService.StartError.tapCreateFailed) { try service.switchMouseTrigger(trigger) }
         #expect(service.mouseTrigger == .none)
         system.refused = []
+        try service.start()
         try service.switchMouseTrigger(trigger)
         #expect(service.mouseTrigger == trigger)
         #expect(system.tap(.mouse) != nil)
