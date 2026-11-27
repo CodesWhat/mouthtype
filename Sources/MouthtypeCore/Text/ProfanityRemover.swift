@@ -99,7 +99,7 @@ public struct ProfanityRemover: Sendable {
     public init(protectedWords: Set<String> = [], protectedPhrases: [String] = []) {
         self.protectedWords = Set(protectedWords.map { $0.lowercased() })
         self.writtenForms = protectedWords
-        self.phraseMatcher = PhraseMatcher(patterns: protectedPhrases)
+        self.phraseMatcher = PhraseMatcher.shared(patterns: protectedPhrases)
     }
 
     public func apply(_ text: String) -> StageResult {
