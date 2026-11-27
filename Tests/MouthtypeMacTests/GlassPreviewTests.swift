@@ -12,11 +12,6 @@ import Testing
         GlassPillEnvironment(materialAvailable: { available }, reduceTransparency: { reduceTransparency }, backdrop: { _ in nil })
     }
 
-    private func spin(until condition: () -> Bool, timeout: TimeInterval = 5) async {
-        let end = Date().addingTimeInterval(timeout)
-        while !condition(), Date() < end { try? await Task.sleep(for: .milliseconds(10)) }
-    }
-
     private func withHooks(_ body: () async throws -> Void) async rethrows {
         let env = PillPreviewStage.systemEnvironment, cache = PillPreviewStage.backdropCache
         defer { PillPreviewStage.systemEnvironment = env; PillPreviewStage.backdropCache = cache }
