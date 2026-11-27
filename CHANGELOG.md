@@ -13,7 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
-- A project's `.git` pointer file is only followed to a git directory inside the project.
+- A project's `.git` pointer file is only followed into a linked worktree or submodule git directory.
 
 ### Added
 
