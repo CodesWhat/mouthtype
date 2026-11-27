@@ -1,4 +1,4 @@
-# Mouthtype 0.12.3
+# Mouthtype 0.12.4
 
 Local dictation for Apple Silicon Macs running macOS 26 or later. Hold Fn, speak, release, and clean text is pasted where you're typing. Recognition and cleanup run on your Mac.
 
@@ -15,6 +15,16 @@ Local dictation for Apple Silicon Macs running macOS 26 or later. Hold Fn, speak
 > This distribution is Developer ID signed and notarized. If macOS rejects it, record the exact message; do not disable Gatekeeper.
 
 The app’s Resources folder contains these notes and its license. Corresponding release source is available from https://mouthtype.app/source; the development repository is at https://github.com/CodesWhat/mouthtype.
+
+## What changed in 0.12.4
+
+- New: click the pill while a take is processing to cancel it. Esc also cancels a take that is still processing.
+- Fixed: the next take no longer drops the previous paste's read-back, and dismissing the microphone card releases the microphone.
+- Fixed: cleanup's length limit scales with the take, a negation stays on its word, and "had second thoughts" no longer becomes a list. Edit Selection by Voice no longer lets a refusal clause fool its check.
+- Fixed: recovery lists and prunes audio that has no history row, and audio retention is reapplied every six hours. A crash that left your output muted is repaired on the next launch.
+- Fixed: a history database saved by a newer version is left alone, with a message to update. Cancelling a file transcription keeps the last result.
+- Security: a project's .git pointer is only followed to a folder inside the project.
+- Speech recognition uses FluidAudio 0.18.4. The menu refreshes less after a take, Home search waits for a pause in typing, and the dictionary list renders lazily.
 
 ## What changed in 0.12.3
 

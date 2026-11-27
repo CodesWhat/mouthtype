@@ -1,7 +1,8 @@
-# Mac 0.12.3 release readiness
+# Mac 0.12.4 release readiness
 
 What each stable release added:
 
+- Stable 0.12.4 (build 31) adds click-to-cancel on the processing pill, and fixes Esc during processing, paste read-back across the next take, cleanup length and negation handling, Edit Selection by Voice guard bypasses, recovery of audio without a history row, a crash-muted output, a history database from a newer version and a cancelled file transcription, confines the .git pointer read to the project, and updates FluidAudio to 0.18.4.
 - Stable 0.12.3 (build 30) keeps no transcript, timings, edits, search entry or audio for a take dictated into a secure field and scrubs existing secure takes on upgrade, pins and verifies the Whisper tokenizer, stops fetching favicons for built-in Style sites, tightens Press Return after inserting, and fixes dictation staying blocked after a cancelled update quit, a locked hands-free recording blocking its stop shortcut, microphone ownership between setup and dictation, and the audio converter tail on a mid-take format change.
 - Stable 0.12.2 (build 29) fixes Fn/Globe dictation that stopped responding when macOS reported the Power key as held.
 - Stable 0.12.1 (build 28) makes Mouthtype paste only when it can confirm a normal text field while Secure Input is on, and otherwise keeps the text on the card with a note.
@@ -19,7 +20,7 @@ What each stable release added:
 - Stable 0.2.0 (build 16) added selected-text transforms, optional saved-word boosting during recognition, cleanup levels in app and website rules, the Formal swearing change, Settings keyboard access and the Appearance preview change.
 - Stable 0.1.0 (build 15) was cut from the rc.4 tree plus the quit-recovery fix and a docs correction.
 
-Not verified on a device for stable 0.12.3:
+Not verified on a device for stable 0.12.4:
 
 - Fresh install on a Mac that has never run Mouthtype.
 - VoiceOver.
