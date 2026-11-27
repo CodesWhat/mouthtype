@@ -1,9 +1,9 @@
 import Foundation
 
-public enum EngineCatalogError: Error, LocalizedError, Equatable {
+enum EngineCatalogError: Error, LocalizedError, Equatable {
     case unknownEngine(id: String, validIDs: [String])
 
-    public var errorDescription: String? {
+    var errorDescription: String? {
         switch self {
         case let .unknownEngine(id, validIDs):
             return "Unknown engine '\(id)'. Valid ids: \(validIDs.joined(separator: ", "))"

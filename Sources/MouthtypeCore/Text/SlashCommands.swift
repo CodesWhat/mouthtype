@@ -11,12 +11,12 @@ import Foundation
 /// engine attached ("Slash research.") is dropped; inside prose it stays after the name.
 ///
 /// Runs before spoken commands so it sees "dash" and "hyphen" as words. The caller runs it only for a coding target.
-public struct SlashCommands: Sendable {
-    public static let stageName = "slash command"
+struct SlashCommands: Sendable {
+    static let stageName = "slash command"
 
     private let matcher: PhraseMatcher
 
-    public init(protectedPhrases: [String] = []) {
+    init(protectedPhrases: [String] = []) {
         self.matcher = PhraseMatcher.shared(patterns: protectedPhrases)
     }
 
@@ -44,7 +44,7 @@ public struct SlashCommands: Sendable {
         "separator", "separators", "delimiter", "delimiters", "button",
     ]
 
-    public func apply(_ text: String) -> StageResult {
+    func apply(_ text: String) -> StageResult {
         let chars = Array(text)
         guard !chars.isEmpty else { return StageResult(text: text) }
         let lower = TextScan.lowered(chars)

@@ -34,15 +34,15 @@ public struct DictionaryRule: Sendable, Equatable, Hashable, Codable {
 ///
 /// Adapted from Parrot (https://github.com/humanitas-labs/parrot, 0eb4708), MIT License, Copyright (c) 2026
 /// Humanitas Labs. See `PhraseMatcher`.
-public struct DictionaryReplacer: Sendable {
-    public static let stageName = "dictionary"
+struct DictionaryReplacer: Sendable {
+    static let stageName = "dictionary"
 
-    public let rules: [DictionaryRule]
+    let rules: [DictionaryRule]
     private let setup: DictionarySetup
 
     /// The matcher and derived lists come from `DictionarySetup`, so a take with the same rules as the last one
     /// rebuilds nothing. Any edit to the rule list is a different key and builds fresh.
-    public init(rules: [DictionaryRule]) {
+    init(rules: [DictionaryRule]) {
         let setup = DictionarySetup.shared(for: rules)
         self.setup = setup
         self.rules = setup.usable
@@ -50,7 +50,7 @@ public struct DictionaryReplacer: Sendable {
 
     private var matcher: PhraseMatcher { setup.matcher }
 
-    public func apply(_ text: String) -> StageResult {
+    func apply(_ text: String) -> StageResult {
         guard !matcher.isEmpty, !text.isEmpty else { return StageResult(text: text) }
         let chars = Array(text)
         let hits = matcher.matches(chars, lower: TextScan.lowered(chars))
@@ -77,7 +77,7 @@ public struct DictionaryReplacer: Sendable {
     }
 
     /// Convenience used by tests and callers that only want the text.
-    public func apply(to text: String) -> String { apply(text).text }
+    func apply(to text: String) -> String { apply(text).text }
 }
 
 /// Everything derived from one rule list, built once and shared. `shared(for:)` keeps the few most recent lists,

@@ -1,9 +1,9 @@
 import Foundation
 
-public enum CleanerCatalogError: Error, LocalizedError, Equatable {
+enum CleanerCatalogError: Error, LocalizedError, Equatable {
     case unknownCleaner(id: String, validIDs: [String])
 
-    public var errorDescription: String? {
+    var errorDescription: String? {
         switch self {
         case let .unknownCleaner(id, validIDs):
             return "Unknown cleaner '\(id)'. Valid ids: \(validIDs.joined(separator: ", "))"

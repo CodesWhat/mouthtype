@@ -10,8 +10,8 @@ import Foundation
 /// The render callback never touches actor state: it works on the `CaptureBuffer`,
 /// `ConverterCache` and `LevelMeter`, which are lock- or atomic-based and
 /// reachable only through the closures built in `start`.
-public actor AudioCapture {
-    public static let targetSampleRate: Double = 16_000
+actor AudioCapture {
+    static let targetSampleRate: Double = 16_000
 
     static let targetFormat = AVAudioFormat(
         commonFormat: .pcmFormatFloat32,
@@ -21,7 +21,7 @@ public actor AudioCapture {
     )!
 
     /// The input level in dBFS, safe to read from any thread (the overlay reads it at 60 Hz).
-    public nonisolated var reading: LevelReading { meter.reading }
+    nonisolated var reading: LevelReading { meter.reading }
 
     private let meter = LevelMeter()
     private let input: any CaptureInputDriving
@@ -41,7 +41,7 @@ public actor AudioCapture {
     /// Failed input buffers in one recording before the input counts as lost.
     static let inputFailureLimit = 20
 
-    public init() {
+    init() {
         input = HALInput(keepsPrepared: true)
         resolveInput = { try CaptureInputSelection.current() }
         authorization = { MicrophoneAccess.status }
@@ -60,12 +60,12 @@ public actor AudioCapture {
 
     /// Called once from the input's own thread when a recording's input is lost: the device went away, the default
     /// input moved, or the input stopped delivering. Build the handler with `CaptureInterruption.hop`.
-    public func setInterruptionHandler(_ handler: (@Sendable () -> Void)?) {
+    func setInterruptionHandler(_ handler: (@Sendable () -> Void)?) {
         interruption = handler
     }
 
     /// Builds the audio unit without starting it. Call at launch once microphone access is granted.
-    @discardableResult public func prepare() throws -> Bool {
+    @discardableResult func prepare() throws -> Bool {
         guard !recording else { return false }
         if let error = MicrophoneAccess.captureError(for: authorization()) { throw error }
         let selected = try resolveInput()
@@ -80,7 +80,7 @@ public actor AudioCapture {
     /// `keyDownAtNanos` is host nanoseconds (`HostClock.now()` units, which is what `CGEvent.timestamp` reports).
     /// Throws `CaptureError`; on a throw nothing is left running. A start while another lease records throws `.busy`
     /// and leaves that recording alone.
-    public func start(keyDownAtNanos: UInt64, lease: CaptureLease) throws {
+    func start(keyDownAtNanos: UInt64, lease: CaptureLease) throws {
         if let holder { throw CaptureError.busy(holder.owner) }
         let startedAt = keyDownAtNanos
 
@@ -118,7 +118,7 @@ public actor AudioCapture {
     /// Stops recording and returns the captured samples. Throws `CaptureError.routeChanged` instead of returning a
     /// partial capture if the input route changed mid-recording, and `.notRecording` if `lease` is not the one
     /// recording. With `salvaging` the partial capture is returned instead.
-    public func stop(_ lease: CaptureLease, salvaging: Bool = false) throws -> CapturedAudio {
+    func stop(_ lease: CaptureLease, salvaging: Bool = false) throws -> CapturedAudio {
         guard holder == lease else { throw CaptureError.notRecording }
         holder = nil
         input.stop()
@@ -154,7 +154,7 @@ public actor AudioCapture {
     }
 
     /// What `lease`'s recording in progress has captured from sample `offset` on. Empty when it is not recording.
-    public func partialSamples(from offset: Int, lease: CaptureLease) -> [Float] {
+    func partialSamples(from offset: Int, lease: CaptureLease) -> [Float] {
         holder == lease ? buffer.samples(from: offset) : []
     }
 
@@ -164,7 +164,7 @@ public actor AudioCapture {
 
     /// Discards `lease`'s recording in progress and says whether there was one. Safe when idle; another lease's
     /// recording is left running.
-    @discardableResult public func cancel(_ lease: CaptureLease) -> Bool {
+    @discardableResult func cancel(_ lease: CaptureLease) -> Bool {
         guard let holder else {
             meter.reset()
             return false

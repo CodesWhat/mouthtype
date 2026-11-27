@@ -2,7 +2,7 @@ import Foundation
 import GRDB
 import Synchronization
 
-public enum TranscriptStoreError: Error, Equatable {
+enum TranscriptStoreError: Error, Equatable {
     case unknownDictation(String)
     case notTerminal(DictationStatus)
     case notCancelled(DictationStatus)
