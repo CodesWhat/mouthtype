@@ -51,10 +51,6 @@ public struct Modifiers: Equatable, ExpressibleByArrayLiteral, Sendable {
         modifiers.contains(where: { $0.matches(modifier) })
     }
 
-    public func contains(kind: Modifier.Kind) -> Bool {
-        modifiers.contains(where: { $0.kind == kind })
-    }
-
     public func isSubset(of other: Modifiers) -> Bool {
         modifiers.allSatisfy { element in
             other.contains(element)
