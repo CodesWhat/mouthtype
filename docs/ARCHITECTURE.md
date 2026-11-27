@@ -17,17 +17,17 @@ Tests live in `Tests/` as `MouthtypeCoreTests`, `FnRemapKitTests`, `MouthtypeMac
 
 ## Dictation pipeline
 
-`DictationController` (in `MouthtypeMac/Dictation/`) drives one dictation at a time from hotkey events. `DictationPipeline` runs the stages.
+`DictationController` (in `MouthtypeMac/Dictation/`) drives one dictation at a time from hotkey events. `DictationPipeline` runs the stages. While a take is processing, Esc or a click on the pill cancels it.
 
 1. **Trigger.** `HotkeyService` watches a `CGEvent` tap (`Input/EventTap.swift`). The tap is created only after Accessibility is granted. `Gesture/` in the core decides hold, tap, double-tap lock (hands-free) and cancel.
-2. **Capture.** `AudioCapture` runs an AUHAL input unit (`HALInput`) and converts to 16 kHz mono Float32. The unit runs only while recording. A recording stops at 20 minutes, with a warning at 19, and a partial is flushed to disk every 5 seconds for crash recovery.
+2. **Capture.** `AudioCapture` runs an AUHAL input unit (`HALInput`) and converts to 16 kHz mono Float32. The unit runs only while recording. A recording stops at 20 minutes, with a warning at 19, and a partial is flushed to disk every 5 seconds for crash recovery. While it records, Mouthtype can mute the output, and it unmutes on the next launch if a crash skipped the restore (`RecordingAudioQuiet`).
 3. **Trim and voice check.** `SilenceTrimmer` cuts leading and trailing silence with an energy threshold. A capture with no voiced frames ends as empty without reaching the engine.
 4. **ASR.** The engine comes from `EngineCatalog`: Parakeet v3 and v2 (FluidAudio, Core ML) and two Whisper variants (WhisperKit). `ParakeetEngine` also runs Silero VAD through FluidAudio's `VadManager`, and can bias recognition toward saved dictionary words and editor names.
 5. **Guard.** `TranscriptGuard` drops words and tags that shouldn't be delivered and marks the take empty when too little voiced audio or no words remain.
 6. **Deterministic cleanup.** `TextPipeline` runs fixed stages in order: fillers, slash commands (coding targets only), spoken commands, self-corrections, counted lists, notation, numbers, dictionary, snippets, profanity (Formal only), blend, style, whitespace.
 7. **Model cleanup (optional).** `CleanupLevel` is off, basic, Fast (`light`) or Thorough (`medium`). Basic is the deterministic pass alone. Fast and Thorough add a local MLX model through `CleanerHost`: Superwhisper S1-mini for Fast and Gemma 4 E4B for Thorough (`CleanerCatalog`). A guard (`SmartCleanupGuard`) and fallbacks keep the deterministic text when the model pass fails or drifts. `AppleCleaner` and `ClaudeCLICleaner` exist in the catalog for benchmarks; the app's cleanup paths don't select them.
 8. **Insertion.** `TextInserter` writes the text to the pasteboard, posts Cmd+V to the target process, then restores the user's clipboard. It snapshots the focused element over Accessibility at start and again before delivery, refuses secure fields, pastes at the focus present at delivery (and skips automatic Return if focus moved since the take started or the starting field was unknown), and verifies the paste by re-reading the field. Text it can't place stays recoverable.
-9. **Record.** `TranscriptStore` logs the take, timings, edits and status. Audio is kept per the [retention policy](AUDIO-RETENTION.md).
+9. **Record.** `TranscriptStore` logs the take, timings, edits and status. A take dictated into a secure field keeps no transcript, timings, edits, search entry or audio (`scrubSecureTake`). Other audio is kept per the [retention policy](AUDIO-RETENTION.md). After a crash, recovery lists audio with no history row too and recovers it in the take's own language (`DictationRecovery`).
 
 File transcription (`MouthtypeMac/FileTranscription/`) reuses the same engine and cleanup on a decoded audio file and returns text for Copy or Save. See [FILE-TRANSCRIPTION.md](FILE-TRANSCRIPTION.md).
 
@@ -43,8 +43,8 @@ Speech and cleanup models are not bundled. They download on first use and then r
 ## Settings and persistence
 
 - **Preferences** are `UserDefaults` in the `com.codeswhat.mouthtype` domain, wrapped by small types such as `CleanupSettings`, `PasteSettings` and `RecordingModePreference`. `SettingsModel` backs the settings UI.
-- **History and stats** are one SQLite database, `~/Library/Application Support/Mouthtype/mouthtype.sqlite`, opened with GRDB (`TranscriptStore`) and migrated on launch.
-- **Audio** is stored as 16 kHz WAV files in `audio/` next to the database (`AudioArchive`), expired by `AudioRetentionPolicy`.
+- **History and stats** are one SQLite database, `~/Library/Application Support/Mouthtype/mouthtype.sqlite`, opened with GRDB (`TranscriptStore`) and migrated on launch. A database written by a newer Mouthtype isn't opened or changed (`TranscriptStoreError.newerSchema`); the app says to update.
+- **Audio** is stored as 16 kHz WAV files in `audio/` next to the database (`AudioArchive`), expired by `AudioRetentionPolicy` at launch and again every six hours (`AudioPurgeLoop`).
 
 ## Updates
 
@@ -69,7 +69,7 @@ The Linux client under `tools/` is experimental, source-only and Python, not a b
 | Microphone | `NSMicrophoneUsageDescription` and the `com.apple.security.device.audio-input` entitlement. `AudioCapture` | Audio is captured only while recording and stays on the Mac. |
 | Accessibility | `AccessibilityAccess`, `FocusSnapshot`, `EditorAccessibility` | Needed for the event tap and for reading the focused field, so insertion can refuse secure fields and skip automatic Return after a focus move. Editor hints are off by default. |
 | Clipboard and synthetic keys | `TextInserter` | The pasteboard is borrowed to carry the text and restored afterward. Cmd+V is posted to the target app. |
-| Network | Model downloads (Hugging Face) and Sparkle (`mouthtype.app`) | Model files in, update feed and archives in. Dictation text and audio aren't sent anywhere by the app's cleanup path, and the app has no telemetry code. Models are commit-pinned but not hash-checked beyond what each library does. |
+| Network | Model downloads (Hugging Face) and Sparkle (`mouthtype.app`) | Model files in, update feed and archives in. Dictation text and audio aren't sent anywhere by the app's cleanup path, and the app has no telemetry code. Models are commit-pinned but not hash-checked beyond what each library does. The exception is the Whisper tokenizer files, which are pinned and checked against SHA-256 digests (`ModelPins.TokenizerPin`). |
 | URL scheme | `AutomationRouter` | Untrusted input from any web page. Off by default for anything that records, copies or inserts. |
 | Local files | Application Support directory | Database and recordings are not encrypted. Imported audio is decoded by platform and dependency code. |
 | Developer tools | `mouthtype-bench` | The Claude CLI cleaner and judge can send input to that service. They're benchmark-only and must use synthetic data. |
