@@ -266,7 +266,7 @@ Mouthtype is free and open source. If it saves you time, you can support it on [
 [![macOS 26](https://img.shields.io/badge/macOS_26-000?logo=apple&logoColor=fff)](https://developer.apple.com/macos/)
 [![Core ML](https://img.shields.io/badge/Core_ML-0A84FF?logo=apple&logoColor=fff)](https://developer.apple.com/machine-learning/core-ml/)
 [![MLX](https://img.shields.io/badge/MLX_3.32-6D28D9)](https://github.com/ml-explore/mlx-swift-lm)
-[![FluidAudio](https://img.shields.io/badge/FluidAudio_0.17-0F766E)](https://github.com/FluidInference/FluidAudio)
+[![FluidAudio](https://img.shields.io/badge/FluidAudio_0.18-0F766E)](https://github.com/FluidInference/FluidAudio)
 [![WhisperKit](https://img.shields.io/badge/WhisperKit_1.1-2563EB)](https://github.com/argmaxinc/WhisperKit)
 [![Sparkle](https://img.shields.io/badge/Sparkle_2.10-D9480F)](https://github.com/sparkle-project/Sparkle)
 [![GRDB](https://img.shields.io/badge/GRDB_7.11-003B57?logo=sqlite&logoColor=fff)](https://github.com/groue/GRDB.swift)
