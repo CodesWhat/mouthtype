@@ -14,12 +14,12 @@ import Foundation
 ///
 /// A clock time can also be corrected to a bare hour at the end of a sentence.
 /// English only.
-public struct SelfCorrection: Sendable {
-    public static let stageName = "self-correction"
+struct SelfCorrection: Sendable {
+    static let stageName = "self-correction"
 
-    public init() {}
+    init() {}
 
-    public func apply(_ text: String) -> StageResult {
+    func apply(_ text: String) -> StageResult {
         let chars = Array(text)
         guard chars.count >= 5 else { return StageResult(text: text) }
         let scan = Scan(chars: chars)

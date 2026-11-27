@@ -26,11 +26,11 @@ import Foundation
 /// Misses: a list whose first item is "first
 /// of all" spelled any other way; bare letters; and prose that happens to count ("First, thanks. Second, I'm
 /// late.") reads as a list.
-public struct CountedLists: Sendable {
+struct CountedLists: Sendable {
     /// Edits log under the spoken command stage, like the list commands they sit next to.
-    public static let stageName = SpokenCommands.stageName
+    static let stageName = SpokenCommands.stageName
 
-    public init() {}
+    init() {}
 
     private enum Kind { case clauseStart, comma, soft }
 
@@ -91,7 +91,7 @@ public struct CountedLists: Sendable {
         "projects", "calls", "emails", "people", "names", "agenda", "ones",
     ]
 
-    public func apply(_ text: String) -> StageResult {
+    func apply(_ text: String) -> StageResult {
         let chars = Array(text)
         let n = chars.count
         guard n > 0 else { return StageResult(text: text) }

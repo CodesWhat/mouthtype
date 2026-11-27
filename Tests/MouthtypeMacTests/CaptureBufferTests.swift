@@ -233,7 +233,7 @@ func makePCM(sampleRate: Double, channels: AVAudioChannelCount, frames: AVAudioF
                 continuation.resume()
             }
         }
-        for _ in 0..<50 where ran == 0 { try? await Task.sleep(for: .milliseconds(10)) }
+        await pollUntil { !(ran == 0) }
         #expect(ran == 1)
     }
 }

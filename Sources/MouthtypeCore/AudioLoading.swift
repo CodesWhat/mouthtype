@@ -1,11 +1,11 @@
 import AVFoundation
 import Foundation
 
-public enum AudioLoadingError: Error, LocalizedError {
+enum AudioLoadingError: Error, LocalizedError {
     case converterUnavailable(from: String)
     case conversionFailed(String)
 
-    public var errorDescription: String? {
+    var errorDescription: String? {
         switch self {
         case let .converterUnavailable(format): return "No converter from \(format) to 16 kHz mono Float32"
         case let .conversionFailed(reason): return "Audio conversion failed: \(reason)"

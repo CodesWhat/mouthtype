@@ -9,7 +9,7 @@ import QuartzCore
 /// slows the animations N times, `--pill-click-test` stretches the locked phase and clicks both controls with
 /// synthetic mouse events, and `--card-click-test` clicks a card's Copy and Undo the same way. `-textFont <name>`
 /// overrides the text font for the run without saving it.
-public enum PillDemo {
+enum PillDemo {
     struct Options {
         var skin: PillSkinKind?
         var slowmo: Float = 1

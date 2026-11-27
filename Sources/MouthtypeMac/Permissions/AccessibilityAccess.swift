@@ -4,20 +4,20 @@ import Foundation
 /// Accessibility trust: prompts once, then polls until it is granted. The event taps are created only after
 /// that, so macOS has no reason to raise an Input Monitoring prompt.
 @MainActor
-public final class AccessibilityAccess {
+final class AccessibilityAccess {
     static let promptedKey = "AccessibilityPrompted"
     static let pollInterval: Duration = .seconds(1)
 
-    public private(set) var isGranted: Bool
+    private(set) var isGranted: Bool
     /// Called on the main actor whenever the grant changes, and once from `start()` with the current state.
-    public var onChange: (@MainActor (Bool) -> Void)?
+    var onChange: (@MainActor (Bool) -> Void)?
 
     private let defaults: UserDefaults
     private let requestPrompt: @MainActor () -> Void
     private let probe: @MainActor () -> Bool
     private var polling: Task<Void, Never>?
 
-    public init(defaults: UserDefaults = .standard) {
+    init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         probe = { AXIsProcessTrusted() }
         requestPrompt = {
@@ -35,7 +35,7 @@ public final class AccessibilityAccess {
     }
 
     /// Shows the system prompt the first time only; after that the menu line opens the pane.
-    public func start(prompt: Bool = true) {
+    func start(prompt: Bool = true) {
         isGranted = probe()
         onChange?(isGranted)
         guard !isGranted else { return }
@@ -47,7 +47,7 @@ public final class AccessibilityAccess {
         poll()
     }
 
-    public func stop() {
+    func stop() {
         polling?.cancel()
         polling = nil
     }
@@ -73,9 +73,9 @@ public final class AccessibilityAccess {
         return granted
     }
 
-    public static let settingsURL = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!
+    static let settingsURL = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!
 
-    public static func statusText(granted: Bool) -> String {
+    static func statusText(granted: Bool) -> String {
         granted ? "Accessibility: allowed" : "Accessibility: needed"
     }
 }

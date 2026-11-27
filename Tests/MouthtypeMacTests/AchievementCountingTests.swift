@@ -64,7 +64,7 @@ import Testing
             editor: counting.counting(editor, as: .transforms) { box.model?.transform != nil }, transformer: CountingTransformer())
         box.model = model
         await model.prepare(transform: .fixGrammar)
-        for _ in 0..<200 where model.isTransforming { try? await Task.sleep(for: .milliseconds(5)) }
+        await pollUntil { !(model.isTransforming) }
         #expect(counting.store.count(.transforms) == 0)  // a preview alone is not a count
         model.accept()
         model.accept()
@@ -89,7 +89,7 @@ import Testing
         // The app refuses the write.
         editor.accepts = false
         await model.prepare(transform: .shorter)
-        for _ in 0..<200 where model.isTransforming { try? await Task.sleep(for: .milliseconds(5)) }
+        await pollUntil { !(model.isTransforming) }
         model.accept()
         #expect(model.refused && counting.store.count(.transforms) == 0)
 
@@ -97,7 +97,7 @@ import Testing
         editor.accepts = true
         model.cancel()
         await model.prepare(transform: .shorter)
-        for _ in 0..<200 where model.isTransforming { try? await Task.sleep(for: .milliseconds(5)) }
+        await pollUntil { !(model.isTransforming) }
         model.cancel()
         #expect(counting.store.count(.transforms) == 0)
     }

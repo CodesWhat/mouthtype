@@ -6,12 +6,12 @@ import Foundation
 /// only its own entry. A marker in UserDefaults records the mapping it found, so the next launch can undo it
 /// if the app died with it applied.
 @MainActor
-public final class FnRemap {
+final class FnRemap {
     static let markerKey = "FnRemapApplied"
     static let originalKey = "FnRemapOriginal"
     static let originalWasUnsetKey = "FnRemapOriginalWasUnset"
 
-    public enum Outcome: Equatable, Sendable {
+    enum Outcome: Equatable, Sendable {
         case applied
         case alreadyApplied
         /// The marker said applied but the live mapping had lost our entry (something else rewrote it); it was put back.
@@ -38,7 +38,7 @@ public final class FnRemap {
     /// The last resort when the main queue is wedged, so it can't touch the actor. Replaced in tests.
     var hardExit: @Sendable (Int32) -> Void = { exit($0) }
 
-    public convenience init(defaults: UserDefaults = .standard) {
+    convenience init(defaults: UserDefaults = .standard) {
         self.init(store: HIDKeyMappingStore(), defaults: defaults)
     }
 
@@ -53,10 +53,10 @@ public final class FnRemap {
         return savedOriginal()?.first { $0[FnRemapMapping.srcKey] == ours[FnRemapMapping.srcKey] && $0 != ours }
     }
 
-    public var isApplied: Bool { defaults.bool(forKey: Self.markerKey) }
+    var isApplied: Bool { defaults.bool(forKey: Self.markerKey) }
 
     /// What the mapping holds right now, for logging. Unset reads as "unset".
-    public func currentDescription() -> String {
+    func currentDescription() -> String {
         do {
             guard let mapping = try store.read() else { return "unset" }
             return mapping.map { entry in
@@ -67,7 +67,7 @@ public final class FnRemap {
         }
     }
 
-    public func apply() -> Outcome {
+    func apply() -> Outcome {
         if isApplied { return verifyLive() }
         let original: [FnRemapMapping.Entry]?
         do {
@@ -123,7 +123,7 @@ public final class FnRemap {
     /// Removes our entry and puts back whatever it displaced. Verified by reading back; the marker stays if that fails.
     /// A property that was never set comes back as an empty array: the HID system has no way to unset it
     /// (an empty array, kCFNull and `hidutil` null were all tried). Both mean no mapping.
-    public func restore() -> Outcome {
+    func restore() -> Outcome {
         guard isApplied else { return .clean }
         let original = savedOriginal()
         let current: [FnRemapMapping.Entry]
@@ -142,7 +142,7 @@ public final class FnRemap {
     }
 
     /// At launch: undo a remap a previous run died with.
-    public func restoreIfStale() -> Outcome {
+    func restoreIfStale() -> Outcome {
         guard isApplied else { return .clean }
         Log.hotkey.warning("fn remap was left applied by a previous run; restoring")
         return restore()
@@ -155,7 +155,7 @@ public final class FnRemap {
     /// cancelled, after `fallbackDelay` the mapping is restored and the process exits anyway; if the main queue is
     /// blocked (a modal alert) or wedged too, a background timer exits and the fn guard restores the mapping. A second signal does the same
     /// immediately. Without it (the diagnostic probes) the handler restores and exits at once.
-    public func installSignalHandlers(
+    func installSignalHandlers(
         signals: [Int32] = [SIGTERM, SIGINT],
         requestTermination: (@MainActor () -> Void)? = nil,
         fallbackDelay: TimeInterval = 10

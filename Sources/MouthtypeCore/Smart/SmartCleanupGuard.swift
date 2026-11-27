@@ -3,14 +3,14 @@ import Foundation
 /// Decides whether a model's output may replace the deterministic text it was made from. Every check answers one
 /// failure seen with small models: output that is empty, runs away, drops the speaker's words, changes a number,
 /// loses a name or a dictionary spelling, or answers the dictation instead of transcribing it.
-public enum SmartCleanupGuard {
+enum SmartCleanupGuard {
     /// Share of the input's content words the output must keep at either model cleanup level.
-    public static func minimumKept(for level: CleanupLevel) -> Double { 0.5 }
+    static func minimumKept(for level: CleanupLevel) -> Double { 0.5 }
     /// Share of the output's content words that may be new, past which it is answering rather than transcribing.
-    public static func maximumNovel(for level: CleanupLevel) -> Double { 0.5 }
+    static func maximumNovel(for level: CleanupLevel) -> Double { 0.5 }
     /// The novel share allowed once the output has `longOutputWords` content words. A short output can legitimately be
     /// half new when one corrected name is one of two content words, so the tighter limit only applies to longer text.
-    public static let longOutputNovel = 0.4
+    static let longOutputNovel = 0.4
     static let longOutputWords = 8
 
     /// How far after an abandoned number or name its correction cue may appear.
@@ -19,7 +19,7 @@ public enum SmartCleanupGuard {
     /// The reason to reject an output that isn't in the language of its input, or nil. A cleanup model that answers in
     /// English (a translation) fails here even when most of its words are kept. Text under three words, or with no
     /// detector, can't be told apart and passes.
-    public static func languageChange(
+    static func languageChange(
         output: String, language: DictationLanguage?, detector: (any LanguageDetector)?,
         confidence: Double = languageChangeConfidence
     ) -> String? {
@@ -32,7 +32,7 @@ public enum SmartCleanupGuard {
     }
 
     /// How sure the detector must be that the output switched language before the cleanup is rejected.
-    public static let languageChangeConfidence = 0.6
+    static let languageChangeConfidence = 0.6
 
     /// Phrases a speaker uses to replace what they just said. Matched as whole words.
     static let correctionCues: [[String]] = [
@@ -43,7 +43,7 @@ public enum SmartCleanupGuard {
     /// The model's text with the input's closing mark put back. A dictation that ended in "." or "?" or "!" keeps it:
     /// the model may not turn a statement into a question or the reverse. An input with no closing mark leaves the
     /// model free to add one.
-    public static func restoringTerminal(input: String, output: String) -> String {
+    static func restoringTerminal(input: String, output: String) -> String {
         guard let wanted = terminalMark(input) else { return output }
         let body = output.replacingOccurrences(of: "\\s+$", with: "", options: .regularExpression)
         guard let last = body.last, last != wanted, ".?!".contains(last) else { return output }
@@ -53,7 +53,7 @@ public enum SmartCleanupGuard {
     /// The model's text with "3:15pm" written back as "3:15 PM" when the input spelled its times that way. The native
     /// model lowercases and closes the gap; the deterministic pass already wrote the conventional form, and the guard
     /// would otherwise throw out a correct output over the casing of its AM or PM.
-    public static func restoringMeridiem(input: String, output: String) -> String {
+    static func restoringMeridiem(input: String, output: String) -> String {
         guard input.range(of: #"(?<![\p{L}])[AP]M(?![\p{L}])"#, options: .regularExpression) != nil,
             let expression = try? NSRegularExpression(pattern: #"(?<=\d)[ \t]?([apAP])[mM](?![\p{L}\p{N}])"#)
         else { return output }
@@ -213,7 +213,7 @@ public enum SmartCleanupGuard {
     /// A reason to reject, or nil when the output is fine. Outside English only the language-neutral checks run: the
     /// negation, certainty, time-of-day, question and number-word checks read English words, so they are left out, the
     /// stop-word filter is off, and German nouns (always capitalized) are not treated as names.
-    public static func rejection(
+    static func rejection(
         input: String, output: String, level: CleanupLevel, dictionary: [DictionaryRule] = [], snippets: [Snippet] = [],
         nearbySpellings: [String] = [], resolvedInput: String? = nil, language: DictationLanguage? = nil,
         strictNames: Bool = false

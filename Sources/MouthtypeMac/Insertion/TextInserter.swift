@@ -8,7 +8,7 @@ import MouthtypeCore
 ///
 /// Call everything on the main actor. `snapshotFocus()` at dictation start, `deliver` when the text is ready.
 @MainActor
-public final class TextInserter {
+final class TextInserter {
     /// When the paste is re-read, from the moment the chord was posted. The third read catches a slow target (an IDE, a
     /// remote desktop) well inside the clipboard's field hold, so its clipboard goes back as soon as the text shows.
     static let verifyOffsets: [TimeInterval] = [0.15, 0.35, 0.65, 1.0]
@@ -77,7 +77,7 @@ public final class TextInserter {
     }
 
     /// `syntheticStamp` goes on every event we post (`eventSourceUserData`), so the app's own taps can recognise them.
-    public init(syntheticStamp: Int64, inputGeneration: @escaping @MainActor () -> UInt64?, restrictedToPID: pid_t? = nil) {
+    init(syntheticStamp: Int64, inputGeneration: @escaping @MainActor () -> UInt64?, restrictedToPID: pid_t? = nil) {
         self.observeBoundary = { Log.app.info("paste boundary: \($0.metadata, privacy: .public)") }
         self.sendsReturn = { SendAfterInsertSettings().isEnabled(bundleID: $0) }
         self.chunkedPaste = { PasteSettings.chunksEnabled($0) }
@@ -153,13 +153,13 @@ public final class TextInserter {
         focus.snapshotApplication()
     }
 
-    public func snapshotFocus() -> FocusSnapshot {
+    func snapshotFocus() -> FocusSnapshot {
         focus.snapshot()
     }
 
     /// The text around the cursor in the focused field, for the cleanup pass. Nil for a secure field or when the app
     /// won't say. The text is used for one cleanup run and neither stored nor logged.
-    public func insertionContext() -> InsertionContext? {
+    func insertionContext() -> InsertionContext? {
         let now = focus.recheck()
         guard !now.isSecure, !focus.isSecureInputEnabled, let element = now.element else { return nil }
         return focus.insertionContext(of: element)
@@ -193,7 +193,7 @@ public final class TextInserter {
     ///
     /// Automatic pastes wait for the preceding clipboard lease; long pastes also wait between parts.
     /// The read-back runs after this returns and never posts a paste again.
-    public func deliver(_ text: String, startFocus: FocusSnapshot?) async -> DeliveryResult {
+    func deliver(_ text: String, startFocus: FocusSnapshot?) async -> DeliveryResult {
         var result = await performDelivery(text, startFocus: startFocus)
         result.startTargetKnown = startFocus?.element != nil
         return result
@@ -569,7 +569,7 @@ public final class TextInserter {
     }
 
     /// Pastes the last delivered transcript again, at the current focus. Nil when nothing was delivered yet.
-    public func pasteLast() async -> DeliveryResult? {
+    func pasteLast() async -> DeliveryResult? {
         guard let lastText else { return nil }
         return await deliver(lastText, startFocus: nil)
     }
@@ -701,7 +701,7 @@ public final class TextInserter {
     }
 
     /// Puts the last delivered transcript on the clipboard to stay. False when nothing was delivered yet.
-    public func copyLast() -> Bool {
+    func copyLast() -> Bool {
         guard let lastText else { return false }
         clipboard.copy(lastText)
         return true

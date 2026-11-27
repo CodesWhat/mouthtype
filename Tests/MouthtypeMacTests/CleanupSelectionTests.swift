@@ -28,14 +28,14 @@ import MouthtypeCore
             fast: fast, thorough: FakeSmartModel(downloaded: true, id: "thorough"), level: { choice.level },
             idleUnloadDelay: .seconds(4))
         selection.start()
-        for _ in 0..<200 where !fast.isLoaded { try? await Task.sleep(for: .milliseconds(10)) }
+        await pollUntil { fast.isLoaded }
         try? await Task.sleep(for: .milliseconds(2500))
         selection.recordingStarted(level: .light, take: "take-1")
         try? await Task.sleep(for: .milliseconds(2500))
         // 5 s since ready, past the 4 s delay, but the key-down was only 2.5 s ago: a second of slack either way.
         #expect(fast.isLoaded && fast.unloads == 0)
         selection.releasePrewarm(for: "take-1")
-        for _ in 0..<1500 where fast.unloads == 0 { try? await Task.sleep(for: .milliseconds(10)) }
+        await pollUntil { !(fast.unloads == 0) }
         #expect(fast.unloads == 1)
     }
 
@@ -52,7 +52,7 @@ import MouthtypeCore
         let (selection, fast) = idleSelection(.milliseconds(300))
         selection.start()
         selection.recordingStarted(level: .light, take: "long")
-        for _ in 0..<500 where !fast.isLoaded { try? await Task.sleep(for: .milliseconds(10)) }
+        await pollUntil { fast.isLoaded }
         #expect(fast.isLoaded)
         // Several times the delay with the take still recording.
         try? await Task.sleep(for: .milliseconds(1500))
@@ -64,11 +64,11 @@ import MouthtypeCore
         let (selection, fast) = idleSelection(.milliseconds(300))
         selection.start()
         selection.recordingStarted(level: .light, take: "take")
-        for _ in 0..<500 where !fast.isLoaded { try? await Task.sleep(for: .milliseconds(10)) }
+        await pollUntil { fast.isLoaded }
         try? await Task.sleep(for: .milliseconds(900))
         #expect(fast.unloads == 0)
         selection.releasePrewarm(for: "take")
-        for _ in 0..<1000 where fast.unloads == 0 { try? await Task.sleep(for: .milliseconds(10)) }
+        await pollUntil { !(fast.unloads == 0) }
         #expect(fast.unloads == 1 && !fast.isLoaded)
     }
 
@@ -76,13 +76,13 @@ import MouthtypeCore
         let (selection, fast) = idleSelection(.milliseconds(300))
         selection.start()
         selection.recordingStarted(level: .light, take: "cancelled")
-        for _ in 0..<500 where !fast.isLoaded { try? await Task.sleep(for: .milliseconds(10)) }
+        await pollUntil { fast.isLoaded }
         try? await Task.sleep(for: .milliseconds(600))
         #expect(fast.unloads == 0)
         // A cancelled take releases the same way a finished one does, and a second release changes nothing.
         selection.releasePrewarm(for: "cancelled")
         selection.releasePrewarm(for: "cancelled")
-        for _ in 0..<1000 where fast.unloads == 0 { try? await Task.sleep(for: .milliseconds(10)) }
+        await pollUntil { !(fast.unloads == 0) }
         #expect(fast.unloads == 1 && !fast.isLoaded)
     }
 
@@ -91,9 +91,9 @@ import MouthtypeCore
         selection.start()
         selection.recordingStarted(level: .light, take: "a")
         selection.recordingStarted(level: .light, take: "a")
-        for _ in 0..<500 where !fast.isLoaded { try? await Task.sleep(for: .milliseconds(10)) }
+        await pollUntil { fast.isLoaded }
         selection.releasePrewarm(for: "a")
-        for _ in 0..<1000 where fast.unloads == 0 { try? await Task.sleep(for: .milliseconds(10)) }
+        await pollUntil { !(fast.unloads == 0) }
         #expect(fast.unloads == 1)
     }
 
@@ -111,7 +111,7 @@ import MouthtypeCore
         #expect(delivery?.result.text == "This is a sentence.")
         let next = await selection.runReady(SmartCleanupRequest(text: "Another sentence.", level: .medium), waitingUpTo: .seconds(60))
         #expect(next?.model.id == "thorough")
-        for _ in 0..<6000 where fast.isLoaded { try? await Task.sleep(for: .milliseconds(10)) }
+        await pollUntil { !(fast.isLoaded) }
         #expect(!fast.isLoaded)
         #expect(thorough.isLoaded)
     }
@@ -123,11 +123,11 @@ import MouthtypeCore
         fast.loadGate = gate
         let selection = CleanupSelection(fast: fast, thorough: FakeSmartModel(downloaded: true, id: "thorough"), level: { choice.level })
         let request = Task { await selection.runReady(SmartCleanupRequest(text: "Keep the wording.", level: .light), waitingUpTo: .seconds(60)) }
-        for _ in 0..<6000 where fast.loadsStarted == 0 { try? await Task.sleep(for: .milliseconds(10)) }
+        await pollUntil { !(fast.loadsStarted == 0) }
         choice.level = .medium; selection.levelChanged()
         await gate.release()
         #expect(await request.value?.model.id == "fast")
-        for _ in 0..<6000 where fast.isLoaded { try? await Task.sleep(for: .milliseconds(10)) }
+        await pollUntil { !(fast.isLoaded) }
         #expect(!fast.isLoaded)
     }
 
@@ -140,13 +140,13 @@ import MouthtypeCore
             fast: FakeSmartModel(downloaded: true, id: "fast"), thorough: thorough, level: { .off })
         selection.start()
         selection.recordingStarted(level: .medium, take: "a")
-        for _ in 0..<600 where !thorough.isLoaded { try? await Task.sleep(for: .milliseconds(10)) }
+        await pollUntil { thorough.isLoaded }
         // Well past the old 120 s window's worth of settling: nothing but the take's end releases it.
         await settle()
         #expect(thorough.isLoaded)
         #expect(thorough.unloads == 0)
         selection.releasePrewarm(for: "a")
-        for _ in 0..<600 where thorough.unloads == 0 { try? await Task.sleep(for: .milliseconds(10)) }
+        await pollUntil { !(thorough.unloads == 0) }
         #expect(thorough.unloads == 1)
         #expect(!thorough.isLoaded)
     }
@@ -160,7 +160,7 @@ import MouthtypeCore
         selection.releasePrewarm(for: "a")
         selection.releasePrewarm(for: "a")
         await settle()
-        for _ in 0..<600 where thorough.isLoaded { try? await Task.sleep(for: .milliseconds(10)) }
+        await pollUntil { !(thorough.isLoaded) }
         #expect(!thorough.isLoaded)
     }
 
@@ -170,13 +170,13 @@ import MouthtypeCore
         let selection = CleanupSelection(fast: fast, thorough: thorough, level: { .off })
         selection.start()
         selection.recordingStarted(level: .light, take: "a")
-        for _ in 0..<600 where !fast.isLoaded { try? await Task.sleep(for: .milliseconds(10)) }
+        await pollUntil { fast.isLoaded }
         selection.recordingStarted(level: .medium, take: "a")
-        for _ in 0..<600 where fast.isLoaded || !thorough.isLoaded { try? await Task.sleep(for: .milliseconds(10)) }
+        await pollUntil { !(fast.isLoaded || !thorough.isLoaded) }
         #expect(!fast.isLoaded)
         #expect(thorough.isLoaded)
         selection.releasePrewarm(for: "a")
-        for _ in 0..<600 where thorough.isLoaded { try? await Task.sleep(for: .milliseconds(10)) }
+        await pollUntil { !(thorough.isLoaded) }
         #expect(!thorough.isLoaded)
         #expect(fast.loads == 1)
     }
@@ -186,11 +186,14 @@ import MouthtypeCore
         let host = CleanupSelection(fast: FakeSmartModel(downloaded: true, id: "fast"), thorough: thorough, level: { .off })
         host.start()
         host.recordingStarted(level: .medium, take: "a")
-        for _ in 0..<600 where !thorough.isLoaded { try? await Task.sleep(for: .milliseconds(10)) }
+        await pollUntil { thorough.isLoaded }
         let unloadedByPressure = thorough.unloads
         // Stand-in for memory pressure: the host drops the model while the take still holds it.
-        host.unloadThoroughForMemoryPressure()
-        for _ in 0..<600 where thorough.unloads == unloadedByPressure { try? await Task.sleep(for: .milliseconds(10)) }
+        // The host ignores pressure until it reaches .ready, which can lag the model's own isLoaded flag, so retry.
+        await pollUntil {
+            host.unloadThoroughForMemoryPressure()
+            return thorough.unloads != unloadedByPressure
+        }
         let loads = thorough.loads
         host.releasePrewarm(for: "a")
         await settle()
@@ -232,7 +235,7 @@ import MouthtypeCore
         let target = selection.downloadTarget
         choice.level = .medium
         target.startDownload()
-        for _ in 0..<6000 where fast.downloads + thorough.downloads == 0 { try? await Task.sleep(for: .milliseconds(10)) }
+        await pollUntil { !(fast.downloads + thorough.downloads == 0) }
         #expect(fast.downloads == 1)
         #expect(thorough.downloads == 0)
     }

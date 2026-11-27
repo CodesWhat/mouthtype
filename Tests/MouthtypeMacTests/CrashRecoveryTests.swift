@@ -335,7 +335,7 @@ private struct Rig {
         await rig.recovery.offerIfNeeded()
         let recover = try #require(rig.cards.actions[.recover])
         recover()
-        for _ in 0..<400 where rig.cards.presented.last?.kind != .recovered { try await Task.sleep(for: .milliseconds(10)) }
+        await pollUntil { !(rig.cards.presented.last?.kind != .recovered) }
 
         let result = try #require(rig.cards.presented.last)
         #expect(result.kind == .recovered && result.transcript == "Hello from the crash." && result.actions == [.copy])

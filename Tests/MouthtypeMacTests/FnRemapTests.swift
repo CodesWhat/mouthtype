@@ -164,7 +164,7 @@ private final class FakeStore: KeyMappingStore {
         remap.hardExit = { _ in }
         _ = remap.apply()
         remap.handleSignal(requestTermination: {}, fallbackDelay: 0.05)
-        for _ in 0..<200 where exits.isEmpty { try? await Task.sleep(for: .milliseconds(10)) }
+        await pollUntil { !(exits.isEmpty) }
         #expect(exits.first == 0 && !remap.isApplied)
     }
 
@@ -183,7 +183,7 @@ private final class FakeStore: KeyMappingStore {
         }
         let start = ContinuousClock.now
         remap.handleSignal(requestTermination: { FnRemap.requestQuit(terminate) }, fallbackDelay: 1.5)
-        for _ in 0..<200 where !answered { try? await Task.sleep(for: .milliseconds(10)) }
+        await pollUntil { answered }
         #expect(answered)
         #expect(start.duration(to: .now) < .seconds(1))
         #expect(exits.isEmpty)
@@ -208,7 +208,7 @@ private final class FakeStore: KeyMappingStore {
         remap.hardExit = { _ in }
         remap.installSignalHandlers(signals: [SIGUSR2], requestTermination: { requests += 1 }, fallbackDelay: 60)
         kill(getpid(), SIGUSR2)
-        for _ in 0..<200 where requests == 0 { try? await Task.sleep(for: .milliseconds(10)) }
+        await pollUntil { !(requests == 0) }
         #expect(requests == 1)
     }
 

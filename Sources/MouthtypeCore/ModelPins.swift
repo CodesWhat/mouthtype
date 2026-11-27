@@ -6,30 +6,30 @@ import WhisperKit
 /// The Hugging Face commits the speech models are downloaded at. docs/SECURITY.md points here.
 /// These are the `main` commits as of 2026-10-21, so a fresh download matches what the app already resolved.
 /// To bump one, fetch https://huggingface.co/api/models/<repo>/revision/main `.sha` and update it here.
-public enum ModelPins {
-    public struct Pin: Sendable, Equatable {
-        public let repo: String
-        public let revision: String
+enum ModelPins {
+    struct Pin: Sendable, Equatable {
+        let repo: String
+        let revision: String
     }
 
-    public static let parakeetV3 = Pin(repo: "FluidInference/parakeet-tdt-0.6b-v3-coreml", revision: "7dd20fe6b1797d35f5e3307e8b1732d9a178edfe")
-    public static let parakeetV2 = Pin(repo: "FluidInference/parakeet-tdt-0.6b-v2-coreml", revision: "ee09c569f73759e6d44c9bd16766f477b2b36d39")
-    public static let ctc110m = Pin(repo: "FluidInference/parakeet-ctc-110m-coreml", revision: "accdafd8cf8a2ff1cabe3c11e54416b405d409aa")
-    public static let sileroVAD = Pin(repo: "FluidInference/silero-vad-coreml", revision: "b419383c55c110e2c9271fa6ee0ea83d03c70d96")
-    public static let whisperKit = Pin(repo: "argmaxinc/whisperkit-coreml", revision: "0f63a7800b00dd0226abd051b906c246e1907482")
+    static let parakeetV3 = Pin(repo: "FluidInference/parakeet-tdt-0.6b-v3-coreml", revision: "7dd20fe6b1797d35f5e3307e8b1732d9a178edfe")
+    static let parakeetV2 = Pin(repo: "FluidInference/parakeet-tdt-0.6b-v2-coreml", revision: "ee09c569f73759e6d44c9bd16766f477b2b36d39")
+    static let ctc110m = Pin(repo: "FluidInference/parakeet-ctc-110m-coreml", revision: "accdafd8cf8a2ff1cabe3c11e54416b405d409aa")
+    static let sileroVAD = Pin(repo: "FluidInference/silero-vad-coreml", revision: "b419383c55c110e2c9271fa6ee0ea83d03c70d96")
+    static let whisperKit = Pin(repo: "argmaxinc/whisperkit-coreml", revision: "0f63a7800b00dd0226abd051b906c246e1907482")
 
     /// The tokenizer files WhisperKit loads for a variant, at an exact commit of the repo it would otherwise resolve at `main`.
     /// The digests are SHA-256 of the files at that commit, reviewed 2026-11-18. To bump one, fetch the repo's
     /// `revision/main` `.sha`, download the three files at it, and update the commit and digests together.
-    public struct TokenizerPin: Sendable, Equatable {
-        public let repo: String
-        public let revision: String
+    struct TokenizerPin: Sendable, Equatable {
+        let repo: String
+        let revision: String
         /// File name to lowercase hex SHA-256.
-        public let files: [String: String]
+        let files: [String: String]
     }
 
     /// `openai/whisper-large-v3` is the tokenizer WhisperKit picks for the turbo model (`large-v3-v20240930_turbo`).
-    public static let whisperTokenizerLargeV3 = TokenizerPin(
+    static let whisperTokenizerLargeV3 = TokenizerPin(
         repo: "openai/whisper-large-v3",
         revision: "06f233fe06e710322aca913c1bc4249a0d71fce1",
         files: [
@@ -38,7 +38,7 @@ public enum ModelPins {
             "tokenizer_config.json": "844b642c73a91359722f47b35705f7174686df33d252695d8572cf9ac03a6389",  // gitleaks:allow (SHA-256 of a public file)
         ]
     )
-    public static let whisperTokenizerSmallEn = TokenizerPin(
+    static let whisperTokenizerSmallEn = TokenizerPin(
         repo: "openai/whisper-small.en",
         revision: "e8727524f962ee844a7319d92be39ac1bd25655a",
         files: [
@@ -93,7 +93,7 @@ public enum ModelPins {
         "generation_config.json",
     ]
 
-    public static let all: [Pin] = [parakeetV3, parakeetV2, ctc110m, sileroVAD, whisperKit]
+    static let all: [Pin] = [parakeetV3, parakeetV2, ctc110m, sileroVAD, whisperKit]
 
     /// FluidAudio takes revisions only through the process-wide `ModelRegistry.revisionOverrides`, keyed by repo path.
     /// The keys come from FluidAudio's own `Repo` enum so a renamed upstream repo fails to match loudly in tests.

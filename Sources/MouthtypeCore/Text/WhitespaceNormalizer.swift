@@ -6,10 +6,10 @@ import Foundation
 /// A `.` or `:` directly followed by a letter or digit keeps its space (`open .gitignore`, `at .5`), as do `./`
 /// and `../` relative paths. `:)`
 /// `;)` `:(` smileys keep theirs.
-public struct WhitespaceNormalizer: Sendable {
-    public init() {}
+struct WhitespaceNormalizer: Sendable {
+    init() {}
 
-    public func apply(_ text: String) -> String {
+    func apply(_ text: String) -> String {
         let chars = Array(text)
         let n = chars.count
         var out: [Character] = []

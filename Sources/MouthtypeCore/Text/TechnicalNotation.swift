@@ -1,13 +1,13 @@
 import Foundation
 
-public struct TechnicalNotation: Sendable {
-    public static let stageName = "notation"
+struct TechnicalNotation: Sendable {
+    static let stageName = "notation"
     private let matcher: PhraseMatcher
     private let spellings: [String: String]
 
     private static let libraries = RecentStrings<(matcher: PhraseMatcher, spellings: [String: String])>()
 
-    public init(protectedPhrases: [String] = []) {
+    init(protectedPhrases: [String] = []) {
         self.init(library: protectedPhrases, extra: [])
     }
 
@@ -31,7 +31,7 @@ public struct TechnicalNotation: Sendable {
         return spellings
     }
 
-    public func apply(_ text: String) -> StageResult {
+    func apply(_ text: String) -> StageResult {
         let chars = Array(text)
         let words = TextScan.words(chars, TextScan.lowered(chars))
         let shielded = shields(chars)
