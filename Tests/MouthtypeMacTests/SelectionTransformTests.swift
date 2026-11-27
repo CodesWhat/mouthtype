@@ -29,7 +29,7 @@ import MouthtypeCore
 }
 
 @MainActor private func settle(_ model: SelectionCleanupModel) async {
-    for _ in 0..<200 where model.isTransforming { try? await Task.sleep(for: .milliseconds(5)) }
+    await pollUntil { !(model.isTransforming) }
 }
 
 @MainActor @Suite struct SelectionTransformTests {

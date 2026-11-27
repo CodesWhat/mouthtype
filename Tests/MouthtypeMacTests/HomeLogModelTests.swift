@@ -171,8 +171,7 @@ import Testing
     }
 
     private func waitUntil(_ condition: @MainActor () -> Bool, sourceLocation: SourceLocation = #_sourceLocation) async {
-        for _ in 0..<200 where !condition() { try? await Task.sleep(for: .milliseconds(25)) }
-        if !condition() { Issue.record("waitUntil: condition never held within 5s", sourceLocation: sourceLocation) }
+        await pollUntil(sourceLocation: sourceLocation, condition)
     }
 
     @Test func finishedTakesAppearWithoutReloading() async throws {

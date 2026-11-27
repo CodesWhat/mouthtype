@@ -258,16 +258,16 @@ import Testing
         model.activate()
         let reload = model.reloadTask
         // Deactivate only once the fetch is really in flight.
-        for _ in 0..<1000 where !started.withLock({ $0 }) { try await Task.sleep(for: .milliseconds(10)) }
+        await pollUntil { !(!started.withLock({ $0 })) }
         model.deactivate()
         release.signal()
-        for _ in 0..<1000 where !finished.withLock({ $0 }) { try await Task.sleep(for: .milliseconds(10)) }
+        await pollUntil { !(!finished.withLock({ $0 })) }
         // The reload has applied or dropped its result once its own task completes.
         await reload?.value
         #expect(model.suggestions.isEmpty)
         model.fetchRecent = { store, limit in try store.recentTakes(limit: limit) }
         model.activate()
-        for _ in 0..<1000 where model.suggestions.isEmpty { try await Task.sleep(for: .milliseconds(10)) }
+        await pollUntil { !(model.suggestions.isEmpty) }
         #expect(!model.suggestions.isEmpty)
     }
 
@@ -458,11 +458,11 @@ import Testing
             return []
         }
         model.activate()
-        for _ in 0..<3000 where !probe.didStart { try await Task.sleep(for: .milliseconds(20)) }
+        await pollUntil { probe.didStart }
         #expect(probe.didStart)
         model.deactivate()
         release.signal()
-        for _ in 0..<3000 where probe.cancelled == nil { try await Task.sleep(for: .milliseconds(20)) }
+        await pollUntil { !(probe.cancelled == nil) }
         #expect(probe.cancelled == true)
         try await Task.sleep(for: .milliseconds(100))
         #expect(model.suggestions.isEmpty)
@@ -487,10 +487,10 @@ import Testing
             return try store.recentTakes(limit: limit)
         }
         model.activate()
-        for _ in 0..<3000 where !probe.didStart { try await Task.sleep(for: .milliseconds(20)) }
+        await pollUntil { probe.didStart }
         await model.reload()
         release.signal()
-        for _ in 0..<3000 where probe.cancelled == nil { try await Task.sleep(for: .milliseconds(20)) }
+        await pollUntil { !(probe.cancelled == nil) }
         #expect(probe.cancelled == true)
         try await Task.sleep(for: .milliseconds(100))
         #expect(!model.suggestions.isEmpty)

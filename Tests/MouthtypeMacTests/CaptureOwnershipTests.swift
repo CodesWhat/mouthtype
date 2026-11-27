@@ -21,7 +21,7 @@ import Testing
     }
 
     private func wait(until condition: @MainActor () -> Bool) async {
-        for _ in 0..<2_000 where !condition() { try? await Task.sleep(for: .milliseconds(1)) }
+        await pollUntil { condition() }
     }
 
     private func isBusy(_ error: (any Error)?, heldBy owner: CaptureOwner) -> Bool {

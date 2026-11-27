@@ -47,12 +47,12 @@ private final class CancellationWake: @unchecked Sendable {
             timer.returned.signal()
             return completed
         }
-        for _ in 0..<500 where !timer.started { try await Task.sleep(for: .milliseconds(1)) }
+        await pollUntil { timer.started }
         #expect(timer.started)
         gate.continuation.yield(())
         gate.continuation.finish()
         #expect(await result.value)
-        for _ in 0..<500 where !timer.cancelled { try await Task.sleep(for: .milliseconds(1)) }
+        await pollUntil { timer.cancelled }
         #expect(timer.cancelled)
         _ = await work.value
     }
