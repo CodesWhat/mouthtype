@@ -2355,11 +2355,14 @@ private struct Rig {
         let second = await rig.inserter.deliver("two", startFocus: nil)
         rig.gate.open()
         await rig.inserter.waitForVerification()
-        #expect(seen.map(\.id) == [second.verificationID])
+        // The cancelled read-back ends its entry as unknown (the row deliberately stays unknown), once, before the
+        // newer one reports, so the listener holds nothing for the older take.
+        #expect(seen.map(\.id) == [first.verificationID, second.verificationID])
+        #expect(seen.first?.verdict == .unknown)
         #expect(first.verificationID != second.verificationID)
     }
 
-    @Test func cancellingTheReadBackSaysNothingAndNeverRepastes() async {
+    @Test func cancellingTheReadBackEndsItAsUnknownAndNeverRepastes() async {
         let rig = Rig()
         rig.focus.current = FocusSnapshot(pid: 100, element: element(100))
         rig.focus.readings = [Self.before]
@@ -2368,7 +2371,9 @@ private struct Rig {
         _ = await rig.inserter.deliver("one", startFocus: nil)
         rig.inserter.cancelVerification()
         await rig.inserter.waitForVerification()
-        #expect(seen.isEmpty)
+        #expect(seen.map(\.verdict) == [.unknown])
+        rig.inserter.cancelVerification()
+        #expect(seen.count == 1)
         #expect(rig.poster.posts == 1)
     }
 

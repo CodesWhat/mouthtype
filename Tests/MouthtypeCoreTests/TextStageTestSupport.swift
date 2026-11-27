@@ -14,8 +14,19 @@ struct TextCase: Sendable, CustomTestStringConvertible {
 }
 
 enum TextTestSupport {
-    /// Wall-clock perf asserts are skipped on shared CI runners, where a page-thrashing machine makes them noise.
-    static let timingAssertsEnabled = ProcessInfo.processInfo.environment["CI"] == nil
+    /// Shared CI runners are noisy, so wall-clock perf budgets get a generous multiple there. A gross regression
+    /// still fails CI; the tight local budgets stay as written.
+    static let ciTimingScale = 5.0
+
+    static func scale(environment: [String: String] = ProcessInfo.processInfo.environment) -> Double {
+        environment["CI"] == nil ? 1 : ciTimingScale
+    }
+
+    static let timingScale = scale()
+
+    /// The budget to assert against: `local` on a dev machine, a multiple of it on CI.
+    static func budget(_ local: Double) -> Double { local * timingScale }
+    static func budget(_ local: Duration) -> Duration { local * timingScale }
 
     /// Applies `edits` (every position refers to `input`) and returns the result with all whitespace removed, so
     /// the comparison ignores the unlogged spacing tidy.

@@ -49,7 +49,7 @@
     {
       "src": "/download/file",
       "headers": {
-        "Location": "/releases/0.12.3/Mouthtype-0.12.3-macos-arm64.dmg",
+        "Location": "/releases/0.12.4/Mouthtype-0.12.4-macos-arm64.dmg",
         "Cache-Control": "no-store"
       },
       "status": 302
@@ -57,7 +57,7 @@
     {
       "src": "/source",
       "headers": {
-        "Location": "/releases/0.12.3/Mouthtype-0.12.3-source.tar.gz",
+        "Location": "/releases/0.12.4/Mouthtype-0.12.4-source.tar.gz",
         "Cache-Control": "no-store"
       },
       "status": 302

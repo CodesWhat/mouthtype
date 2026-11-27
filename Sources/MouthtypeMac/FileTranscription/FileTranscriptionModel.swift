@@ -83,7 +83,7 @@ final class FileTranscriptionModel {
                         self.state = .finished
                     }
                 } catch is CancellationError {
-                    self.previous = nil
+                    self.restorePrevious(markingFailure: false)
                     self.state = .cancelled
                 } catch {
                     self.restorePrevious()
@@ -98,9 +98,9 @@ final class FileTranscriptionModel {
         }
     }
 
-    /// A failed import keeps the transcript that was on screen before it.
-    private func restorePrevious() {
-        failedFilename = filename
+    /// A failed or cancelled import keeps the transcript that was on screen before it.
+    private func restorePrevious(markingFailure: Bool = true) {
+        if markingFailure { failedFilename = filename }
         guard let kept = previous else { return }
         previous = nil
         text = kept.text

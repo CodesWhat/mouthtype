@@ -14,10 +14,10 @@ import Foundation
 public struct SlashCommands: Sendable {
     public static let stageName = "slash command"
 
-    private let protectedPhrases: [String]
+    private let matcher: PhraseMatcher
 
     public init(protectedPhrases: [String] = []) {
-        self.protectedPhrases = protectedPhrases
+        self.matcher = PhraseMatcher.shared(patterns: protectedPhrases)
     }
 
     private static let joiners: [String: String] = ["dash": "-", "hyphen": "-", "underscore": "_"]
@@ -105,7 +105,7 @@ public struct SlashCommands: Sendable {
 
     private func shields(_ chars: [Character], _ lower: [Character]) -> [Bool] {
         var result = [Bool](repeating: false, count: chars.count)
-        for hit in PhraseMatcher(patterns: protectedPhrases).matches(chars, lower: lower) {
+        for hit in matcher.matches(chars, lower: lower) {
             for index in hit.range { result[index] = true }
         }
         var quoted = false

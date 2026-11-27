@@ -13,18 +13,21 @@ while IFS= read -r bundle; do
 done < <(find "$(dirname "$codecov_dir")" -maxdepth 1 -name '*.xctest')
 test "${#objects[@]}" -gt 0 || { echo "no .xctest bundles beside $codecov_dir" >&2; exit 1; }
 
+# Bench and self-test harness code is tooling that ships no dictation behavior, so it stays out of the floor.
+ignore='(\.build|Tests)/|/mouthtype-bench/|SelfTest\.(swift|c)$'
+
 arguments=("${objects[0]}")
 for binary in "${objects[@]:1}"; do
     arguments+=("-object=$binary")
 done
 xcrun llvm-cov report "${arguments[@]}" -instr-profile="$profdata" \
-    -ignore-filename-regex='(\.build|Tests)/' > coverage-report.txt
+    -ignore-filename-regex="$ignore" > coverage-report.txt
 # lcov for Codecov, from the same profile and binaries. Best effort: the floor below measures the report, not this file.
 # It is written aside and only renamed to coverage.lcov once every check below passes, so a failed run uploads nothing.
 rm -f coverage.lcov coverage.lcov.tmp
 trap 'rm -f coverage.lcov.tmp' EXIT
 if ! xcrun llvm-cov export -format=lcov "${arguments[@]}" -instr-profile="$profdata" \
-    -ignore-filename-regex='(\.build|Tests)/' > coverage.lcov.tmp; then
+    -ignore-filename-regex="$ignore" > coverage.lcov.tmp; then
     echo "lcov export failed; skipping Codecov upload file" >&2
     rm -f coverage.lcov.tmp
 fi

@@ -10,6 +10,12 @@ private final class StubEngine: DictationEngine {
     var text = "Hello from the crash."
     var error: Error?
     private(set) var calls = 0
+    private(set) var languages: [DictationLanguageRequest] = []
+
+    func transcribe(samples: [Float], language: DictationLanguageRequest) async throws -> Transcription {
+        languages.append(language)
+        return try await transcribe(samples: samples)
+    }
 
     func transcribe(samples: [Float]) async throws -> Transcription {
         calls += 1
@@ -43,7 +49,7 @@ private final class StubPill: DictationPill {
     func showRecording() {}
     func showHandsFree() {}
     func showHandsFreeNotice(_ text: String, duration: TimeInterval) {}
-    func showProcessing() {}
+    func showProcessing(cancellable: Bool) {}
     func showMessage(_ message: PillMessage, duration: TimeInterval) { messages.append(message) }
     func hide() {}
 }
@@ -104,6 +110,49 @@ private struct Rig {
         #expect(rig.cards.presented.last?.transcript == "Hello from the crash.")
     }
 
+    @Test func recoveryTranscribesInTheLanguageTheRowRecordedAndFallsBackWhenItIsUnreadable() async throws {
+        let rig = try Rig()
+        defer { rig.cleanUp() }
+        let transcribed = Transcription(text: "hola", words: [], processingSeconds: 0.1, engineID: "t")
+        let spanish = try rig.seed(ago: 60)
+        try rig.store.recordTranscription(spanish, TranscriptionRecord(transcription: transcribed, rawText: "hola", language: "es"))
+        let item = try #require(try await rig.recovery.loadSavedRecordings().first { $0.id == spanish })
+        rig.recovery.offerSaved(item)
+        await rig.recovery.recover()
+        #expect(rig.engine.languages == [.explicit(try #require(DictationLanguage(code: "es")))])
+
+        let junk = try rig.seed(ago: 30)
+        try rig.store.recordTranscription(junk, TranscriptionRecord(transcription: transcribed, rawText: "x", language: "not-a-language"))
+        rig.recovery.offerSaved(try #require(try await rig.recovery.loadSavedRecordings().first { $0.id == junk }))
+        await rig.recovery.recover()
+        #expect(rig.engine.languages.last == .english)
+    }
+
+    @Test func audioWithNoRowGetsOneSoRecoverAndDiscardEndItAndItLeavesSavedRecordings() async throws {
+        let rig = try Rig()
+        defer { rig.cleanUp() }
+        let tone = (0..<16_000).map { 0.3 * sin(Float($0) * 0.2) }
+        _ = try rig.archive.write(samples: tone, id: "lost-a")
+        try rig.archive.appendPartial(samples: tone, id: "lost-b")
+        let old = rig.now.addingTimeInterval(-600)
+        for name in ["lost-a.wav", "lost-b.partial.wav"] {
+            try FileManager.default.setAttributes([.modificationDate: old], ofItemAtPath: rig.archive.directory.appendingPathComponent(name).path)
+        }
+        let orphans = try await rig.recovery.loadSavedRecordings().filter(\.isOrphan)
+        #expect(Set(orphans.map(\.id)) == ["lost-a", "lost-b"])
+
+        rig.recovery.offerSaved(try #require(orphans.first { $0.id == "lost-a" }))
+        await rig.recovery.recover()
+        #expect(rig.engine.calls == 1 && rig.cards.presented.last?.kind == .recovered)
+        #expect(try rig.store.dictation(id: "lost-a")?.status == .inserted)
+
+        rig.recovery.offerSaved(try #require(orphans.first { $0.id == "lost-b" }))
+        await rig.recovery.discard()
+        #expect(try rig.store.dictation(id: "lost-b")?.status == .cancelled)
+        #expect(try await rig.recovery.loadSavedRecordings().isEmpty)
+        #expect(FileManager.default.fileExists(atPath: rig.archive.partialURL(for: "lost-b").path))
+    }
+
     @Test func recoveryDoesNotRunOverAnActiveDictation() async throws {
         let rig = try Rig()
         defer { rig.cleanUp() }
@@ -123,7 +172,7 @@ private struct Rig {
         defer { rig.cleanUp() }
         let id = try rig.seed(ago: 10)
         _ = await rig.recovery.offerIfNeeded()
-        let recording = try #require(try rig.recovery.savedRecordings().first { $0.id == id })
+        let recording = try #require(try await rig.recovery.loadSavedRecordings().first { $0.id == id })
         var requests: [Int: CheckedContinuation<[RecoverableDictation], Error>] = [:]
         var calls = 0
         defer { requests.values.forEach { $0.resume(returning: []) } }
@@ -165,18 +214,14 @@ private struct Rig {
         section.refresh()
         #expect(submenu.items.count == 1 && submenu.items[0].representedObject == nil)
         submenu.delegate?.menuNeedsUpdate?(submenu)
-        for _ in 0..<400 where submenu.items.allSatisfy({ $0.representedObject == nil }) {
-            try await Task.sleep(for: .milliseconds(5))
-        }
+        await pollUntil { submenu.items.contains { $0.representedObject != nil } }
         func shown() -> [String] { submenu.items.compactMap { ($0.representedObject as? RecoverableDictation)?.id } }
         #expect(shown() == Array(ids.prefix(20)))
         let next = try #require(submenu.items.first { $0.title == "Older recordings" })
         _ = section.perform(try #require(next.action), with: next)
         #expect(shown() == Array(ids[20..<40]))
         section.menuNeedsUpdate(submenu)
-        for _ in 0..<400 where submenu.items.allSatisfy({ $0.representedObject == nil }) {
-            try await Task.sleep(for: .milliseconds(5))
-        }
+        await pollUntil { submenu.items.contains { $0.representedObject != nil } }
         #expect(shown() == Array(ids[20..<40]))
         let oldest = try #require(submenu.items.first { $0.title == "Older recordings" })
         _ = section.perform(try #require(oldest.action), with: oldest)
@@ -187,9 +232,7 @@ private struct Rig {
         #expect(shown() == Array(ids[20..<40]))
         for id in ids.prefix(40) { try rig.store.finish(id, status: .cancelled) }
         section.menuNeedsUpdate(submenu)
-        for _ in 0..<400 where submenu.items.allSatisfy({ $0.representedObject == nil }) {
-            try await Task.sleep(for: .milliseconds(5))
-        }
+        await pollUntil { submenu.items.contains { $0.representedObject != nil } }
         #expect(shown() == Array(ids[40..<45]))
         #expect(!submenu.items.contains { $0.title == "Newer recordings" || $0.title == "Older recordings" })
     }
@@ -203,9 +246,7 @@ private struct Rig {
         let menu = SavedRecordingsMenuSection(recovery: rig.recovery, canRecover: { true })
         let submenu = try #require(menu.items.first?.submenu)
         submenu.delegate?.menuNeedsUpdate?(submenu)
-        for _ in 0..<400 where submenu.items.allSatisfy({ $0.representedObject == nil }) {
-            try await Task.sleep(for: .milliseconds(5))
-        }
+        await pollUntil { submenu.items.contains { $0.representedObject != nil } }
         let entries = submenu.items
         #expect(menu.items.first?.submenu?.autoenablesItems == false)
         #expect(entries.count == 2)
@@ -241,7 +282,7 @@ private struct Rig {
 
         #expect(scan?.newest == nil && rig.recovery.offered == nil)
         #expect(rig.cards.presented.isEmpty && rig.engine.calls == 0)
-        let saved = try #require(try rig.recovery.savedRecordings().first { $0.id == stale })
+        let saved = try #require(try await rig.recovery.loadSavedRecordings().first { $0.id == stale })
         rig.recovery.offerSaved(saved)
         #expect(rig.recovery.offered?.id == stale)
         #expect(rig.cards.presented.last?.kind == .recoverOffer)

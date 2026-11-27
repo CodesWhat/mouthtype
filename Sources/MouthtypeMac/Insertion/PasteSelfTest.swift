@@ -172,7 +172,7 @@ enum PasteSelfTest {
         report("restored the real clipboard")
         report(failures.isEmpty ? "PASS" : "FAIL: \(failures.joined(separator: "; "))")
         window.close()
-        NSApp.terminate(nil)
+        FnRemap.requestQuit { NSApp.terminate(nil) }
     }
 
     private static func makeTextView(editable: Bool, string: String) -> (scroll: NSScrollView, view: NSTextView) {

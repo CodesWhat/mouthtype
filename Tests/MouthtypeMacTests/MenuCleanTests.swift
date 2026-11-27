@@ -323,4 +323,25 @@ import MouthtypeCore
         waiters.forEach { $0.resume() }
         waiters = []
     }
+
+    @Test func aFinishedTakeRefreshesOnlyTakeSectionsNotDiagnostics() {
+        final class Probe: MenuSection {
+            let item = NSMenuItem(title: "probe", action: nil, keyEquivalent: "")
+            var items: [NSMenuItem] { [item] }
+            var refreshes = 0
+            var refreshesAfterTake: Bool
+            init(_ afterTake: Bool) { refreshesAfterTake = afterTake }
+            func refresh() { refreshes += 1 }
+        }
+        let daily = DailyMenu()
+        let takes = Probe(true), other = Probe(false)
+        daily.add(section: takes)
+        daily.add(section: other)
+        var diagnosticsRuns = 0
+        daily.onRefresh = { diagnosticsRuns += 1 }
+        daily.refreshAfterTake()
+        #expect(takes.refreshes == 1 && other.refreshes == 0 && diagnosticsRuns == 0)
+        daily.refresh()
+        #expect(takes.refreshes == 2 && other.refreshes == 1 && diagnosticsRuns == 1)
+    }
 }

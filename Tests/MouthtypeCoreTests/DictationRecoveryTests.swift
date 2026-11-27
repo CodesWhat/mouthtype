@@ -10,6 +10,36 @@ import Testing
         #expect(try DictationRecovery.saved(store: rig.store, archive: rig.archive, now: now, launchedAt: now).map(\.id) == [old])
     }
 
+    @Test func audioWithNoRowIsListedAsSavedAndKeepsItsOwnTime() throws {
+        let rig = try Rig()
+        defer { rig.cleanUp() }
+        let kept = try rig.row(.failed, ago: 600, now: now, audioSeconds: 1)
+        let orphan = try rig.archive.write(samples: [Float](repeating: 0.1, count: 32_000), id: "orphan")
+        let stamp = now.addingTimeInterval(-3_000)
+        try FileManager.default.setAttributes([.modificationDate: stamp], ofItemAtPath: orphan.url.path)
+        try rig.archive.appendPartial(samples: [Float](repeating: 0.1, count: 16_000), id: "crashed")
+        try FileManager.default.setAttributes([.modificationDate: stamp], ofItemAtPath: rig.archive.partialURL(for: "crashed").path)
+        try rig.archive.appendPartial(samples: [Float](repeating: 0.1, count: 16_000), id: "live")
+        let saved = try DictationRecovery.saved(store: rig.store, archive: rig.archive, now: now, launchedAt: now.addingTimeInterval(-1_000))
+        #expect(Set(saved.map(\.id)) == [kept, "orphan", "crashed"])
+        let found = try #require(saved.first { $0.id == "orphan" })
+        #expect(found.isOrphan && !found.isPartial && found.seconds == 2 && found.startedAt.timeIntervalSince(stamp).magnitude < 1)
+        #expect(try #require(saved.first { $0.id == "crashed" }).isPartial)
+        #expect(try #require(saved.first { $0.id == kept }).isOrphan == false)
+    }
+
+    @Test func recoverableTakesCarryTheLanguageTheyWereTranscribedIn() throws {
+        let rig = try Rig()
+        defer { rig.cleanUp() }
+        let id = try rig.row(.transcribed, ago: 600, now: now, audioSeconds: 1)
+        try rig.store.recordTranscription(
+            id,
+            TranscriptionRecord(
+                transcription: Transcription(text: "hola", words: [], processingSeconds: 0.1, engineID: "t"), rawText: "hola", language: "es"))
+        let saved = try DictationRecovery.saved(store: rig.store, archive: rig.archive, now: now, launchedAt: now)
+        #expect(saved.first { $0.id == id }?.language == "es")
+    }
+
     @Test func savedRecordingsRemainReachableAfterTheLaunchScanAndFailedAttempts() throws {
         let rig = try Rig()
         defer { rig.cleanUp() }

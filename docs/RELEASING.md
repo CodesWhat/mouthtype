@@ -16,6 +16,9 @@ Update these together:
 - `docs/READ-ME.md`
 - Affected usage guides
 - Website build labels and redirects (`/download/file` to the new `.dmg`), and their existing browser checks
+- `docs/RELEASE-READINESS.md` (title and a `Stable X.Y.Z (build N)` entry), `docs/KNOWN-LIMITS.md` and `CHANGELOG.md`
+
+`python3 scripts/check-version-strings.py` compares all of these with `packaging/Version.plist`; CI runs it through the release helper tests.
 
 `SECURITY.md` must name the supported prerelease and retire the previous line. Keep publication on hold until the app, source, feed and website all select that exact version/build.
 
@@ -25,7 +28,9 @@ Follow the CodesWhat dev-branch, reviewed-PR and main-sync procedure. Keep defer
 
 ### 3. Package the release
 
-Run `python3 scripts/package-release.py --output-dir /absolute/path/to/release-output` from the exact tagged source. It builds in repeatable mode (fixed scratch path `/private/tmp/mouthtype-release-scratch`, see [REPEATABLE-BUILD.md](REPEATABLE-BUILD.md)), signs, submits to Apple, waits with a ten-minute limit, staples, makes the final ZIP, extracts it, and requires signature/staple/Gatekeeper checks to pass on the extracted app. It then builds the DMG from the stapled app, signs it with the same Developer ID, notarizes and staples the DMG through the same submit/wait/log flow, mounts it read-only, and requires the signature, ticket and Gatekeeper (`spctl --type open`) checks to pass on the image and the app inside it.
+First run `python3 scripts/evaluate-mac-daily-use.py --output-dir /absolute/path/to/eval-output` on the tagged commit. It runs the real speech model over the synthetic corpus and writes `eval-receipt.json` beside `recognition.json`. The promotion PR into `main` carries a `Full suite receipt: <commit sha> <N> tests, 0 failures` line from the local full `swift test` run on the PR head (only documentation changes may follow the receipt commit); `scripts/check-promotion-receipt.py` checks it in CI.
+
+Run `python3 scripts/package-release.py --eval-receipt /absolute/path/to/eval-output/eval-receipt.json --output-dir /absolute/path/to/release-output` from the exact tagged source. It refuses to start unless the eval receipt names this exact commit and its `recognition.json` hash and clip count still match. It builds in repeatable mode (fixed scratch path `/private/tmp/mouthtype-release-scratch`, see [REPEATABLE-BUILD.md](REPEATABLE-BUILD.md)), signs, submits to Apple, waits with a ten-minute limit, staples, makes the final ZIP, extracts it, and requires signature/staple/Gatekeeper checks to pass on the extracted app. It then builds the DMG from the stapled app, signs it with the same Developer ID, notarizes and staples the DMG through the same submit/wait/log flow, mounts it read-only, and requires the signature, ticket and Gatekeeper (`spctl --type open`) checks to pass on the image and the app inside it.
 
 The DMG is the public first-install download and the ZIP is the Sparkle update archive; the appcast keeps pointing at the ZIP. `scripts/build-dmg.py` makes the DMG: dmgbuild (pinned in `scripts/dmg/requirements.txt`, installed into the git-ignored `build/dmg-venv` on first run) writes the window layout and runs hdiutil, so no Finder scripting is involved. The window background comes from `scripts/dmg/background.py` (stdlib, deterministic, 1x and 2x combined with `tiffutil`) and the volume icon is rendered from the built app's own system icon by `scripts/dmg/volume-icon.swift`, so it keeps the squircle. The volume is named Mouthtype and compressed UDZO. Preview one without the release flow: `MOUTHTYPE_TIMESTAMP=none python3 scripts/build-dmg.py --app build/Mouthtype.app --output build/dmg-preview/Mouthtype.dmg`.
 
@@ -49,6 +54,8 @@ Generate and validate the [release source inventory](RELEASE-INVENTORY.md) again
 After the tagged release is packaged and checked, run `scripts/stage-public-release.py` with the release directory and `--public-dir` pointing at a retained artifact directory outside disposable worktrees, such as the root checkout’s `build/public-release-assets`. It requires the DMG and checks the exact tag/source, archive and DMG digests, DMG notarization evidence, extracted signature/staple/Gatekeeper result and matching public key. It generates a corresponding source tarball and uses the pinned Sparkle tools to generate and verify the signed appcast.
 
 The ZIP enclosure is EdDSA signed; the DMG is not part of the feed. The feed must remain byte-for-byte signed; re-sign after any change. New source archives contain committed source only, never local planning, credentials, recordings or worktrees.
+
+If the retained directory is lost, rebuild it with `python3 scripts/restore-public-assets.py --public-dir build/public-release-assets`. It downloads each published release's ZIP, DMG, source archive, checksums and manifest, checks them against GitHub's digests, and refuses to replace a file that differs. The signed `updates/appcast.xml` is not a release asset and needs a backup.
 
 Keep `build/public-release-assets` across releases. Staging preserves older versioned downloads, refuses changes to an existing versioned file and replaces only the current signed feed. Back up published release outputs; the retained directory is deployment state, not disposable compiler scratch. The website’s `/download/file` redirect must point at the release’s `.dmg` (not the ZIP), and `/source` at its source tarball, for the same release and build as the signed appcast. `publish-website.py` rejects a release whose manifest has a DMG when `/download/file` targets anything else, and validates every retained DMG’s checksum and notarization record.
 

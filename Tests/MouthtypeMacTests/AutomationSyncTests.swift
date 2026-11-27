@@ -51,6 +51,32 @@ import MouthtypeCore
         #expect(await events(service, count: 1) == [.cancelled(reason: .escape)])
     }
 
+    @Test func escapeAfterTheReleaseCancelsWhileATakeIsProcessing() async {
+        let service = service(.hold)
+        defer { service.stop() }
+        service.setProcessing(true)
+        service.process(.init(kind: .keyDown, keyCode: 53, flags: 0, timestamp: 5))
+        #expect(await events(service, count: 1) == [.cancelled(reason: .escape)])
+    }
+
+    @Test func escapeIsIgnoredWhenNothingIsProcessing() async {
+        let service = service(.hold)
+        defer { service.stop() }
+        service.process(.init(kind: .keyDown, keyCode: 53, flags: 0, timestamp: 5))
+        service.setProcessing(true)
+        service.setProcessing(false)
+        service.process(.init(kind: .keyDown, keyCode: 53, flags: 0, timestamp: 6))
+        #expect(await events(service, count: 1).isEmpty)
+    }
+
+    @Test func theKeyTapListensForEscapeWhileProcessingWithoutSwallowingIt() {
+        let esc = TapSample(kind: .keyDown, keyCode: 53, flags: 0, timestamp: 0)
+        let idle = TapPolicy.decide(esc, role: .keys, recording: false, swallowedKey: nil, idleKeysReported: false)
+        let processing = TapPolicy.decide(esc, role: .keys, recording: false, swallowedKey: nil, idleKeysReported: false, processing: true)
+        #expect(idle == .passThrough)
+        #expect(processing == .observe)
+    }
+
     @Test func releasingTheLockLetsTheNextPressStartFresh() async {
         let service = service(.hold)
         defer { service.stop() }

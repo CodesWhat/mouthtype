@@ -24,6 +24,10 @@ private enum OutputFailure: Error { case unavailable }
         if unavailable { throw OutputFailure.unavailable }
         return current
     }
+    func output(forUID uid: String) throws -> QuietOutput? {
+        if unavailable { throw OutputFailure.unavailable }
+        return identity.uid == uid ? identity : nil
+    }
     func isMuted(_ output: QuietOutput) throws -> Bool {
         guard !unavailable, identity == output else { throw OutputFailure.unavailable }
         beforeRead?()
@@ -139,5 +143,81 @@ private enum OutputFailure: Error { case unavailable }
         #expect(!QuietAudioPreference.isEnabled(defaults))
         QuietAudioPreference.set(true, in: defaults)
         #expect(QuietAudioPreference.isEnabled(defaults))
+    }
+
+    @Test func aCrashedMuteIsRestoredOnNextLaunch() {
+        let output = QuietOutputFake()
+        let marker = InMemoryQuietMuteMarker()
+        let crashed = RecordingAudioQuiet(output: output, enabled: { true }, marker: marker)
+        crashed.begin()  // Process dies here: end() never runs.
+        #expect(output.muted && marker.markedUID == "speakers")
+        let relaunched = RecordingAudioQuiet(output: output, enabled: { true }, marker: marker)
+        #expect(relaunched.recoverFromCrash())
+        #expect(!output.muted)
+        #expect(marker.markedUID == nil)
+    }
+
+    @Test func aCleanEndLeavesNothingToRecover() {
+        let output = QuietOutputFake()
+        let marker = InMemoryQuietMuteMarker()
+        let quiet = RecordingAudioQuiet(output: output, enabled: { true }, marker: marker)
+        quiet.begin(); quiet.end()
+        #expect(marker.markedUID == nil)
+        output.muted = true  // The user's own mute later.
+        #expect(!quiet.recoverFromCrash())
+        #expect(output.muted)
+    }
+
+    @Test func aStaleMarkerNeverUnmutesAnotherDeviceOrAnAlreadyUnmutedOne() {
+        let output = QuietOutputFake()
+        let marker = InMemoryQuietMuteMarker()
+        marker.markedUID = "headphones"
+        output.muted = true
+        let quiet = RecordingAudioQuiet(output: output, enabled: { true }, marker: marker)
+        #expect(!quiet.recoverFromCrash())
+        #expect(output.muted && output.writes.isEmpty && marker.markedUID == nil)
+        marker.markedUID = "speakers"
+        output.muted = false
+        #expect(!quiet.recoverFromCrash())
+        #expect(output.writes.isEmpty && marker.markedUID == nil)
+    }
+
+    @Test func recoveryReachesAMarkedDeviceThatIsNoLongerTheDefault() {
+        let output = QuietOutputFake()
+        output.identity = QuietOutput(id: 2, uid: "headphones")
+        output.current = QuietOutput(id: 1, uid: "speakers")
+        output.muted = true
+        let marker = InMemoryQuietMuteMarker()
+        marker.markedUID = "headphones"
+        #expect(RecordingAudioQuiet(output: output, enabled: { true }, marker: marker).recoverFromCrash())
+        #expect(!output.muted && output.writes.count == 1 && output.writes[0] == (2, false))
+        #expect(marker.markedUID == nil)
+    }
+
+    @Test func recoveryClearsTheMarkerWhenTheMarkedDeviceIsGone() {
+        let output = QuietOutputFake()
+        output.muted = true
+        let marker = InMemoryQuietMuteMarker()
+        marker.markedUID = "usb-dac"
+        #expect(!RecordingAudioQuiet(output: output, enabled: { true }, marker: marker).recoverFromCrash())
+        #expect(output.muted && output.writes.isEmpty && marker.markedUID == nil)
+    }
+
+    @Test func aFailedMuteWriteLeavesNoMarker() {
+        let output = QuietOutputFake()
+        output.writeFails = true
+        let marker = InMemoryQuietMuteMarker()
+        RecordingAudioQuiet(output: output, enabled: { true }, marker: marker).begin()
+        #expect(marker.markedUID == nil)
+    }
+
+    @Test func defaultsMarkerRoundTrips() throws {
+        let defaults = try #require(UserDefaults(suiteName: "RecordingAudioQuietTests.\(UUID().uuidString)"))
+        let marker = DefaultsQuietMuteMarker(defaults)
+        #expect(marker.markedUID == nil)
+        marker.markedUID = "speakers"
+        #expect(DefaultsQuietMuteMarker(defaults).markedUID == "speakers")
+        marker.markedUID = nil
+        #expect(DefaultsQuietMuteMarker(defaults).markedUID == nil)
     }
 }

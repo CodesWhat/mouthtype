@@ -2,8 +2,8 @@ import Foundation
 
 public enum AudioRetentionMaintenance {
     /// Applies the retention policy to completed takes, and to failed and unfinished takes and crash partials once they are
-    /// past `AudioArchive.recoveryGrace`. Audio with no row is never removed: after an emptied or restored database it is
-    /// the only way back to those recordings. Then clears `audio_path` on rows whose file is gone, which also repairs a crash
+    /// past `AudioArchive.recoveryGrace`. Audio with no row is kept for the same grace, so an emptied or restored database
+    /// can still recover it, and follows the policy after that. Then clears `audio_path` on rows whose file is gone, which also repairs a crash
     /// between deleting a file and clearing its pointer. Returns the row ids whose audio the policy removed.
     @discardableResult
     public static func prune(archive: AudioArchive, store: TranscriptStore, policy: AudioRetentionPolicy, now: Date) throws -> [String] {

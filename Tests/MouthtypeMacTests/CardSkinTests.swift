@@ -403,6 +403,48 @@ private final class CardRig {
         rig.finish()
     }
 
+    @Test(arguments: ["matrix", "minimal"])
+    func aCancellableProcessingPillUnderAFoldedCardCancelsOnClick(skin: String) throws {
+        let rig = CardRig(skin: skin)
+        rig.presenter.present(.pasteFailed("Send the notes."))
+        var controls: [PillControl] = []
+        rig.pill.onControl = { controls.append($0) }
+        rig.pill.showProcessing(cancellable: true)
+        #expect(rig.pill.isGrown)
+        let row = try #require(rig.squircle?.bodyFrame)
+        let grown = try #require(rig.squircle?.grownFrame)
+        let spot = CGPoint(x: row.midX, y: row.midY)
+        rig.pill.updateInteractivity(pointer: rig.screen(spot))
+        #expect(!rig.pill.panel.ignoresMouseEvents)
+        #expect(rig.pill.host.hitTest(rig.pill.host.convert(spot, to: rig.pill.host.superview)) === rig.pill.host)
+        let windowSpot = rig.pill.host.convert(spot, to: nil)
+        func mouse(_ type: NSEvent.EventType) -> NSEvent {
+            NSEvent.mouseEvent(
+                with: type, location: windowSpot, modifierFlags: [], timestamp: 0,
+                windowNumber: rig.pill.panel.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1
+            )!
+        }
+        rig.pill.host.mouseDown(with: mouse(.leftMouseDown))
+        rig.pill.host.mouseUp(with: mouse(.leftMouseUp))
+        #expect(controls == [.pill])
+        // Outside the grown frame the panel stays click-through.
+        rig.pill.updateInteractivity(pointer: rig.screen(CGPoint(x: grown.maxX + 6, y: grown.midY)))
+        #expect(rig.pill.panel.ignoresMouseEvents)
+        rig.finish()
+    }
+
+    @Test(arguments: ["matrix", "minimal"])
+    func aNonCancellableProcessingPillUnderAFoldedCardStaysClickThroughOffTheCard(skin: String) throws {
+        let rig = CardRig(skin: skin)
+        rig.presenter.present(.pasteFailed("Send the notes."))
+        rig.pill.showProcessing(cancellable: false)
+        let grown = try #require(rig.squircle?.grownFrame)
+        rig.pill.updateInteractivity(pointer: rig.screen(CGPoint(x: grown.maxX + 6, y: grown.midY)))
+        #expect(rig.pill.panel.ignoresMouseEvents)
+        #expect(rig.pill.host.controlAt(CGPoint(x: grown.midX, y: grown.minY + 2)) == nil)
+        rig.finish()
+    }
+
     @Test func aPressThatStartedOnTheCardKeepsThePanelLiveUntilTheButtonComesUp() throws {
         let rig = CardRig(skin: "matrix")
         rig.presenter.present(.pasteFailed("Send the notes."))

@@ -62,6 +62,9 @@ class ExtractionTests(unittest.TestCase):
         self.assertLess(verification.index("python3 scripts/codeql/verify-extraction.py"), verification.index("upload-sarif@"))
         self.assertIn("sha: ${{ steps.revision.outputs.sha }}", verification)
         self.assertIn("refs/heads/dev/v0.8.0", verification)
+        step = verification[verification.index("      - uses: github/codeql-action/upload-sarif@"):]
+        step = step.split("\n      - ")[0]
+        self.assertNotRegex(step, r"(?m)^\s+if:", "upload-sarif must not override the default success() gate")
 
     def test_requires_every_first_party_file_including_fn_guard(self):
         with tempfile.TemporaryDirectory() as directory:

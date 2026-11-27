@@ -146,7 +146,7 @@ protocol DictationPill: AnyObject {
     /// A line over a locked recording that gives way to the hands-free pill again.
     func showHandsFreeNotice(_ text: String, duration: TimeInterval)
     func showPreview(_ text: String)
-    func showProcessing()
+    func showProcessing(cancellable: Bool)
     func showMessage(_ message: PillMessage, duration: TimeInterval)
     /// The line shown under a delivery card, held until `hideCardMessage`.
     func showCardMessage(_ message: PillMessage)

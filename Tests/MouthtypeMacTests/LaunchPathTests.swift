@@ -29,7 +29,7 @@ import os
         // Straight after the status item: nothing has registered on main, and the rest of launch hasn't started.
         #expect(!FontRegistry.registeredOnMain)
         #expect(!finished)
-        for _ in 0..<1000 where !finished { try? await Task.sleep(for: .milliseconds(10)) }
+        await pollUntil { finished }
         #expect(finished)
         #expect(FontRegistry.registered == FontRegistry.families)
     }
@@ -98,6 +98,16 @@ import os
         #expect(replies == [true])
     }
 
+    @Test func anOrdinaryQuitRepliesTrueExactlyOnce() async {
+        let delegate = AppDelegate()
+        let box = ReplyBox()
+        delegate.replyToTermination = { _, ready in box.replies.append(ready) }
+        #expect(delegate.applicationShouldTerminate(NSApplication.shared) == .terminateLater)
+        await replies(1, in: box)
+        try? await Task.sleep(for: .milliseconds(50))
+        #expect(box.replies == [true])
+    }
+
     @Test func aQuitWithAnEmptyQueueIsImmediate() {
         let delegate = AppDelegate()
         #expect(!delegate.deferQuitForQueuedURLs(sender: NSApplication.shared))
@@ -151,7 +161,7 @@ import os
         // Back on the main actor with the open still held shut.
         #expect(outcomes.isEmpty)
         #expect(delegate.storeOpenInFlight)
-        for _ in 0..<1000 where !held.started { try? await Task.sleep(for: .milliseconds(5)) }
+        await pollUntil { held.started }
         #expect(held.started)
         #expect(!held.ranOnMainThread)
         // Main-actor work goes on meanwhile: a URL queues and a window built early has no store yet.
@@ -161,7 +171,7 @@ import os
         #expect(!delegate.launchComplete)
         #expect(outcomes.isEmpty)
         held.release()
-        for _ in 0..<1000 where outcomes.isEmpty { try? await Task.sleep(for: .milliseconds(5)) }
+        await pollUntil { !outcomes.isEmpty }
         // Give a second delivery the same chance to land.
         try? await Task.sleep(for: .milliseconds(50))
         #expect(outcomes.count == 1)
@@ -180,7 +190,7 @@ import os
         delegate.openStoreOffMain { outcomes.append($0) }
         #expect(outcomes.isEmpty)
         held.release()
-        for _ in 0..<1000 where outcomes.isEmpty { try? await Task.sleep(for: .milliseconds(5)) }
+        await pollUntil { !outcomes.isEmpty }
         try? await Task.sleep(for: .milliseconds(50))
         #expect(outcomes.count == 1)
         #expect(outcomes.first?.store == nil)
@@ -211,9 +221,8 @@ import os
     }
 
     /// Waits for `count` replies with its own bound, so a quit that is never answered fails the test instead of hanging it.
-    private func replies(_ count: Int, in box: ReplyBox, within limit: Duration = .seconds(2)) async {
-        let end = ContinuousClock.now + limit
-        while box.replies.count < count, ContinuousClock.now < end { try? await Task.sleep(for: .milliseconds(5)) }
+    private func replies(_ count: Int, in box: ReplyBox, within limit: Duration = .seconds(30)) async {
+        await pollUntil(deadline: limit) { box.replies.count >= count }
     }
 
     @Test func aQuitOutwaitsAStuckOpenOnlyUntilTheDeadlineAndALateOpenChangesNothing() async {
@@ -236,7 +245,7 @@ import os
         #expect(launches == 0)
         // The open comes back after the quit was answered: no second reply and no launch on the way out.
         held.release()
-        for _ in 0..<400 where delegate.storeOpenInFlight { try? await Task.sleep(for: .milliseconds(5)) }
+        await pollUntil { !delegate.storeOpenInFlight }
         try? await Task.sleep(for: .milliseconds(50))
         #expect(!delegate.storeOpenInFlight)
         #expect(box.replies == [true])
@@ -261,7 +270,7 @@ import os
         #expect(delegate.pendingOpenCount == 0)
         #expect(delegate.storeOpenInFlight)
         held.release()
-        for _ in 0..<400 where delegate.storeOpenInFlight { try? await Task.sleep(for: .milliseconds(5)) }
+        await pollUntil { !delegate.storeOpenInFlight }
         try? await Task.sleep(for: .milliseconds(50))
         #expect(box.replies == [true])
     }
@@ -275,7 +284,7 @@ import os
         let box = ReplyBox()
         delegate.replyToTermination = { _, ready in box.replies.append(ready) }
         delegate.openStoreOffMain { _ in }
-        for _ in 0..<400 where !held.started { try? await Task.sleep(for: .milliseconds(5)) }
+        await pollUntil { held.started }
         #expect(delegate.applicationShouldTerminate(NSApplication.shared) == .terminateLater)
         // Well past the deadline, with the files still moving: no reply yet.
         try? await Task.sleep(for: .milliseconds(300))
@@ -285,9 +294,86 @@ import os
         #expect(box.replies == [true])
         #expect(delegate.storeOpenInFlight)
         held.release()
-        for _ in 0..<400 where delegate.storeOpenInFlight { try? await Task.sleep(for: .milliseconds(5)) }
+        await pollUntil { !delegate.storeOpenInFlight }
         try? await Task.sleep(for: .milliseconds(50))
         #expect(box.replies == [true])
+    }
+
+    @Test func aQuitWithdrawnAfterTheOpenSkippedItsQuarantineRunsTheOpenAgain() async {
+        let held = HeldStoreOpen(outcome: StoreOpenOutcome(failure: "skipped"), patience: .seconds(20))
+        defer { held.release() }
+        let seen = OSAllocatedUnfairLock<[StoreOpenActivity]>(initialState: [])
+        let delegate = AppDelegate()
+        let opens = OSAllocatedUnfairLock(initialState: 0)
+        delegate.openStore = { activity in
+            seen.withLock { $0.append(activity) }
+            if opens.withLock({
+                $0 += 1; return $0
+            }) > 1 {
+                return StoreOpenOutcome(quarantinedTo: URL(fileURLWithPath: "/tmp/moved"))
+            }
+            return held.open(activity)
+        }
+        delegate.storeQuitDeadline = .milliseconds(30)
+        // The quit is committed when the app asks the updater whether it may go ahead; that is the moment the stuck open
+        // reaches its quarantine step, so it is refused. The updater then says no, which cancels the quit.
+        delegate.appUpdater = AppUpdater(
+            driver: nil,
+            activity: {
+                if let activity = seen.withLock({ $0.first }), activity.state == .quitCommitted {
+                    #expect(!activity.beginQuarantine())
+                    held.release()
+                }
+                return .recovering
+            })
+        delegate.appUpdater.updateWillRelaunch()
+        let box = ReplyBox()
+        delegate.replyToTermination = { _, ready in box.replies.append(ready) }
+        var finished: [StoreOpenOutcome] = []
+        delegate.openStoreOffMain { finished.append($0) }
+        #expect(delegate.applicationShouldTerminate(NSApplication.shared) == .terminateLater)
+        await replies(1, in: box)
+        #expect(box.replies == [false])
+        await pollUntil { !finished.isEmpty }
+        #expect(opens.withLock { $0 } == 2)
+        #expect(finished.count == 1)
+        #expect(finished.first?.quarantinedTo != nil)
+        #expect(!delegate.storeOpenInFlight)
+    }
+
+    @Test func anOpenThatSkippedItsQuarantineWhileTheQuitIsStillCommittedRunsAgainOnceTheQuitIsWithdrawn() async {
+        let held = HeldStoreOpen(outcome: StoreOpenOutcome(failure: "skipped"), patience: .seconds(20))
+        defer { held.release() }
+        let seen = OSAllocatedUnfairLock<[StoreOpenActivity]>(initialState: [])
+        let opens = OSAllocatedUnfairLock(initialState: 0)
+        let delegate = AppDelegate()
+        delegate.openStore = { activity in
+            seen.withLock { $0.append(activity) }
+            if opens.withLock({
+                $0 += 1; return $0
+            }) > 1 {
+                return StoreOpenOutcome(quarantinedTo: URL(fileURLWithPath: "/tmp/moved"))
+            }
+            return held.open(activity)
+        }
+        var finished: [StoreOpenOutcome] = []
+        delegate.openStoreOffMain { finished.append($0) }
+        await pollUntil { !seen.withLock { $0.isEmpty } }
+        guard let activity = seen.withLock({ $0.first }) else { Issue.record("open never started"); return }
+        // The deadline committed the quit and a draft prompt is up; the open reaches its quarantine and is refused.
+        #expect(activity.commitQuit())
+        #expect(!activity.beginQuarantine())
+        held.release()
+        try? await Task.sleep(for: .milliseconds(150))
+        #expect(finished.isEmpty)
+        #expect(opens.withLock { $0 } == 1)
+        // Keep Editing.
+        activity.withdrawQuit()
+        await pollUntil { !finished.isEmpty }
+        #expect(opens.withLock { $0 } == 2)
+        #expect(finished.count == 1)
+        #expect(finished.first?.quarantinedTo != nil)
+        #expect(!delegate.storeOpenInFlight)
     }
 
     @Test func aQuitCancelledDuringAnUpdateInstallUnblocksNewWork() {
@@ -338,7 +424,7 @@ import os
         let before = model.refreshCount
         for _ in 0..<20 { model.scheduleRefresh() }
         #expect(model.refreshCount == before)
-        for _ in 0..<1000 where model.refreshCount == before { try? await Task.sleep(for: .milliseconds(10)) }
+        await pollUntil { model.refreshCount != before }
         // The burst is one refresh: give any extra one the same chance to land.
         try? await Task.sleep(for: .milliseconds(50))
         #expect(model.refreshCount == before + 1)
@@ -419,6 +505,27 @@ private final class HeldStoreOpen: Sendable {
 }
 
 @Suite struct PhrasesHealthTests {
+    @Test func aTakeReadsThePhrasesOnlyWhenTheFileChanges() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("phrases-snippets-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let url = dir.appendingPathComponent("phrases.json")
+        let phrases = FilePhrases(url: url)
+        #expect(phrases.snippets().isEmpty)
+        #expect(phrases.snippets().isEmpty)
+        #expect(phrases.snippetReads.withLock { $0 } == 1)
+        try phrases.save(original: nil, phrase: Snippet(trigger: "my email", expansion: "a@b.co"))
+        let saved = phrases.snippets()
+        #expect(saved.count == 1)
+        #expect(phrases.snippets() == saved)
+        #expect(phrases.snippetReads.withLock { $0 } == 2)
+        // A file broken by hand keeps the last good list and is not re-read until it changes again.
+        try Data("not json at all".utf8).write(to: url)
+        #expect(phrases.snippets() == saved)
+        #expect(phrases.snippets() == saved)
+        #expect(phrases.snippetReads.withLock { $0 } == 3)
+    }
+
     @Test func theFileIsReadAgainOnlyWhenItChanges() throws {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("phrases-health-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)

@@ -126,6 +126,9 @@ import Testing
         "Number one is the price. Number two is the timing.",
         "One day we'll know. Two days later it broke.",
         "I came first. Then I came second.",
+        "First I had second thoughts. Then I had third thoughts.",
+        "I had first thoughts and then I had second thoughts about it.",
+        "We had second thoughts, then third thoughts.",
         "Last night I slept well.",
         "First time I tried it, it failed. Second time it worked.",
         "Second, call the bank. Third, email Priya.",
@@ -296,6 +299,6 @@ import Testing
         let ms = Double(elapsed.components.seconds) * 1000 + Double(elapsed.components.attoseconds) / 1e15
         print("COUNTEDLISTS-PERF 500 lists: \(ms) ms")
         #expect(out.text.contains("1. Call the bank."))
-        if TextTestSupport.timingAssertsEnabled { #expect(ms < 3000, "took \(ms) ms") }
+        #expect(ms < TextTestSupport.budget(3000), "took \(ms) ms")
     }
 }

@@ -20,9 +20,6 @@ import MouthtypeCore
     }
 
     private func descendants(of view: NSView) -> [NSView] { view.subviews + view.subviews.flatMap { descendants(of: $0) } }
-    private func count(_ typeName: String, in view: NSView) -> Int {
-        descendants(of: view).filter { String(describing: type(of: $0)).contains(typeName) }.count
-    }
 
     // MARK: Window
 

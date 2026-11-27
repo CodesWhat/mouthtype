@@ -25,7 +25,7 @@ struct EngineWorker: AsyncParsableCommand {
         var output = WorkerOutput(
             engineID: engine, displayName: engine, prepare: nil, peakRSSBytes: 0, peakFootprintBytes: nil, firstTranscribeMs: nil, modelBytes: nil, modelPath: nil, clips: [], error: nil)
         do {
-            let transcriber = try EngineCatalog.make(id: engine)
+            let transcriber = try BenchEngines.make(id: engine)
             output.displayName = transcriber.displayName
             if let measured = transcriber as? any MeasuredTranscriber {
                 output.prepare = try await measured.prepareMeasured()

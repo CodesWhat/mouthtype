@@ -2,16 +2,33 @@ import Foundation
 
 public struct TechnicalNotation: Sendable {
     public static let stageName = "notation"
-    private let protectedPhrases: [String]
+    private let matcher: PhraseMatcher
     private let spellings: [String: String]
 
+    private static let libraries = RecentStrings<(matcher: PhraseMatcher, spellings: [String: String])>()
+
     public init(protectedPhrases: [String] = []) {
-        self.protectedPhrases = protectedPhrases
+        self.init(library: protectedPhrases, extra: [])
+    }
+
+    /// `library` is the long, stable part (dictionary and snippets), derived once and reused while it stays the
+    /// same; `extra` is whatever changes per take. Same result as one list of `library + extra`.
+    init(library: [String], extra: [String]) {
+        let base = Self.libraries.value(for: library) { phrases in
+            (PhraseMatcher(patterns: phrases), Self.spellings(of: phrases))
+        }
+        var spellings = base.spellings
+        for (key, phrase) in Self.spellings(of: extra) where spellings[key] == nil { spellings[key] = phrase }
+        self.matcher = base.matcher.appending(extra)
+        self.spellings = spellings
+    }
+
+    private static func spellings(of phrases: [String]) -> [String: String] {
         var spellings: [String: String] = [:]
-        for phrase in protectedPhrases where phrase.count > 1 && phrase.allSatisfy(\.isLetter) {
+        for phrase in phrases where phrase.count > 1 && phrase.allSatisfy(\.isLetter) {
             if spellings[phrase.lowercased()] == nil { spellings[phrase.lowercased()] = phrase }
         }
-        self.spellings = spellings
+        return spellings
     }
 
     public func apply(_ text: String) -> StageResult {
@@ -103,7 +120,6 @@ public struct TechnicalNotation: Sendable {
 
     private func shields(_ chars: [Character]) -> [Bool] {
         var result = [Bool](repeating: false, count: chars.count)
-        let matcher = PhraseMatcher(patterns: protectedPhrases)
         for hit in matcher.matches(chars, lower: TextScan.lowered(chars)) {
             for index in hit.range { result[index] = true }
         }

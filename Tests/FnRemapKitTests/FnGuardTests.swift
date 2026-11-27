@@ -5,11 +5,20 @@ import Testing
 private final class FakeStore: KeyMappingStore {
     var mapping: [FnRemapMapping.Entry]?
     var refuseWrites = false
+    /// What the next reads return after a write, instead of the written mapping. Models a HID system that accepts a
+    /// write but reports something else back.
+    var readsAfterWrite: [FnRemapMapping.Entry]??
+    var failReadsAfterWrite = false
+    var failReads = false
     private(set) var writes: [[FnRemapMapping.Entry]] = []
 
     init(_ mapping: [FnRemapMapping.Entry]?) { self.mapping = mapping }
 
-    func read() throws -> [FnRemapMapping.Entry]? { mapping }
+    func read() throws -> [FnRemapMapping.Entry]? {
+        if failReads || (failReadsAfterWrite && !writes.isEmpty) { throw KeyMappingError.unsupportedShape }
+        if !writes.isEmpty, let readsAfterWrite { return readsAfterWrite }
+        return mapping
+    }
 
     func write(_ mapping: [FnRemapMapping.Entry]) -> Bool {
         guard !refuseWrites else { return false }
@@ -86,6 +95,39 @@ private final class FakeStore: KeyMappingStore {
             #expect(FnGuard.removeOurs(ours, from: store) == .alreadyGone)
             #expect(store.writes.isEmpty)
         }
+    }
+
+    @Test func reportsAWriteThatTheReadBackContradicts() {
+        let failure = FnGuardOutcome.failed("the mapping was not restored after the write")
+        // The write is accepted but our entry is still there.
+        var store = FakeStore([capsToEscape, ours])
+        store.readsAfterWrite = [capsToEscape, ours]
+        #expect(FnGuard.removeOurs(ours, from: store) == failure)
+        // Our entry is gone but the read-back is not the mapping we wrote.
+        store = FakeStore([capsToEscape, ours])
+        store.readsAfterWrite = []
+        #expect(FnGuard.removeOurs(ours, from: store) == failure)
+        // The property reads back as unset.
+        store = FakeStore([ours])
+        store.readsAfterWrite = .some(nil)
+        #expect(FnGuard.removeOurs(ours, from: store) == failure)
+    }
+
+    @Test func reportsAReadBackThatThrows() {
+        let store = FakeStore([ours])
+        store.failReadsAfterWrite = true
+        #expect(FnGuard.removeOurs(ours, from: store) == .failed("the mapping was not restored after the write"))
+    }
+
+    @Test func reportsAnUnreadableMappingWithoutWriting() {
+        let store = FakeStore([ours])
+        store.failReads = true
+        guard case .failed(let message) = FnGuard.removeOurs(ours, from: store) else {
+            Issue.record("expected a failure")
+            return
+        }
+        #expect(message.hasPrefix("could not read the current mapping"))
+        #expect(store.writes.isEmpty)
     }
 
     @Test func reportsARefusedWrite() {

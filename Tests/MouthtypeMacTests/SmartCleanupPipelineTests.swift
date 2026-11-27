@@ -495,11 +495,55 @@ private struct CleanupDiagnosticFixtureError: Error, CustomStringConvertible {
         let cleaner = ScriptedCleaner { text, _ in text }
         var (pipeline, _) = pipeline(cleaner, level: level, snippets: [Snippet(trigger: "um holy shit", expansion: "Oh dear")])
         pipeline.cleanupBudget = -1
+        pipeline.cleanupBudgetPerWord = 0
         let cleaned = await clean(pipeline, text: "um holy shit this is fucking broken")
         #expect(cleaned.text == "Oh dear this is broken")
         #expect(cleaned.cleanup.outcome == "timeout")
         #expect(cleaned.edits.contains { $0.stage == "snippet" })
         #expect(cleaner.calls == 0)
+    }
+
+    @Test func theDefaultCleanupBudgetIsFiftyMsPlusAQuarterMsPerWord() {
+        #expect(DictationPipeline.cleanupBudgetMs == 50)
+        #expect(DictationPipeline.cleanupBudgetPerWordMs == 0.25)
+        let pipeline = DictationPipeline(store: nil, archive: nil, engine: StubEngine(), clock: SystemDictationClock())
+        #expect(pipeline.cleanupBudget == 50 && pipeline.cleanupBudgetPerWord == 0.25)
+    }
+
+    @Test func theCleanupBudgetGrowsWithTheLengthOfTheTake() async {
+        var (pipeline, _) = pipeline(ScriptedCleaner { text, _ in text }, level: .basic)
+        pipeline.cleanupBudget = -1
+        pipeline.cleanupBudgetPerWord = 10_000
+        let cleaned = await clean(pipeline, text: "um this is a longer take with a few words in it")
+        #expect(cleaned.cleanup.outcome == "ok")
+    }
+
+    @Test func theBudgetCountsTheWordsHeardNotTheWordsLeftAfterCleanup() async {
+        var (pipeline, _) = pipeline(ScriptedCleaner { text, _ in text }, level: .basic)
+        pipeline.cleanupBudget = -1
+        pipeline.cleanupBudgetPerWord = 10_000
+        // Every word is a filler, so the cleaned text has no words; the budget must come from the transcript.
+        let cleaned = await clean(pipeline, text: "um um um um um um")
+        #expect(cleaned.cleanup.outcome == "ok")
+    }
+
+    @Test func theFullDictionaryFallbackUsesTheScaledBudgetToo() async {
+        let rules = [DictionaryRule(heard: "en pee em", written: "npm"), DictionaryRule(heard: "mouth type", written: "Mouthtype")]
+        var (pipeline, _) = pipeline(ScriptedCleaner { text, _ in text }, level: .light, rules: rules, ready: false)
+        pipeline.cleanupBudget = -1
+        pipeline.cleanupBudgetPerWord = 10_000
+        let cleaned = await clean(pipeline, text: "um hello. Fuck, npm failed.")
+        #expect(cleaned.cleanup.outcome != "timeout")
+        #expect(cleaned.text.hasSuffix("npm failed."))
+    }
+
+    @Test func aFourHundredWordTakeCleansWithinTheDefaultBudget() async {
+        var (pipeline, _) = pipeline(ScriptedCleaner { text, _ in text }, level: .basic)
+        pipeline.cleanupBudget = DictationPipeline.cleanupBudgetMs
+        let take = Array(repeating: "um so we should probably ship the new build today, and then check the logs.", count: 30)
+            .joined(separator: " ")
+        let cleaned = await clean(pipeline, text: take)
+        #expect(cleaned.cleanup.outcome == "ok")
     }
 
     @Test func aRejectedModelOutputStillLeavesNoSwearing() async {
@@ -546,6 +590,7 @@ private struct CleanupDiagnosticFixtureError: Error, CustomStringConvertible {
         let rules = [DictionaryRule(heard: "en pee em", written: "npm")]
         var (pipeline, _) = pipeline(ScriptedCleaner { text, _ in text }, level: .basic, rules: rules)
         pipeline.cleanupBudget = -1
+        pipeline.cleanupBudgetPerWord = 0
         let cleaned = await clean(pipeline, text: "um hello. Fuck, npm failed.")
         #expect(cleaned.cleanup.outcome == "timeout")
         #expect(cleaned.text == "um hello. npm failed.")

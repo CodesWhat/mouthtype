@@ -34,22 +34,26 @@ import MouthtypeCore
         #expect(CleanupSettings().pipelineOptions.slashCommands)
     }
 
+    private func isCodingTarget(bundleID: String?, websiteHost: String? = nil) -> Bool {
+        CodingTargets.isCodingApp(bundleID: bundleID) || CodingTargets.isCodingWebsite(host: websiteHost, bundleID: bundleID)
+    }
+
     @Test func codingTargetsComeFromTheBundleIDOrTheSite() {
         for id in [
             "com.apple.Terminal", "com.googlecode.iterm2", "com.microsoft.VSCode", "com.jetbrains.intellij", "com.jetbrains.pycharm",
             "dev.zed.Zed", "com.anthropic.claudefordesktop", "com.openai.codex", "com.stablyai.orca",
         ] {
-            #expect(CodingTargets.isCodingTarget(bundleID: id), Comment(rawValue: id))
+            #expect(isCodingTarget(bundleID: id), Comment(rawValue: id))
         }
         for id in ["com.apple.Notes", "com.apple.mail", "com.tinyspeck.slackmacgap", "com.jetbrainsfake.app", nil] {
-            #expect(!CodingTargets.isCodingTarget(bundleID: id))
+            #expect(!isCodingTarget(bundleID: id))
         }
-        #expect(CodingTargets.isCodingTarget(bundleID: "com.google.Chrome", websiteHost: "claude.ai"))
-        #expect(CodingTargets.isCodingTarget(bundleID: "com.apple.Safari", websiteHost: "chatgpt.com"))
-        #expect(!CodingTargets.isCodingTarget(bundleID: "com.google.Chrome", websiteHost: "example.com"))
-        #expect(!CodingTargets.isCodingTarget(bundleID: "com.google.Chrome", websiteHost: nil))
+        #expect(isCodingTarget(bundleID: "com.google.Chrome", websiteHost: "claude.ai"))
+        #expect(isCodingTarget(bundleID: "com.apple.Safari", websiteHost: "chatgpt.com"))
+        #expect(!isCodingTarget(bundleID: "com.google.Chrome", websiteHost: "example.com"))
+        #expect(!isCodingTarget(bundleID: "com.google.Chrome", websiteHost: nil))
         // A host only counts in a browser that reports one.
-        #expect(!CodingTargets.isCodingTarget(bundleID: "com.apple.Notes", websiteHost: "claude.ai"))
+        #expect(!isCodingTarget(bundleID: "com.apple.Notes", websiteHost: "claude.ai"))
     }
 
     @Test func settingsRoundTrip() {

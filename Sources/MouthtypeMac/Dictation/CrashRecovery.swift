@@ -71,8 +71,10 @@ final class CrashRecovery {
         defer { isRecovering = false; onFinished?() }
         offered = nil
         // A finished take keeps its row as it was: a closed session turns every store write into a no-op.
-        let session = DictationSession(id: item.id, startedAt: item.startedAt, keyDownAt: clock.nowNanos(), rowOpen: !item.isCompleted)
-        pill.showProcessing()
+        var session = DictationSession(id: item.id, startedAt: item.startedAt, keyDownAt: clock.nowNanos(), rowOpen: rowOpen(for: item))
+        // The take is read in the language it was recorded in, not whatever the setting says today.
+        session.languageRequest = item.language.flatMap { DictationLanguage(code: $0) }.map { .explicit($0) }
+        pill.showProcessing(cancellable: false)
         do {
             let url = item.audioURL
             let samples = try await Task.detached { try AudioArchive.read(contentsOf: url) }.value
@@ -132,10 +134,6 @@ final class CrashRecovery {
         return await Task.detached { DictationRecovery.completed(rows: rows, now: now, archive: archive) }.value
     }
 
-    func savedRecordings() throws -> [RecoverableDictation] {
-        try DictationRecovery.saved(store: store, archive: archive, now: clock.now(), launchedAt: launchedAt)
-    }
-
     func offerSaved(_ item: RecoverableDictation) {
         guard !isRecovering else { return }
         offered = item
@@ -153,12 +151,30 @@ final class CrashRecovery {
             ])
     }
 
+    /// Whether the take's row takes writes. A finished take keeps its row as it was. Audio with no row gets one here
+    /// (pointing at its WAV when there is one), so Recover and Discard end it and it leaves Saved Recordings; when the
+    /// store can't write it, the session stays closed and nothing is written.
+    private func rowOpen(for item: RecoverableDictation) -> Bool {
+        if item.isCompleted { return false }
+        guard item.isOrphan else { return true }
+        do {
+            try store.begin(DictationStart(id: item.id, startedAt: item.startedAt))
+            if !item.isPartial {
+                try store.recordCapture(item.id, CaptureRecord(audioPath: item.audioURL.path))
+            }
+            return true
+        } catch {
+            Log.app.error("recovery: no row for saved audio: \(String(describing: error), privacy: .public)")
+            return false
+        }
+    }
+
     /// The card's Discard: the row ends as cancelled and the audio stays in the archive.
     func discard() async {
         guard let item = offered else { return }
         offered = nil
         await pipeline.finish(
-            DictationSession(id: item.id, startedAt: item.startedAt, keyDownAt: clock.nowNanos(), rowOpen: !item.isCompleted), .cancelled
+            DictationSession(id: item.id, startedAt: item.startedAt, keyDownAt: clock.nowNanos(), rowOpen: rowOpen(for: item)), .cancelled
         )
         onFinished?()
     }
