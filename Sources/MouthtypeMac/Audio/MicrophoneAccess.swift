@@ -4,17 +4,17 @@ import Foundation
 
 /// Microphone authorization: asking once when the system has never asked, and
 /// refusing to start capture when access is missing.
-public enum MicrophoneAccess {
-    public static let settingsURL = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone")!
+enum MicrophoneAccess {
+    static let settingsURL = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone")!
 
-    public static var status: AVAuthorizationStatus {
+    static var status: AVAuthorizationStatus {
         AVCaptureDevice.authorizationStatus(for: .audio)
     }
 
     /// Shows the system prompt if the user has never answered it, and returns
     /// the status once they have. Does not block the main thread.
     @discardableResult
-    public static func requestIfUndetermined() async -> AVAuthorizationStatus {
+    static func requestIfUndetermined() async -> AVAuthorizationStatus {
         guard status == .notDetermined else { return status }
         Log.capture.info("requesting microphone access")
         let granted = await AVCaptureDevice.requestAccess(for: .audio)
@@ -23,7 +23,7 @@ public enum MicrophoneAccess {
     }
 
     /// The menu's status line.
-    public static func statusText(for status: AVAuthorizationStatus) -> String {
+    static func statusText(for status: AVAuthorizationStatus) -> String {
         switch status {
         case .authorized: return "Microphone: allowed"
         case .denied, .restricted: return "Microphone: not allowed"

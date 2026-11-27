@@ -123,8 +123,8 @@ public struct DownloadRateMeter: Sendable, Equatable {
 /// model, each reporting its own 0...1 (download in the first half, compile in the second), so the raw fraction restarts at
 /// every call. The first call downloads the whole repo, so its download half is scaled against the full total, and the
 /// bar holds there once it finishes.
-public struct StagedDownloadTracker: Sendable, Equatable {
-    public enum Event: Sendable, Equatable {
+struct StagedDownloadTracker: Sendable, Equatable {
+    enum Event: Sendable, Equatable {
         case listing
         case downloading
         case compiling
@@ -132,27 +132,27 @@ public struct StagedDownloadTracker: Sendable, Equatable {
         case finished
     }
 
-    public let stageBytes: [Int64]
+    let stageBytes: [Int64]
     /// Share of each model's own 0...1 that is download. The rest is compile.
-    public let downloadWeight: Double
-    public private(set) var stage = 0
+    let downloadWeight: Double
+    private(set) var stage = 0
     private var highWater: Double = 0
 
-    public init(stageBytes: [Int64], downloadWeight: Double = 0.5) {
+    init(stageBytes: [Int64], downloadWeight: Double = 0.5) {
         self.stageBytes = stageBytes
         self.downloadWeight = downloadWeight
     }
 
-    public var totalBytes: Int64 { stageBytes.reduce(0, +) }
+    var totalBytes: Int64 { stageBytes.reduce(0, +) }
 
     /// True once every model has finished.
-    public var isComplete: Bool { stage >= stageBytes.count }
+    var isComplete: Bool { stage >= stageBytes.count }
 
-    public var initial: ModelDownloadProgress {
+    var initial: ModelDownloadProgress {
         ModelDownloadProgress(completedBytes: 0, totalBytes: totalBytes, completedFiles: 0, totalFiles: stageBytes.count)
     }
 
-    public mutating func update(fraction: Double, event: Event) -> ModelDownloadProgress {
+    mutating func update(fraction: Double, event: Event) -> ModelDownloadProgress {
         let within: Double
         switch event {
         case .listing: within = 0

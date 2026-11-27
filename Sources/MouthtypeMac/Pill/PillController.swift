@@ -14,7 +14,7 @@ final class PillPanel: NSPanel {
 /// moves, so nothing runs while idle. The panel is click-through except while locked and the pointer is over a
 /// control.
 @MainActor
-public final class PillController {
+final class PillController {
     enum State: Equatable {
         case hidden, recording, handsFree, processing, message(PillMessage)
     }
@@ -75,7 +75,7 @@ public final class PillController {
     var cardSettle: TimeInterval = 0.4
     var isGrown: Bool { cardView != nil }
 
-    public init(level: @escaping @MainActor () -> LevelReading, defaults: UserDefaults = .standard) {
+    init(level: @escaping @MainActor () -> LevelReading, defaults: UserDefaults = .standard) {
         self.defaults = defaults
         levelSource = level
         skinKind = PillSkinPreference.current(defaults)
@@ -190,7 +190,7 @@ public final class PillController {
         install(Self.makeSkin(kind, scale: scale, readout: colour))
     }
 
-    public func showRecording() {
+    func showRecording() {
         enter(.recording)
         recordingStart = CACurrentMediaTime()
         skin.showRecording(locked: false)
@@ -198,7 +198,7 @@ public final class PillController {
     }
 
     /// The same meter with the lock look and, once clicked, the cancel and stop controls.
-    public func showHandsFree() {
+    func showHandsFree() {
         enter(.handsFree)
         if recordingStart == nil { recordingStart = CACurrentMediaTime() }
         skin.showRecording(locked: true)
@@ -206,7 +206,7 @@ public final class PillController {
     }
 
     /// One line over a hands-free recording, then back to the hands-free pill unless something else took over.
-    public func showHandsFreeNotice(_ text: String, duration: TimeInterval = 4) {
+    func showHandsFreeNotice(_ text: String, duration: TimeInterval = 4) {
         guard state == .handsFree else { return }
         let message = PillMessage(text)
         enter(.message(message))
@@ -221,7 +221,7 @@ public final class PillController {
     static let processingHelp = "Click to cancel this take"
 
     /// Only a cancellable take (one the dictation controller can actually stop) gets the click target and tooltip.
-    public func showProcessing(cancellable: Bool = false) {
+    func showProcessing(cancellable: Bool = false) {
         enter(.processing)
         processingCancellable = cancellable
         recordingStart = nil
@@ -263,7 +263,7 @@ public final class PillController {
         showMessage(PillMessage(text, isError: isError), duration: duration)
     }
 
-    public func hide() {
+    func hide() {
         previewView.update("")
         if isGrown, let cardReadout {
             // The card outlives whatever the pill was doing: the pill goes back to being its readout row.

@@ -78,14 +78,14 @@ public enum ClaudeCLI {
 }
 
 /// Quality ceiling: Claude Haiku through the CLI. Its latency includes process startup, so it is not comparable to a local model or an API call.
-public final class ClaudeCLICleaner: MeasuredCleaner {
-    public static let haikuID = "claude-haiku-cli"
-    public static let haikuDisplayName = "Claude Haiku via claude CLI (quality ceiling)"
+final class ClaudeCLICleaner: MeasuredCleaner {
+    static let haikuID = "claude-haiku-cli"
+    static let haikuDisplayName = "Claude Haiku via claude CLI (quality ceiling)"
 
-    public let id: String
-    public let displayName: String
-    public let modelDirectory: URL? = nil
-    public let timingsAreRepresentative = false
+    let id: String
+    let displayName: String
+    let modelDirectory: URL? = nil
+    let timingsAreRepresentative = false
     private let model: String
 
     init(id: String, displayName: String, model: String) {
@@ -94,14 +94,14 @@ public final class ClaudeCLICleaner: MeasuredCleaner {
         self.model = model
     }
 
-    public func prepareMeasured() async throws -> PrepareTimings {
+    func prepareMeasured() async throws -> PrepareTimings {
         guard ClaudeCLI.locate() != nil else {
             throw CleanerError.unavailable(reason: "The claude CLI was not found on PATH")
         }
         return PrepareTimings(downloadSeconds: 0, loadSeconds: 0, downloaded: false)
     }
 
-    public func cleanMeasured(_ transcript: String, context: CleanupContext) async throws -> CleanupResult {
+    func cleanMeasured(_ transcript: String, context: CleanupContext) async throws -> CleanupResult {
         let clock = ContinuousClock()
         let start = clock.now
         let output = try await ClaudeCLI.run(

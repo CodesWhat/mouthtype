@@ -12,16 +12,16 @@ import MouthtypeCore
 /// probes keep tap 2 on permanently: the remap has to swallow its destination key (and stands in for the Fn combos
 /// it broke), the probes log keys.
 @MainActor
-public final class HotkeyService {
-    public struct Options: Sendable {
-        public var source: HotkeySource
-        public var configuration: GestureConfiguration
+final class HotkeyService {
+    struct Options: Sendable {
+        var source: HotkeySource
+        var configuration: GestureConfiguration
         /// Keep the key tap on while idle so key events can be logged. Diagnostics only.
-        public var observesKeys: Bool
+        var observesKeys: Bool
         /// An extra mouse button that dictates like the shortcut. `.none` installs no mouse tap at all.
-        public var mouseTrigger: MouseTrigger
+        var mouseTrigger: MouseTrigger
 
-        public init(
+        init(
             source: HotkeySource = .fnFlag, configuration: GestureConfiguration = .default, observesKeys: Bool = false,
             mouseTrigger: MouseTrigger = .none
         ) {
@@ -32,20 +32,20 @@ public final class HotkeyService {
         }
     }
 
-    public enum StartError: Error, Equatable {
+    enum StartError: Error, Equatable {
         case accessibilityMissing
         case tapCreateFailed
     }
 
-    public let events: AsyncStream<HotkeyEvent>
-    public private(set) var health: HotkeyHealth = .off {
+    let events: AsyncStream<HotkeyEvent>
+    private(set) var health: HotkeyHealth = .off {
         didSet { if health != oldValue { onHealthChange?(health) } }
     }
-    public var onHealthChange: (@MainActor (HotkeyHealth) -> Void)?
+    var onHealthChange: (@MainActor (HotkeyHealth) -> Void)?
     /// Runs on every watchdog tick, for checks that live outside the taps (the Fn remap still being in the HID mapping).
-    public var onWatchdog: (@MainActor () -> Void)?
+    var onWatchdog: (@MainActor () -> Void)?
     /// Every sample either tap delivers, before it reaches the processor. For the probes.
-    public var sampleObserver: (@MainActor (TapSample) -> Void)?
+    var sampleObserver: (@MainActor (TapSample) -> Void)?
 
     private struct Slot {
         var tap: (any TapHandle)?
@@ -73,7 +73,7 @@ public final class HotkeyService {
     private var consumer: Task<Void, Never>?
     private var monitor: Task<Void, Never>?
 
-    public convenience init(options: Options = Options()) {
+    convenience init(options: Options = Options()) {
         self.init(options: options, otherKeysHeld: HotkeyService.liveKeysHeld)
     }
 
@@ -87,7 +87,7 @@ public final class HotkeyService {
         (messages, messageSink) = AsyncStream.makeStream(of: TapMessage.self)
     }
 
-    public var source: HotkeySource { options.source }
+    var source: HotkeySource { options.source }
 
     private var processing = false
 
@@ -119,7 +119,7 @@ public final class HotkeyService {
     // MARK: - Lifecycle
 
     /// Creates the always-on tap. Call only after Accessibility is granted, so macOS has no reason to raise an Input Monitoring prompt.
-    public func start() throws {
+    func start() throws {
         guard system.isProcessTrusted else { throw StartError.accessibilityMissing }
         guard slots[.flags]?.tap == nil else { return }
         let thread = TapThread()
@@ -176,7 +176,7 @@ public final class HotkeyService {
         Log.hotkey.info("tap created, health \(self.health.statusText, privacy: .public)")
     }
 
-    public func stop() {
+    func stop() {
         consumer?.cancel()
         monitor?.cancel()
         consumer = nil
@@ -201,7 +201,7 @@ public final class HotkeyService {
 
     /// Moves the live taps to another hotkey source (the Fn remap toggled) without a relaunch. A recording in
     /// progress is cancelled, since the key that would end it is about to mean something else.
-    public func switchSource(_ source: HotkeySource) throws {
+    func switchSource(_ source: HotkeySource) throws {
         guard source != options.source else { return }
         let wasRunning = thread != nil
         let interrupted = engine.isRecording
@@ -212,7 +212,7 @@ public final class HotkeyService {
         if wasRunning { try start() }
     }
 
-    public func switchRecordingMode(_ mode: RecordingMode, source: HotkeySource? = nil) throws {
+    func switchRecordingMode(_ mode: RecordingMode, source: HotkeySource? = nil) throws {
         let nextSource = source ?? options.source
         guard mode != options.configuration.recordingMode || nextSource != options.source else { return }
         let previous = options
@@ -237,7 +237,7 @@ public final class HotkeyService {
 
     /// Moves the live taps to another mouse button (or none) without a relaunch. A recording in progress is cancelled,
     /// since the button that would end it is about to mean something else. On failure the previous button stays.
-    public func switchMouseTrigger(_ trigger: MouseTrigger) throws {
+    func switchMouseTrigger(_ trigger: MouseTrigger) throws {
         guard trigger != options.mouseTrigger else { return }
         let previous = options.mouseTrigger
         let wasRunning = thread != nil
@@ -256,7 +256,7 @@ public final class HotkeyService {
     }
 
     /// Ends a locked recording that something other than the key stopped (the menu, the safety cap), so the next press starts fresh.
-    public func releaseLock() {
+    func releaseLock() {
         guard engine.isLocked else { return }
         engine.endLock()
         mapper.lockedRecording = false
@@ -267,7 +267,7 @@ public final class HotkeyService {
     /// tap goes up so Esc cancels, and the hotkey stops it instead of reading as a too-short tap.
     /// A key already down when the start finished (the controller refused that press, the URL owns the session) is turned
     /// into the lock too, so its release is swallowed instead of reading as a too-short hold that discards the recording.
-    public func adoptLockedRecording() {
+    func adoptLockedRecording() {
         if engine.isRecording {
             guard !engine.isLocked, engine.lockFromChord() != nil else { return }
         } else {
@@ -416,7 +416,7 @@ public final class HotkeyService {
 
     /// Takes are waiting on the engine after the key came up. While true the key tap stays installed, listen-only for
     /// Esc, and an Esc press cancels them. Esc is never swallowed here: it still reaches the app in front.
-    public func setProcessing(_ on: Bool) {
+    func setProcessing(_ on: Bool) {
         guard on != processing else { return }
         processing = on
         shared.processing.store(on, ordering: .relaxed)

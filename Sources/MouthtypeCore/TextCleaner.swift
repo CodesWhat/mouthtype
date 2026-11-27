@@ -131,23 +131,23 @@ public enum CleanerError: Error, LocalizedError, Equatable {
     }
 }
 
-public enum CleanupLimits {
+enum CleanupLimits {
     /// Cap on generated tokens: a small multiple of the input length, with a floor for tiny inputs.
-    public static func maxOutputTokens(for transcript: String) -> Int {
+    static func maxOutputTokens(for transcript: String) -> Int {
         TextMetrics.wordCount(transcript) * 3 + 48
     }
 
     /// Hard ceiling on any single generation.
-    public static let outputTokenCeiling = 16_384
+    static let outputTokenCeiling = 16_384
 
     /// Sizes the allowance from the encoded input as well as its word count, because text without spaces (Japanese,
     /// Chinese) has few whitespace words but many tokens. Never below the word-based allowance.
-    public static func maxOutputTokens(for transcript: String, inputTokens: Int) -> Int {
+    static func maxOutputTokens(for transcript: String, inputTokens: Int) -> Int {
         min(outputTokenCeiling, max(maxOutputTokens(for: transcript), inputTokens * 2 + 64))
     }
 
     /// A transform's output more than four times the input plus 200 characters is not an edit of it.
-    public static func isImplausiblyLong(output: String, input: String) -> Bool {
+    static func isImplausiblyLong(output: String, input: String) -> Bool {
         output.count > input.count * 4 + 200
     }
 }

@@ -6,28 +6,28 @@ import Foundation
 ///
 /// This engine enforces minimum recording durations to prevent accidental activations
 /// and conflicts with system shortcuts.
-public struct RecordingDecisionEngine {
+struct RecordingDecisionEngine {
     /// Minimum duration for modifier-only hotkeys to avoid OS shortcut conflicts.
     ///
     /// This is applied regardless of user's minimumKeyTime setting.
     /// See `GestureConstants.modifierOnlyMinimumDuration` for rationale.
-    public static let modifierOnlyMinimumDuration: TimeInterval = GestureConstants.modifierOnlyMinimumDuration
+    static let modifierOnlyMinimumDuration: TimeInterval = GestureConstants.modifierOnlyMinimumDuration
 
     /// Context information needed to make a recording decision.
-    public struct Context: Equatable, Sendable {
+    struct Context: Equatable, Sendable {
         /// The hotkey configuration that triggered this recording
-        public var hotkey: HotKey
+        var hotkey: HotKey
 
         /// User's configured minimum key time preference
-        public var minimumKeyTime: TimeInterval
+        var minimumKeyTime: TimeInterval
 
         /// When recording started (nil if no recording)
-        public var recordingStartTime: Date?
+        var recordingStartTime: Date?
 
         /// Current timestamp
-        public var currentTime: Date
+        var currentTime: Date
 
-        public init(
+        init(
             hotkey: HotKey,
             minimumKeyTime: TimeInterval,
             recordingStartTime: Date?,
@@ -41,7 +41,7 @@ public struct RecordingDecisionEngine {
     }
 
     /// The decision outcome for a recording.
-    public enum Decision: Equatable, Sendable {
+    enum Decision: Equatable, Sendable {
         /// Recording was too short or accidental - discard silently
         case discardShortRecording
 
@@ -63,7 +63,7 @@ public struct RecordingDecisionEngine {
     ///
     /// - Parameter context: Recording context with timing and configuration
     /// - Returns: Decision to discard or proceed
-    public static func decide(_ context: Context) -> Decision {
+    static func decide(_ context: Context) -> Decision {
         let elapsed = context.recordingStartTime.map { context.currentTime.timeIntervalSince($0) } ?? 0
         let includesPrintableKey = context.hotkey.key != nil
 
