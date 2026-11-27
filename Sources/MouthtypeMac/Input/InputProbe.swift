@@ -78,7 +78,7 @@ enum InputProbe {
             Log.probe.info("remap restore: \(String(describing: restored), privacy: .public); mapping after: \(remap.currentDescription(), privacy: .public)")
             Log.probe.info("verified mapping restored: \(!remap.isApplied, privacy: .public)")
         }
-        NSApp.terminate(nil)
+        FnRemap.requestQuit { NSApp.terminate(nil) }
     }
 
     /// Installs and tears down the active key tap on the real tap thread, the path a press and release take.

@@ -47,7 +47,7 @@ enum CorrectionSelfTest {
         guard let store = try? TranscriptStore(url: directory.appendingPathComponent("mouthtype.sqlite")) else {
             report("FAIL temporary store")
             try? FileManager.default.removeItem(at: directory)
-            NSApp.terminate(nil)
+            FnRemap.requestQuit { NSApp.terminate(nil) }
             return
         }
         let clock = SystemDictationClock()
@@ -172,7 +172,7 @@ enum CorrectionSelfTest {
         report(failures.isEmpty ? "PASS" : "FAIL: \(failures.joined(separator: "; "))")
         window.close()
         try? FileManager.default.removeItem(at: directory)
-        NSApp.terminate(nil)
+        FnRemap.requestQuit { NSApp.terminate(nil) }
     }
 
     private static func quartz(_ point: CGPoint) -> CGPoint {
