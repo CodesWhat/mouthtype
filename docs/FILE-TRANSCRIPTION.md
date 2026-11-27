@@ -30,7 +30,7 @@ The window shows the file's name, length and size with a status chip, then the f
 
 ## While it runs
 
-Cancel stops further work when the current recognition operation returns. A file that fails to import leaves the previous transcript on screen and says which file failed.
+Cancel stops further work when the current recognition operation returns. A file that fails to import, or a run you cancel, leaves the previous transcript on screen. A failure also says which file failed.
 
 > [!NOTE]
 > Closing the Transcribe Audio File window also cancels a running import. Closing or switching the Mouthtype window does not; the transcript is there when you reopen it.

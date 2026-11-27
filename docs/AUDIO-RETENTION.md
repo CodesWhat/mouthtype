@@ -12,23 +12,23 @@ No age limit still has a size limit. A change doesn't delete recordings immediat
 > [!WARNING]
 > Retention settings don't restore audio previously removed.
 
-## What happens at launch
+## What happens at launch and every six hours
 
-Changes apply to retained recordings the next time Mouthtype launches. Recovery audio keeps its 30-day grace period. Startup maintenance:
+Mouthtype applies the limits when it launches and again every six hours while it's idle. If it's busy at that point, it tries again after five minutes. Recovery audio keeps its 30-day grace period. Each pass:
 
 1. Selects known completed recordings and recovery audio past its 30-day grace period.
 2. Removes eligible WAVs past the selected age limit.
 3. Removes the oldest remaining eligible WAVs until they fit the selected size limit.
 
-New archive metadata records the selected expiration date, or no expiration date when there is no age limit. When startup maintenance removes a completed recording, its audio location and expiration are cleared from its database row; its text and statistics remain. If the saved location still points to an existing recording outside the current archive, cleanup keeps that location and expiration, including when it deletes an old archive copy with the same take ID.
+New archive metadata records the selected expiration date, or no expiration date when there is no age limit. When maintenance removes a completed recording, its audio location and expiration are cleared from its database row; its text and statistics remain. If the saved location still points to an existing recording outside the current archive, cleanup keeps that location and expiration, including when it deletes an old archive copy with the same take ID.
 
 ## Recovery audio and unmatched files
 
 Recovery audio is failed or interrupted takes and crash partials. It isn't pruned for the first 30 days. After that it follows your age and size limit like any other audio.
 
-Files without a matching database record are never pruned. They aren't assumed completed just because the database doesn't list them as unfinished.
+Audio with no matching database record, for example after the database was replaced, gets the same 30 days. After that it follows your age and size limit instead of staying forever. It's listed in **Saved Recordings** too, and Recover transcribes it in a new history row.
 
-Recovery audio remains available through **Saved Recordings** during the grace period; the existing Recover and Discard behavior is unchanged. Discard ends the recovery offer and doesn't promise to delete its audio immediately.
+Recovery audio remains available through **Saved Recordings** during the grace period. Recover and Discard each end the offer, so the take leaves the list. Discard doesn't delete its audio immediately.
 
 ## What stays
 
