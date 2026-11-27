@@ -10,7 +10,6 @@ enum SettingsTheme {
     static let windowSize = NSSize(width: 900, height: 620)
     static let minimumSize = NSSize(width: 860, height: 600)
     static let sidebarWidth: CGFloat = 212
-    static let headerHeight: CGFloat = 46
 }
 
 /// Every point size the Settings window uses. Nothing may go below `minimum`.
@@ -29,8 +28,4 @@ enum SettingsFont {
     static let footer: CGFloat = 10
 
     static let all: [CGFloat] = [wordmark, title, headerDescription, body, detail, eyebrow, footer]
-
-    static func sans(_ size: CGFloat) -> Font { .custom(sansName, size: max(size, minimum)) }
-    static func serif(_ size: CGFloat) -> Font { .custom(serifName, size: max(size, minimum)) }
-    static func mono(_ size: CGFloat) -> Font { .custom(monoName, size: max(size, minimum)) }
 }

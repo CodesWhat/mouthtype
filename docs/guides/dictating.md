@@ -9,7 +9,7 @@ How to start, stop and recover a take, and the settings that change how recordin
 | Dictate (Hold to talk) | Hold <kbd>Fn</kbd>, release to finish |
 | Go hands-free | Double-tap <kbd>Fn</kbd>, or press <kbd>Fn</kbd>+<kbd>Space</kbd> |
 | Stop a hands-free take | Tap <kbd>Fn</kbd> |
-| Cancel a take | <kbd>Esc</kbd> (five-second Undo window) |
+| Cancel a take | <kbd>Esc</kbd> (five-second Undo window), or click the pill while it's processing |
 | Paste Last Take | <kbd>Control</kbd>+<kbd>Command</kbd>+<kbd>V</kbd> |
 | Copy Last Take | <kbd>Control</kbd>+<kbd>Command</kbd>+<kbd>C</kbd> |
 
@@ -20,6 +20,8 @@ By default you **hold** <kbd>Fn</kbd> while you speak and release it to finish. 
 For longer takes, go hands-free. Double-tap <kbd>Fn</kbd>, or press <kbd>Fn</kbd>+<kbd>Space</kbd>, and Mouthtype keeps recording after you let go. Tap <kbd>Fn</kbd> to stop. Stop and Cancel also live on the pill and in the menu while a hands-free take is running.
 
 Press <kbd>Esc</kbd> to cancel a take. You get a five-second Undo window. If <kbd>Esc</kbd> is your dictation shortcut, use Cancel from the pill or the menu instead.
+
+Esc also works after you let go, while a take is still processing. So does clicking the pill, which shows "Click to cancel this take" on hover. Nothing gets pasted. Esc still reaches the app you're in, so it does whatever it normally does there.
 
 > [!NOTE]
 > A single recording stops on its own after 20 minutes. A "One minute left" card appears at 19.
@@ -72,8 +74,7 @@ Click is the default sound set: a key-down thunk to start, a duller key-up thunk
 - It skips outputs that have no settable mute.
 - It doesn't pause media players.
 
-> [!WARNING]
-> If Mouthtype crashes mid-take it can't restore, so check your Mac's mute if that happens.
+If Mouthtype crashes mid-take it can't restore right then. It remembers which output it muted and unmutes that one on the next launch, even if your default output has changed since.
 
 ## Spoken commands
 
@@ -88,9 +89,9 @@ Mouthtype keeps your text when delivery goes wrong.
 | "Nothing to paste into" (nothing has focus) | Your text is kept. Focus a field and use Paste Last Take |
 | "Paste didn't land" (the field didn't change after a paste), with the transcript offered to copy | Look at the field before pasting again. Some apps don't report a change even when text arrived |
 | "Secure field, not pasted" (a secure field, like a password box, gets nothing pasted) | Nothing is pasted and the card keeps the text |
-| The microphone disconnects mid-take | What was captured is saved. **Insert** or **Discard** it |
+| The microphone disconnects mid-take | What was captured is saved. **Insert** or **Discard** it. Dismissing the card releases the microphone and leaves the take in Saved Recordings |
 | "Recover your last dictation?" after a crash or force-quit | Accept the offer on the next launch |
-| Older interrupted or failed recordings | Open **Saved Recordings** in the menu. Recovery pauses new recordings until it finishes |
+| Older interrupted or failed recordings | Open **Saved Recordings** in the menu. Recovery pauses new recordings until it finishes. Audio with no history entry is listed too. A take with a history entry is recovered in the language it was recorded in; audio without one uses your current language setting. Recover and Discard stay done |
 | You need an earlier take's text | Home lists your recent takes. **Copy** puts a take's text on the clipboard, and **Recover** reruns one whose audio is still saved |
 
 More fixes are in [Troubleshooting](../TROUBLESHOOTING.md).

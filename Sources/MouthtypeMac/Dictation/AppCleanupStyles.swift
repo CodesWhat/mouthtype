@@ -273,7 +273,4 @@ struct AppCleanupStyles: Equatable, Sendable {
     func resolveInstructions(bundleID: String?, websiteHost: String? = nil) -> String? {
         layers(bundleID: bundleID, websiteHost: websiteHost).lazy.compactMap(\.instructions).first
     }
-
-    /// The instructions saved on exactly this app's rule, if any.
-    func instructions(bundleID: String) -> String? { entries.first { $0.bundleID == bundleID }?.instructions }
 }

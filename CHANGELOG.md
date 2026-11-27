@@ -9,6 +9,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.4] - 2026-11-27
+
+### Security
+
+- A project's `.git` pointer file is only followed to a git directory inside the project.
+
+### Added
+
+- Click the pill while a take is processing to cancel it. This includes a click during stop. The pill shown during recovery stays click-through.
+
+### Changed
+
+- Speech recognition uses FluidAudio 0.18.4.
+- Cleanup's length limit scales with the take, so long takes aren't held to a fixed word budget.
+- Smart cleanup keeps a negation on its word when it drops a modifier between them, and holds long outputs to a tighter limit on new words.
+- Edit Selection by Voice no longer lets a refusal clause or a faithful "can't be done" rewrite fool its guard.
+- The menu refreshes only the parts that depend on takes after a take, Home search waits for a pause in typing, achievement scans use the stats index, phrases.json is read only when it changes, and the dictionary list renders lazily.
+
+### Fixed
+
+- Esc cancels a take that is still processing, and only Esc does. The next take no longer drops the previous paste's read-back, and dismissing the microphone card releases the microphone.
+- If a crash left your output muted, Mouthtype unmutes it on the next launch.
+- A cancelled file transcription run keeps the last result instead of clearing it.
+- Recovery lists and prunes audio that has no history row, and a take with a history row recovers in the language it was dictated in. Recover and Discard now stick. Audio retention is reapplied every six hours instead of only at launch.
+- A history database saved by a newer Mouthtype is left untouched, with a message to update.
+- Cancelling a quit that had already skipped history's recovery step reopens history properly.
+- "Had second thoughts" no longer turns into a list.
+
 ## [0.12.3] - 2026-11-23
 
 ### Security
@@ -286,7 +314,8 @@ First stable release for Apple Silicon Macs on macOS 26 or later. Hold Fn, speak
 
 0.1.0 was preceded by `v0.1.0-alpha.1` through `v0.1.0-alpha.9`, `v0.1.0-beta.1` and `v0.1.0-rc.1` through `v0.1.0-rc.4`. Each has a tag on the [releases page](https://github.com/CodesWhat/mouthtype/tags). Their notes are folded into the 0.1.0 entry in [`packaging/ReleaseNotes.txt`](packaging/ReleaseNotes.txt).
 
-[Unreleased]: https://github.com/CodesWhat/mouthtype/compare/v0.12.3...HEAD
+[Unreleased]: https://github.com/CodesWhat/mouthtype/compare/v0.12.4...HEAD
+[0.12.4]: https://github.com/CodesWhat/mouthtype/compare/v0.12.3...v0.12.4
 [0.12.3]: https://github.com/CodesWhat/mouthtype/compare/v0.12.2...v0.12.3
 [0.12.2]: https://github.com/CodesWhat/mouthtype/compare/v0.12.1...v0.12.2
 [0.12.1]: https://github.com/CodesWhat/mouthtype/compare/v0.12.0...v0.12.1

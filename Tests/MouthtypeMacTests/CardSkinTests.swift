@@ -417,9 +417,15 @@ private final class CardRig {
         rig.pill.updateInteractivity(pointer: rig.screen(spot))
         #expect(!rig.pill.panel.ignoresMouseEvents)
         #expect(rig.pill.host.hitTest(rig.pill.host.convert(spot, to: rig.pill.host.superview)) === rig.pill.host)
-        rig.pill.host.onPress(.pill)
-        rig.pill.host.onPress(nil)
-        rig.pill.host.onActivate(.pill)
+        let windowSpot = rig.pill.host.convert(spot, to: nil)
+        func mouse(_ type: NSEvent.EventType) -> NSEvent {
+            NSEvent.mouseEvent(
+                with: type, location: windowSpot, modifierFlags: [], timestamp: 0,
+                windowNumber: rig.pill.panel.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1
+            )!
+        }
+        rig.pill.host.mouseDown(with: mouse(.leftMouseDown))
+        rig.pill.host.mouseUp(with: mouse(.leftMouseUp))
         #expect(controls == [.pill])
         // Outside the grown frame the panel stays click-through.
         rig.pill.updateInteractivity(pointer: rig.screen(CGPoint(x: grown.maxX + 6, y: grown.midY)))

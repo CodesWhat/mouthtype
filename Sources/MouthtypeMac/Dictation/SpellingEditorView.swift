@@ -54,7 +54,13 @@ struct SpellingEditorView: View {
                 } else if visibleWords.isEmpty {
                     emptyNote("No words match “\(query.trimmingCharacters(in: .whitespacesAndNewlines))”.")
                 } else {
-                    ForEach(visibleWords) { word in wordRow(word) }
+                    // One lazy subview, so a library of thousands builds only the rows on screen.
+                    LazyVStack(spacing: 0) {
+                        ForEach(Array(visibleWords.enumerated()), id: \.element.id) { index, word in
+                            if index > 0 { DesignHairline() }
+                            wordRow(word)
+                        }
+                    }
                 }
             }
             HStack {

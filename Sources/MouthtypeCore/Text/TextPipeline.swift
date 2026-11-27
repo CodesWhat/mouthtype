@@ -226,7 +226,7 @@ public struct TextPipeline: Sendable {
                 (options.dictionary ? input.dictionary.flatMap { [$0.heard, $0.written] } : [])
                 + (options.snippets ? input.snippets.flatMap { [$0.trigger, $0.expansion] } : [])
             let nearby = CleanupPrompt.nearbySpellings(CleanupContext(before: input.context?.before, after: input.context?.after))
-            run(TechnicalNotation.stageName) { TechnicalNotation(protectedPhrases: phrases + nearby).apply($0) }
+            run(TechnicalNotation.stageName) { TechnicalNotation(library: phrases, extra: nearby).apply($0) }
         }
         if options.numbers {
             let formatter = numberFormatter

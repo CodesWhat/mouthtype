@@ -410,13 +410,6 @@ public actor SmartCleanup {
     }
 }
 
-extension S1MiniPrompt {
-    /// A short hash of the system prompt and the control lines, for the store's `prompt_sha`.
-    public static func promptSHA(_ controlLines: [String]) -> String {
-        shortSHA(Data(([system] + controlLines).joined(separator: "\n").utf8))
-    }
-}
-
 /// The first six bytes of the SHA-256 as hex, for the store's `prompt_sha`.
 private func shortSHA(_ data: Data) -> String {
     SHA256.hash(data: data).prefix(6).map { String(format: "%02x", $0) }.joined()

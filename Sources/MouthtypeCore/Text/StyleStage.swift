@@ -87,6 +87,12 @@ public struct StyleStage: Sendable {
 
     /// Every word in the given strings, exactly as written, for use as `protectedWords`.
     public static func words(of strings: [String]) -> Set<String> {
+        wordSets.value(for: strings) { build(wordsOf: $0) }
+    }
+
+    private static let wordSets = RecentStrings<Set<String>>()
+
+    private static func build(wordsOf strings: [String]) -> Set<String> {
         var result = Set<String>()
         for s in strings {
             let chars = Array(s)
