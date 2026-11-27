@@ -18,7 +18,7 @@
 | Support links | The menu bar and About panel links were checked in tests, not opened in a live default browser. | They should open GitHub Sponsors and the Donate page in your default browser. |
 | Edit Selection by Voice | Automated tests cover the flow, but it was not run on a device after its final review fixes. | Check the preview before you accept. Nothing changes until you do. |
 | Typing calibration | Scoring is covered by tests, and the Stats card has not been used with VoiceOver. | Your measured speed only affects the time-saved figure. |
-| Speech recognition engine | FluidAudio 0.18.0 was not checked on real speech, including long takes. | Expect the same accuracy as before, but report any change in long takes. |
+| Speech recognition engine | FluidAudio 0.18.4 was not checked on real speech, including long takes. | Expect the same accuracy as before, but report any change in long takes. |
 | VoiceOver | Acceptance testing is deferred. | Controls have accessibility identifiers and render correctly offscreen, but that doesn't show they work with VoiceOver. |
 | Update installation | Other macOS versions and fresh installs aren't verified. | Signed update checks are tested. An update from one release to the next was observed installing and relaunching on one Mac. |
 | Other apps | Other browsers, terminals and Electron apps need more testing. | TextEdit and Chrome have physical coverage. An unknown delivery status isn't proof the text failed to land. |
