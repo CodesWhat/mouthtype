@@ -4,7 +4,7 @@ import unittest
 
 
 WORKFLOWS = Path(__file__).resolve().parents[2] / ".github/workflows"
-PINNED = "CodesWhat/.github/actions/changes-gate@b85ebce168f649bcd2fddf2ff0d433fb38e30866"
+PINNED = "CodesWhat/.github/actions/changes-gate@684a6b931e7802f1985e2cb4f6ea0c95861988e3"
 FAIL_OPEN = (
     "if: ${{ !cancelled() && (needs.changes.result != 'success' || "
     "needs.changes.outputs.run != 'false') }}"

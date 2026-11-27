@@ -24,6 +24,10 @@ private enum OutputFailure: Error { case unavailable }
         if unavailable { throw OutputFailure.unavailable }
         return current
     }
+    func output(forUID uid: String) throws -> QuietOutput? {
+        if unavailable { throw OutputFailure.unavailable }
+        return identity.uid == uid ? identity : nil
+    }
     func isMuted(_ output: QuietOutput) throws -> Bool {
         guard !unavailable, identity == output else { throw OutputFailure.unavailable }
         beforeRead?()
@@ -176,6 +180,27 @@ private enum OutputFailure: Error { case unavailable }
         output.muted = false
         #expect(!quiet.recoverFromCrash())
         #expect(output.writes.isEmpty && marker.markedUID == nil)
+    }
+
+    @Test func recoveryReachesAMarkedDeviceThatIsNoLongerTheDefault() {
+        let output = QuietOutputFake()
+        output.identity = QuietOutput(id: 2, uid: "headphones")
+        output.current = QuietOutput(id: 1, uid: "speakers")
+        output.muted = true
+        let marker = InMemoryQuietMuteMarker()
+        marker.markedUID = "headphones"
+        #expect(RecordingAudioQuiet(output: output, enabled: { true }, marker: marker).recoverFromCrash())
+        #expect(!output.muted && output.writes.count == 1 && output.writes[0] == (2, false))
+        #expect(marker.markedUID == nil)
+    }
+
+    @Test func recoveryClearsTheMarkerWhenTheMarkedDeviceIsGone() {
+        let output = QuietOutputFake()
+        output.muted = true
+        let marker = InMemoryQuietMuteMarker()
+        marker.markedUID = "usb-dac"
+        #expect(!RecordingAudioQuiet(output: output, enabled: { true }, marker: marker).recoverFromCrash())
+        #expect(output.muted && output.writes.isEmpty && marker.markedUID == nil)
     }
 
     @Test func aFailedMuteWriteLeavesNoMarker() {

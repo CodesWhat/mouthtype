@@ -27,7 +27,7 @@ jobs:
       # Tests read design/, packaging/ and scripts/ from the checkout, so those count. Pushes and manual runs always run.
       # Matching is case-insensitive, like the macOS checkout.
       - id: gate
-        uses: CodesWhat/.github/actions/changes-gate@b85ebce168f649bcd2fddf2ff0d433fb38e30866
+        uses: CodesWhat/.github/actions/changes-gate@684a6b931e7802f1985e2cb4f6ea0c95861988e3
         with:
           patterns: |
             Sources/**
@@ -61,7 +61,7 @@ jobs:
           persist-credentials: false
 
       - id: receipt
-        uses: CodesWhat/.github/actions/tree-receipt/verify@b85ebce168f649bcd2fddf2ff0d433fb38e30866
+        uses: CodesWhat/.github/actions/tree-receipt/verify@684a6b931e7802f1985e2cb4f6ea0c95861988e3
 
   # build and test are required checks, and the macOS queue is the slow part of CI. A workflow-level paths filter would
   # leave both checks missing and block merges, so gate at job level instead: a skipped job with the same name still
@@ -342,5 +342,5 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: CodesWhat/.github/actions/tree-receipt/record@b85ebce168f649bcd2fddf2ff0d433fb38e30866
+      - uses: CodesWhat/.github/actions/tree-receipt/record@684a6b931e7802f1985e2cb4f6ea0c95861988e3
         if: ${{ needs.build.result == 'success' && needs.test.result == 'success' && needs.bundle.result == 'success' }}

@@ -204,15 +204,13 @@ private final class FakeSystem: HotkeySystem {
 
     // MARK: Recovery
 
-    private func settle() async { try? await Task.sleep(for: .milliseconds(150)) }
-
     @Test func aDisabledTapIsReenabledAtOnce() async throws {
         let (service, system) = make()
         try service.start()
         defer { service.stop() }
         let tap = try #require(system.tap(.flags))
         tap.context.sink.yield(.disabled(.flags))
-        await settle()
+        await pollUntil { tap.enableCalls >= 1 }
         #expect(tap.enableCalls == 1)
         #expect(service.health == .listening)
     }
@@ -227,7 +225,7 @@ private final class FakeSystem: HotkeySystem {
         tap.enableWorks = false
         tap.isEnabled = false
         tap.context.sink.yield(.disabled(.flags))
-        await settle()
+        await pollUntil { service.health == .recovering }
         #expect(service.health == .recovering)
         #expect(healths.contains(.recovering))
     }
@@ -245,7 +243,7 @@ private final class FakeSystem: HotkeySystem {
         let tap = try #require(system.tap(.flags))
         system.currentFlags = 0
         tap.context.sink.yield(.disabled(.flags))
-        await settle()
+        await pollUntil { events.contains { if case .released = $0 { true } else { false } } }
         #expect(events.contains { if case .released = $0 { true } else { false } })
     }
 
@@ -256,10 +254,10 @@ private final class FakeSystem: HotkeySystem {
         try service.start()
         defer { service.stop() }
         system.isSecureInputEnabled = true
-        try await Task.sleep(for: HotkeyService.monitorInterval + .milliseconds(400))
+        await pollUntil { service.health == .secureInputOn }
         #expect(service.health == .secureInputOn)
         system.isSecureInputEnabled = false
-        try await Task.sleep(for: HotkeyService.monitorInterval + .milliseconds(400))
+        await pollUntil { service.health == .listening }
         #expect(service.health == .listening)
     }
 }

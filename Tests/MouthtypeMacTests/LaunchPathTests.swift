@@ -98,6 +98,16 @@ import os
         #expect(replies == [true])
     }
 
+    @Test func anOrdinaryQuitRepliesTrueExactlyOnce() async {
+        let delegate = AppDelegate()
+        let box = ReplyBox()
+        delegate.replyToTermination = { _, ready in box.replies.append(ready) }
+        #expect(delegate.applicationShouldTerminate(NSApplication.shared) == .terminateLater)
+        await replies(1, in: box)
+        try? await Task.sleep(for: .milliseconds(50))
+        #expect(box.replies == [true])
+    }
+
     @Test func aQuitWithAnEmptyQueueIsImmediate() {
         let delegate = AppDelegate()
         #expect(!delegate.deferQuitForQueuedURLs(sender: NSApplication.shared))
