@@ -150,7 +150,7 @@ final class FakeSmartModel: SmartModel, @unchecked Sendable {
         try? await Task.sleep(for: .milliseconds(40))
         #expect(model.unloads == 0 && model.isLoaded)
         await gate.release()
-        for _ in 0..<100 where model.unloads == 0 { try? await Task.sleep(for: .milliseconds(10)) }
+        await pollUntil { !(model.unloads == 0) }
         #expect(model.unloads == 1 && !model.isLoaded)
     }
 
@@ -204,7 +204,7 @@ final class FakeSmartModel: SmartModel, @unchecked Sendable {
         }
         try? await Task.sleep(for: .milliseconds(40))
         waiting.cancel()
-        for _ in 0..<100 where !finished.value { try? await Task.sleep(for: .milliseconds(10)) }
+        await pollUntil { finished.value }
         #expect(finished.value)
         #expect(await waiting.value == nil)
         await gate.release()
@@ -236,13 +236,13 @@ final class FakeSmartModel: SmartModel, @unchecked Sendable {
         model.cleanGate = gate
         let baseline = model.cleanCalls
         let task = Task { @MainActor in try await host.transform(.fixGrammar, text: "some text here", waitingUpTo: .seconds(5)) }
-        for _ in 0..<100 where model.cleanCalls == baseline { try? await Task.sleep(for: .milliseconds(10)) }
+        await pollUntil { !(model.cleanCalls == baseline) }
         host.unloadForMemoryPressure()
         try? await Task.sleep(for: .milliseconds(60))
         #expect(model.unloads == 0 && model.isLoaded)
         await gate.release()
         #expect((try? await task.value) == "some text here")
-        for _ in 0..<100 where model.unloads == 0 { try? await Task.sleep(for: .milliseconds(10)) }
+        await pollUntil { !(model.unloads == 0) }
         #expect(model.unloads == 1 && !model.isLoaded)
     }
 
@@ -252,7 +252,7 @@ final class FakeSmartModel: SmartModel, @unchecked Sendable {
         model.cleanGate = gate
         let baseline = model.cleanCalls
         let first = Task { @MainActor in try await host.transform(.shorter, text: "first text", waitingUpTo: .seconds(5)) }
-        for _ in 0..<100 where model.cleanCalls == baseline { try? await Task.sleep(for: .milliseconds(10)) }
+        await pollUntil { !(model.cleanCalls == baseline) }
         first.cancel()
         let second = Task { @MainActor in try await host.transform(.shorter, text: "second text", waitingUpTo: .seconds(5)) }
         try? await Task.sleep(for: .milliseconds(80))
@@ -269,7 +269,7 @@ final class FakeSmartModel: SmartModel, @unchecked Sendable {
         model.cleanGate = gate
         let baseline = model.cleanCalls
         let task = Task { @MainActor in try await host.transform(.moreFormal, text: "some text here", waitingUpTo: .seconds(5)) }
-        for _ in 0..<100 where model.cleanCalls == baseline { try? await Task.sleep(for: .milliseconds(10)) }
+        await pollUntil { !(model.cleanCalls == baseline) }
         let dictation = await host.run(SmartCleanupRequest(text: "keep this take", level: .light))
         #expect(dictation.outcome == .timeout && dictation.text == "keep this take")
         #expect(model.cleanCalls == baseline + 1)
@@ -292,7 +292,7 @@ final class FakeSmartModel: SmartModel, @unchecked Sendable {
     }
 
     private func settle(_ host: CleanerHost, until done: (CleanerState) -> Bool) async {
-        for _ in 0..<200 where !done(host.state) { try? await Task.sleep(for: .milliseconds(10)) }
+        await pollUntil { done(host.state) }
     }
 
     @Test func aModelThatIsNotOnDiskStaysAbsentAndNothingIsFetched() async {
@@ -375,7 +375,7 @@ final class FakeSmartModel: SmartModel, @unchecked Sendable {
         await settle(host) { if case .ready = $0 { true } else { false } }
         await settle(host) { $0 == .unloaded }
         #expect(host.state == .unloaded)
-        for _ in 0..<100 where model.unloads == 0 { try? await Task.sleep(for: .milliseconds(10)) }
+        await pollUntil { !(model.unloads == 0) }
         #expect(model.unloads == 1)
     }
 
@@ -417,7 +417,7 @@ final class FakeSmartModel: SmartModel, @unchecked Sendable {
         let request = SmartCleanupRequest(text: "long take", level: .light)
         let running = Task { await host.run(request) }
         // Wait until the generation has actually started, then well past the 100 ms idle delay.
-        for _ in 0..<500 where model.cleanCalls == 0 { try? await Task.sleep(for: .milliseconds(10)) }
+        await pollUntil { !(model.cleanCalls == 0) }
         #expect(model.cleanCalls == 1)
         // The in-flight run is itself a use, so releasing the hold starts no countdown.
         host.endRecordingHold()

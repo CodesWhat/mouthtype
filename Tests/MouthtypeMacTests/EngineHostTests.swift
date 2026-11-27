@@ -84,7 +84,7 @@ private actor RoutedStubEngine: Transcriber {
         })
         await host.load()
         host.select(language: .explicit(.hindi))
-        for _ in 0..<200 where host.downloadProgress?.fraction != 0.25 { try? await Task.sleep(for: .milliseconds(5)) }
+        await pollUntil { !(host.downloadProgress?.fraction != 0.25) }
         #expect(host.downloadProgress?.fraction == 0.25)
         host.select(language: .english)
         await settle(host)
@@ -124,7 +124,7 @@ private actor RoutedStubEngine: Transcriber {
         let engine = ProgressEngine(gate: gate)
         let host = EngineHost(makeEngine: { _ in engine })
         host.start()
-        for _ in 0..<200 where !host.statusText.contains("25%") { try? await Task.sleep(for: .milliseconds(5)) }
+        await pollUntil { host.statusText.contains("25%") }
         #expect(host.statusText == "Downloading speech model: 25%")
         await gate.release()
         for _ in 0..<200 {

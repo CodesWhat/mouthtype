@@ -125,7 +125,7 @@ private struct Rig {
     }
 
     func settle(_ condition: @MainActor () -> Bool) async {
-        for _ in 0..<200 where !condition() { try? await Task.sleep(for: .milliseconds(10)) }
+        await pollUntil { condition() }
     }
 
     /// The edit is made and the watch runs until the offer shows.

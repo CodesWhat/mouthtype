@@ -402,7 +402,7 @@ import Testing
         skin.showRecording(locked: false)
         skin.reduceMotionOverride = true
         NSWorkspace.shared.notificationCenter.post(name: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification, object: nil)
-        for _ in 0..<100 where skin.lampMotion != .steady { try await Task.sleep(for: .milliseconds(10)) }
+        await pollUntil { !(skin.lampMotion != .steady) }
         #expect(skin.lampMotion == .steady && skin.lampAnimation == nil)
     }
 

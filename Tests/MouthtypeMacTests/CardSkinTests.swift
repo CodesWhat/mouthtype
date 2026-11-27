@@ -482,7 +482,7 @@ private final class CardRig {
         #expect(rig.pill.state == .recording && rig.pill.isGrown)
         #expect(rig.pill.panel.frame.height > standard.height)
         rig.presenter.dismiss()
-        for _ in 0..<100 where rig.pill.panel.frame.size != standard { try await Task.sleep(for: .milliseconds(10)) }
+        await pollUntil { !(rig.pill.panel.frame.size != standard) }
         #expect(rig.pill.state == .recording && rig.pill.panel.frame.size == standard)
         rig.finish()
     }

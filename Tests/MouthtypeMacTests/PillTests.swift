@@ -344,7 +344,7 @@ func makePillController(skin: PillSkinKind? = nil, level: @escaping @MainActor (
         controller.showHandsFreeNotice("1 min left", duration: 0.05)
         #expect(controller.state == .message(PillMessage("1 min left")))
         // Poll rather than sleep once: other main-actor tests can hold the actor past a fixed delay.
-        for _ in 0..<40 where controller.state != .handsFree { try? await Task.sleep(for: .milliseconds(50)) }
+        await pollUntil { !(controller.state != .handsFree) }
         #expect(controller.state == .handsFree)
         controller.hide()
     }

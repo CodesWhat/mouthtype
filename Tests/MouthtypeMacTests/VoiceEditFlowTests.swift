@@ -98,7 +98,7 @@ private final class Counter: @unchecked Sendable {
 }
 
 @MainActor private func wait(for coordinator: VoiceEditCoordinator, _ phase: VoiceEditPhase) async {
-    for _ in 0..<400 where coordinator.phase != phase { try? await Task.sleep(for: .milliseconds(5)) }
+    await pollUntil { !(coordinator.phase != phase) }
 }
 
 @MainActor @Suite(.timeLimit(.minutes(1))) struct VoiceEditFlowTests {
@@ -307,7 +307,7 @@ private final class Counter: @unchecked Sendable {
         let flow = rig.coordinator()
         let beginning = Task { await flow.begin() }
         await wait(for: flow, .recording)
-        for _ in 0..<400 where rig.recorder.starts == 0 { try? await Task.sleep(for: .milliseconds(5)) }
+        await pollUntil { !(rig.recorder.starts == 0) }
         await flow.stopRecording()
         #expect(flow.phase == .ended(.noInstruction))
         rig.recorder.releaseStart()
