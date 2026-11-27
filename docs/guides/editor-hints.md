@@ -22,7 +22,7 @@ The names come from:
 
 - The window title: the file and project.
 - Identifiers around your cursor, the same text window cleanup reads (300 characters before the cursor and 40 after).
-- The git-tracked file names of the project in front.
+- The git-tracked file names of the project in front. A `.git` file that points elsewhere is followed only into a linked worktree or submodule git directory, so a project can't aim the lookup at another path.
 
 Where the project comes from:
 

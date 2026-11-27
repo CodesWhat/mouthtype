@@ -38,7 +38,7 @@ Mac also has update-check preferences. The menu offers **Check for Updates…**,
 
 **Settings → General → Recording behavior** offers **Hold to talk** (the default) or **Press to toggle**. Toggle starts recording with one press and stops with the next; releasing the shortcut keeps recording. This preserves your chosen key or combination.
 
-<kbd>Esc</kbd> cancels, except when <kbd>Esc</kbd> itself is your dictation key; use the pill or menu to cancel then.
+<kbd>Esc</kbd> cancels, except when <kbd>Esc</kbd> itself is your dictation key; use the pill or menu to cancel then. After you let go, Esc or a click on the pill cancels a take that's still processing, and nothing is pasted.
 
 ## Permissions and models
 
@@ -139,7 +139,7 @@ Questions still keep their question marks. These presets don't add enthusiasm or
 
 **Settings → General → Microphone** follows System Default or remembers a named input for Mouthtype. A missing chosen microphone is reported instead of silently using another input. The choice applies to the next take and does not change the Mac’s system input.
 
-**Quiet other audio** is on by default from 0.4.0 (it stays off if you turned it off before), and **Live words** is optional and off by default. Quieting mutes supported output while recording and restores the state Mouthtype still owns. Live words shows provisional text above the pill. Preview text can change; the completed take is still transcribed and inserted once. See [Settings](SETTINGS.md) for hardware and execution limits.
+**Quiet other audio** is on by default from 0.4.0 (it stays off if you turned it off before), and **Live words** is optional and off by default. Quieting mutes supported output while recording and restores the state Mouthtype still owns. If a crash leaves the output muted, the next launch unmutes it. Live words shows provisional text above the pill. Preview text can change; the completed take is still transcribed and inserted once. See [Settings](SETTINGS.md) for hardware and execution limits.
 
 Choose **Transcribe Audio File…** from the menu, which opens the **Transcribe Audio File** window, to import one WAV, AIFF or M4A up to 10 minutes and 512 MB. The full raw result is selectable, with explicit Copy and Save Text. It preserves the original and does not paste, run cleanup or change dictation statistics. See [file transcription](FILE-TRANSCRIPTION.md).
 
@@ -165,7 +165,7 @@ A single recording stops after 20 minutes; a "One minute left" card appears at 1
 
 If a paste fails or there's nowhere to paste, the result stays available to copy. **Paste Last Take** and **Copy Last Take** restore the latest saved take after restart. <kbd>Control</kbd>+<kbd>Command</kbd>+<kbd>V</kbd> and <kbd>Control</kbd>+<kbd>Command</kbd>+<kbd>C</kbd> are their global shortcuts, shown beside them in the menu, unless your dictation shortcut uses the same combination, in which case the menu shows none. **Recent Takes** lists earlier ones.
 
-A recording interrupted by a crash can be recovered on the next launch. **Saved Recordings** makes older interrupted or failed recordings available to recover without pasting into the wrong app. Failed recovery keeps a Recover action so it can be retried. Recovery pauses new recordings until it finishes.
+A recording interrupted by a crash can be recovered on the next launch. **Saved Recordings** makes older interrupted or failed recordings available to recover without pasting into the wrong app. Audio that has no history entry is listed there too, and each take is recovered in the language it was recorded in. Failed recovery keeps a Recover action so it can be retried, and Recover and Discard stay done. Recovery pauses new recordings until it finishes.
 
 Click is the default sound set: a bright key-down thunk to start, a duller key-up thunk to stop, and matching lock and error cues. **Settings > General > Recording sounds** turns cues on or off. Other sound sets and a picker are deferred.
 
@@ -173,7 +173,7 @@ Click is the default sound set: a bright key-down thunk to start, a duller key-u
 
 History, settings, dictionary and audio stay on this Mac. The default store is `~/Library/Application Support/Mouthtype/mouthtype.sqlite`; recordings are in its sibling `audio` directory. Text history is retained indefinitely.
 
-**Settings > Advanced > Storage** offers 14, 30 or 90 days, or No age limit, and a 2 GB or 10 GB size limit. Defaults stay 90 days and 2 GB. The next launch prunes completed recordings past your age or size limit. Recovery audio (failed or interrupted takes and crash partials) is kept for 30 days, then the same limit applies to it. Text and timings stay. See [saved audio](AUDIO-RETENTION.md). Model downloads require network access.
+**Settings > Advanced > Storage** offers 14, 30 or 90 days, or No age limit, and a 2 GB or 10 GB size limit. Defaults stay 90 days and 2 GB. Mouthtype prunes completed recordings past your age or size limit at launch and again every six hours. Recovery audio (failed or interrupted takes and crash partials) is kept for 30 days, then the same limit applies to it. Text and timings stay. See [saved audio](AUDIO-RETENTION.md). Model downloads require network access.
 
 ## Website
 
