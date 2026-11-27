@@ -95,7 +95,7 @@ Choose **Hold to talk** or **Press to toggle** under Recording behavior beside t
 - Your chosen key stays the same.
 - Caps Lock keeps its existing toggle behavior in either mode; its system state may also change.
 - <kbd>Escape</kbd> cancels unless Escape itself is your chosen shortcut. Use Cancel Dictation in the menu in that case.
-- The pill and menu retain Stop and Cancel.
+- The pill and menu retain Stop and Cancel. Once the take is processing, clicking the pill cancels it, and so does Escape.
 
 > [!NOTE]
 > Changing behavior cancels an active recording instead of inserting it, and Settings says so under the row when it happens. If the listener cannot change mode, the previous mode remains saved and Settings shows the error.
