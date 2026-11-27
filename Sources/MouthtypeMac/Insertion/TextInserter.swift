@@ -62,6 +62,8 @@ public final class TextInserter {
     /// Bumped by every delivery. A verification that finds it moved on is stale and says nothing.
     private var deliveryGeneration = 0
     private var verification: Task<Void, Never>?
+    /// The delivery whose read-back is still running. Cancelling it reports `unknown` so the listener drops its entry.
+    private var readingBack: Int?
     private var onVerified: (@MainActor (PasteVerification) -> Void)?
     /// What the last successful paste put in the field and where.
     private struct LastPaste {
@@ -116,13 +118,18 @@ public final class TextInserter {
         onVerified = handler
     }
 
-    /// A new dictation ends the last paste's read-back. Its row keeps "unknown".
+    /// A new dictation or paste ends the last paste's read-back. Its row keeps "unknown", and the listener hears an
+    /// `unknown` verdict so it can drop the entry it holds for that paste.
     func cancelVerification() {
         batchGeneration += 1
         armedReturn = nil
         cancelUnconfirmedSend()
         verification?.cancel()
         verification = nil
+        if let id = readingBack {
+            readingBack = nil
+            onVerified?(PasteVerification(id: id, verdict: .unknown, receiptMs: nil))
+        }
     }
 
     /// Returns when the current read-back has ended. For tests and the self-test.
@@ -498,6 +505,7 @@ public final class TextInserter {
     ) {
         let offsets = Self.verifyOffsets
         let startedAt = now()
+        readingBack = generation
         verification = Task { [weak self] in
             var observations: [PasteVerifier.Observation] = []
             var missedChecks = false
@@ -530,6 +538,7 @@ public final class TextInserter {
             Log.app.info("paste read-back: \(verdict.storeOutcome, privacy: .public)")
             let verification = PasteVerification(id: generation, verdict: verdict, receiptMs: self.clipboard.firstReceiptMs)
             self.lastVerdict = verification
+            self.readingBack = nil
             self.onVerified?(verification)
             self.returnAfterVerdict(verification)
         }

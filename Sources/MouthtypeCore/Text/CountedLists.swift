@@ -69,6 +69,7 @@ public struct CountedLists: Sendable {
         "the", "a", "an", "in", "on", "at", "of", "my", "his", "her", "our", "their", "your", "its", "this", "that",
         "these", "those", "came", "come", "comes", "was", "is", "are", "were", "be", "been", "to", "for", "with",
         "finished", "finish", "got", "get", "placed", "ranked", "every", "each", "any", "no", "one",
+        "had", "have", "has", "having",
         "than", "by", "from", "as", "into", "onto", "not", "so", "very", "went", "go", "goes", "going",
     ]
     /// Without punctuation, a marker followed by one of these is a sentence ("number one is the price").

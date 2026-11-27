@@ -21,6 +21,8 @@ The data directory is `~/Library/Application Support/Mouthtype`.
 > [!WARNING]
 > Don't delete the data folder when upgrading. Mouthtype doesn't encrypt its database, recordings or backups.
 
+A history database saved by a newer Mouthtype is left untouched, and the app tells you to update.
+
 Uninstalling the app doesn't remove the folder. Quit Mouthtype before you remove it, and delete the data folder only if you mean to erase it.
 
 ## Retention
@@ -30,8 +32,8 @@ Text history is kept indefinitely. Completed recordings are pruned by the rules 
 - Age: 14, 30 or 90 days, or No age limit.
 - Size: 2 GB or 10 GB.
 - Defaults are 90 days and 2 GB.
-- Changes apply at the next launch, to completed recordings only. The text and word timings stay.
-- Unfinished recordings, crash-recovery audio and failed takes available for recovery are exempt, so they can use extra space.
+- Limits apply at launch and again every six hours while Mouthtype is idle, to completed recordings only. The text and word timings stay.
+- Unfinished recordings, crash-recovery audio, failed takes and audio with no history row are exempt for their first 30 days, so they can use extra space.
 - Removed audio can't be restored.
 
 Details are in [saved audio](../AUDIO-RETENTION.md).

@@ -11,6 +11,11 @@ public struct RecoverableDictation: Sendable, Equatable {
     /// A finished take whose audio was kept. Recovering it re-transcribes the audio and offers the result, but never
     /// writes to or ends its row.
     public var isCompleted: Bool = false
+    /// The audio has no history row (the store was missing, `begin` failed, or the database was replaced). Recovery
+    /// transcribes it and offers the text; there is no row to write to or end.
+    public var isOrphan: Bool = false
+    /// BCP 47 code the take was transcribed in, when its row recorded one. Recovery uses it instead of today's setting.
+    public var language: String?
 }
 
 /// What a launch found: the newest dictation worth offering and how many older ones were set aside.
@@ -30,14 +35,42 @@ public enum DictationRecovery {
     public static func saved(
         store: TranscriptStore, archive: AudioArchive, now: Date, launchedAt: Date
     ) throws -> [RecoverableDictation] {
-        try store.savedRecordingCandidates(from: .distantPast, before: launchedAt)
-            .compactMap { row in
+        let rows = try store.savedRecordingCandidates(from: .distantPast, before: launchedAt)
+            .compactMap { row -> RecoverableDictation? in
                 guard let audio = audio(for: row, archive: archive) else { return nil }
                 return RecoverableDictation(
                     id: row.id, startedAt: Date(timeIntervalSince1970: row.startedAt), audioURL: audio.url,
-                    seconds: audio.seconds, isPartial: audio.url == archive.partialURL(for: row.id)
+                    seconds: audio.seconds, isPartial: audio.url == archive.partialURL(for: row.id), language: row.language
                 )
             }
+        let orphans = try orphans(store: store, archive: archive, before: launchedAt)
+        return (rows + orphans).sorted { $0.startedAt > $1.startedAt }
+    }
+
+    /// WAVs in the archive whose id has no row, older than `launchedAt` so a recording in progress is never listed. The
+    /// file's modification time stands in for the start time. A finished WAV wins over its in-progress copy.
+    public static func orphans(store: TranscriptStore, archive: AudioArchive, before launchedAt: Date) throws -> [RecoverableDictation] {
+        guard let names = archive.listedFileNames(), !names.isEmpty else { return [] }
+        let known = try store.dictationIDs()
+        var found: [RecoverableDictation] = []
+        var seen = Set<String>()
+        for name in names.sorted() where name.hasSuffix(".wav") {
+            let isPartial = name.hasSuffix(".partial.wav")
+            let id = String(name.dropLast(isPartial ? ".partial.wav".count : ".wav".count))
+            guard !known.contains(id), !seen.contains(id) else { continue }
+            let url = archive.url(for: id)
+            let chosen = FileManager.default.fileExists(atPath: url.path) ? url : archive.partialURL(for: id)
+            let attributes = try? FileManager.default.attributesOfItem(atPath: chosen.path)
+            guard let size = attributes?[.size] as? Int, size > 44,
+                let modified = attributes?[.modificationDate] as? Date, modified < launchedAt
+            else { continue }
+            seen.insert(id)
+            found.append(
+                RecoverableDictation(
+                    id: id, startedAt: modified, audioURL: chosen, seconds: Double(size - 44) / Double(AudioArchive.sampleRate * 2),
+                    isPartial: chosen == archive.partialURL(for: id), isOrphan: true))
+        }
+        return found
     }
 
     /// The kept audio of finished takes, from each row's own `audio_path`: the file must exist and be a valid
@@ -54,7 +87,8 @@ public enum DictationRecovery {
                 guard let size = (try? FileManager.default.attributesOfItem(atPath: url.path))?[.size] as? Int, size > 44 else { continue }
                 return RecoverableDictation(
                     id: row.id, startedAt: Date(timeIntervalSince1970: row.startedAt), audioURL: url,
-                    seconds: Double(size - 44) / Double(AudioArchive.sampleRate * 2), isPartial: false, isCompleted: true
+                    seconds: Double(size - 44) / Double(AudioArchive.sampleRate * 2), isPartial: false, isCompleted: true,
+                    language: row.language
                 )
             }
             return nil
@@ -89,7 +123,7 @@ public enum DictationRecovery {
             recoverable.append(
                 RecoverableDictation(
                     id: row.id, startedAt: Date(timeIntervalSince1970: row.startedAt), audioURL: audio.url,
-                    seconds: audio.seconds, isPartial: audio.url == archive.partialURL(for: row.id)
+                    seconds: audio.seconds, isPartial: audio.url == archive.partialURL(for: row.id), language: row.language
                 ))
         }
         var newest = recoverable.first

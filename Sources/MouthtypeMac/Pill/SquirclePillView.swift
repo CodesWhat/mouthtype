@@ -167,6 +167,8 @@ class SquirclePillView: NSView, PillSkinView {
     var cardProgress: CGFloat? { cardReadout?.progress }
     var lampTone: CardReadout.Tone? { mode.readout?.tone }
 
+    var bodyFrame: CGRect { rowRect }
+
     var controlFrames: [PillControl: CGRect] {
         guard isLocked, mode == .locked else { return [:] }
         return MatrixPillLayout.controlFrames(capsule: rowRect, metrics: metrics)
@@ -692,7 +694,7 @@ class SquirclePillView: NSView, PillSkinView {
         switch control {
         case .cancel:
             return palette.controlForeground.withAlphaComponent(down ? 0.26 : over ? 0.17 : 0.10).cgColor
-        case .stop:
+        case .stop, .pill:
             let base = palette.finishFill
             if down { return (base.blended(withFraction: 0.22, of: .black) ?? base).cgColor }
             if over { return (base.blended(withFraction: 0.20, of: .white) ?? base).cgColor }

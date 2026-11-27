@@ -32,6 +32,42 @@ import Testing
         #expect(ProjectFiles.repositoryRoot(containing: root)?.standardizedFileURL.path == root.standardizedFileURL.path)
     }
 
+    @Test func aGitFilePointerIsOnlyFollowedIntoAWorktreeOrSubmoduleDirectory() throws {
+        let base = FileManager.default.temporaryDirectory.appendingPathComponent("gitdir-pointer-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: base) }
+        let fm = FileManager.default
+        let worktreeGit = base.appendingPathComponent("main/.git/worktrees/w")
+        let moduleGit = base.appendingPathComponent("main/.git/modules/m")
+        let elsewhere = base.appendingPathComponent("elsewhere")
+        for dir in [worktreeGit, moduleGit, elsewhere] {
+            try fm.createDirectory(at: dir, withIntermediateDirectories: true)
+            try "ref: refs/heads/x\n".write(to: dir.appendingPathComponent("HEAD"), atomically: true, encoding: .utf8)
+        }
+        func point(_ pointer: String) throws -> URL? {
+            let root = base.appendingPathComponent("checkout-\(UUID().uuidString)")
+            try fm.createDirectory(at: root, withIntermediateDirectories: true)
+            try pointer.write(to: root.appendingPathComponent(".git"), atomically: true, encoding: .utf8)
+            return ProjectFiles.gitDirectory(of: root)
+        }
+        let resolvedWorktree = worktreeGit.resolvingSymlinksInPath().path
+        #expect(try point("gitdir: \(worktreeGit.path)\n")?.path == resolvedWorktree)
+        #expect(try point("gitdir: \(moduleGit.path)")?.path == moduleGit.resolvingSymlinksInPath().path)
+        // Hostile pointers: system paths, a directory without the worktree shape, traversal, empty, wrong prefix.
+        #expect(try point("gitdir: /etc\n") == nil)
+        #expect(try point("gitdir: /\n") == nil)
+        #expect(try point("gitdir: \(elsewhere.path)\n") == nil)
+        #expect(try point("gitdir: \(worktreeGit.path)/../../../../elsewhere\n") == nil)
+        #expect(try point("gitdir:\n") == nil)
+        #expect(try point("not a pointer\n") == nil)
+    }
+
+    @Test func aRealGitDirectoryIsUsedAsIs() throws {
+        let root = try makeRepo()
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: root.appendingPathComponent(".git"), withIntermediateDirectories: true)
+        #expect(ProjectFiles.gitDirectory(of: root)?.path == root.appendingPathComponent(".git").path)
+    }
+
     @Test func aDirectoryOutsideAnyRepoResolvesToNothing() throws {
         let loose = FileManager.default.temporaryDirectory.appendingPathComponent("not-a-repo-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: loose, withIntermediateDirectories: true)

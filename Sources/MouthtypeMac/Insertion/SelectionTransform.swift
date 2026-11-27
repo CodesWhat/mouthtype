@@ -41,5 +41,3 @@ struct TransformModelStatus: Equatable {
         }
     }
 }
-
-enum TransformError: Error, Equatable { case emptyResult }

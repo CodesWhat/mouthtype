@@ -48,7 +48,7 @@ public final class HotkeyService {
     public var sampleObserver: (@MainActor (TapSample) -> Void)?
 
     private struct Slot {
-        var tap: EventTap?
+        var tap: (any TapHandle)?
         var recovery = TapRecovery()
         var retry: Task<Void, Never>?
     }
@@ -58,6 +58,7 @@ public final class HotkeyService {
 
     private var options: Options
     private let otherKeysHeldProbe: @MainActor ([UInt16]) -> Bool
+    private let system: any HotkeySystem
     private let eventSink: AsyncStream<HotkeyEvent>.Continuation
     private var messages: AsyncStream<TapMessage>
     private var messageSink: AsyncStream<TapMessage>.Continuation
@@ -76,8 +77,9 @@ public final class HotkeyService {
         self.init(options: options, otherKeysHeld: HotkeyService.liveKeysHeld)
     }
 
-    init(options: Options, otherKeysHeld: @escaping @MainActor ([UInt16]) -> Bool) {
+    init(options: Options, otherKeysHeld: @escaping @MainActor ([UInt16]) -> Bool, system: any HotkeySystem = LiveHotkeySystem()) {
         self.options = options
+        self.system = system
         otherKeysHeldProbe = otherKeysHeld
         engine = GestureEngine(configuration: options.configuration)
         mapper = HotkeyInputMapper(source: options.source)
@@ -86,6 +88,8 @@ public final class HotkeyService {
     }
 
     public var source: HotkeySource { options.source }
+
+    private var processing = false
 
     /// For the self-test: whether the key tap exists right now.
     var keyTapInstalled: Bool { slots[.keys]?.tap != nil }
@@ -116,7 +120,7 @@ public final class HotkeyService {
 
     /// Creates the always-on tap. Call only after Accessibility is granted, so macOS has no reason to raise an Input Monitoring prompt.
     public func start() throws {
-        guard AXIsProcessTrusted() else { throw StartError.accessibilityMissing }
+        guard system.isProcessTrusted else { throw StartError.accessibilityMissing }
         guard slots[.flags]?.tap == nil else { return }
         let thread = TapThread()
         self.thread = thread
@@ -276,9 +280,9 @@ public final class HotkeyService {
     /// How many real key presses and clicks the taps have seen, or nil when they can't vouch for it.
     var userInputGeneration: UInt64? { shared.userInputGeneration }
 
-    private func makeTap(_ role: TapRole, countsInput: Bool = false) -> EventTap? {
+    private func makeTap(_ role: TapRole, countsInput: Bool = false) -> (any TapHandle)? {
         guard let thread else { return nil }
-        return EventTap(role: role, context: tapContext(for: role), runLoop: thread.runLoop, countsInput: countsInput)
+        return system.makeTap(role: role, context: tapContext(for: role), runLoop: thread.runLoop, countsInput: countsInput)
     }
 
     func tapContext(for role: TapRole) -> TapContext {
@@ -312,6 +316,13 @@ public final class HotkeyService {
 
     func process(_ sample: TapSample) {
         sampleObserver?(sample)
+        // Past the release there is no gesture for Esc to cancel, so it goes straight to the controller.
+        if processing, !engine.isRecording, !mapper.hotkeyHeld, sample.kind == .keyDown, !sample.isAutorepeat,
+            sample.keyCode == TapPolicy.escapeKeyCode, sample.userData != SyntheticEvents.stamp
+        {
+            eventSink.yield(.cancelled(reason: .escape))
+            return
+        }
         if mouseHeld, !mapper.hotkeyHeld, engine.isRecording, !engine.isLocked, !sample.isAutorepeat,
             sample.kind == .keyDown, sample.userData != SyntheticEvents.stamp
         {
@@ -393,11 +404,31 @@ public final class HotkeyService {
             shared.recording.store(false, ordering: .relaxed)
         } else if let slot = slots[.keys] {
             shared.recording.store(false, ordering: .relaxed)
+            // A take still processing keeps the tap up so Esc can reach it.
+            if !processing {
+                slot.retry?.cancel()
+                slot.tap?.teardown()
+                slots[.keys] = nil
+            }
+        }
+        refreshHealth()
+    }
+
+    /// Takes are waiting on the engine after the key came up. While true the key tap stays installed, listen-only for
+    /// Esc, and an Esc press cancels them. Esc is never swallowed here: it still reaches the app in front.
+    public func setProcessing(_ on: Bool) {
+        guard on != processing else { return }
+        processing = on
+        shared.processing.store(on, ordering: .relaxed)
+        if on {
+            if thread != nil, slots[.keys]?.tap == nil, let keyTap = makeTap(.keys) {
+                slots[.keys] = Slot(tap: keyTap)
+            }
+        } else if !engine.isRecording, !keyTapStaysOn, let slot = slots[.keys] {
             slot.retry?.cancel()
             slot.tap?.teardown()
             slots[.keys] = nil
         }
-        refreshHealth()
     }
 
     /// Only differences between these dates matter to the gesture engine; `nanos` is a `CGEvent.timestamp`.
@@ -462,12 +493,12 @@ public final class HotkeyService {
     /// While a tap was off the hotkey may have been released unseen. Only a missed release is acted on:
     /// a press missed meanwhile doesn't start a recording halfway through.
     private func resync() {
-        let flags = CGEventSource.flagsState(.combinedSessionState).rawValue
+        let flags = system.currentFlags
         var destinationDown = false
         if case let .remapped(code) = options.source {
-            destinationDown = CGEventSource.keyState(.combinedSessionState, key: CGKeyCode(code))
+            destinationDown = system.isKeyDown(code)
         }
-        if let shortcut { destinationDown = CGEventSource.keyState(.combinedSessionState, key: CGKeyCode(shortcut.keyCode)) }
+        if let shortcut { destinationDown = system.isKeyDown(shortcut.keyCode) }
         guard
             let sample = Self.resyncSample(
                 source: options.source,
@@ -510,7 +541,7 @@ public final class HotkeyService {
             }
             onWatchdog?()
         }
-        if !engine.isRecording { secureInput = IsSecureEventInputEnabled() }
+        if !engine.isRecording { secureInput = system.isSecureInputEnabled }
         refreshHealth()
     }
 

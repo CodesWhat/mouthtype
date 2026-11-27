@@ -40,7 +40,7 @@ struct HomePage: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
             @Bindable var model = model
-            TextField("Search saved takes", text: $model.query)
+            TextField("Search saved takes", text: $model.searchText)
                 .textFieldStyle(.roundedBorder)
                 .accessibilityLabel("Search saved takes")
                 .accessibilityIdentifier("home-search")

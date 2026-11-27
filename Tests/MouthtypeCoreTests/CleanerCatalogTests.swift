@@ -54,6 +54,16 @@ import Testing
         #expect(model.spec.downloadSizeMB >= 4000)
         #expect(CleanerCatalog.mlxSpec(id: "superwhisper-s1-mini") != nil)
     }
+    @Test func onlyTheEvaluationModelTurnsThinkingOff() throws {
+        let lfm = try #require(CleanerCatalog.mlxSpec(id: "lfm3-1.7b-mlx-4bit"))
+        #expect(lfm.disablesThinking)
+        #expect(lfm.license?.contains("LFM Open License") == true)
+        #expect(CleanerCatalog.smartCleanupID != lfm.id)
+        for id in ["gemma-4-e4b-it-4bit", "qwen3-4b-instruct-2507-4bit", "superwhisper-s1-mini"] {
+            #expect(try #require(CleanerCatalog.mlxSpec(id: id)).disablesThinking == false)
+        }
+    }
+
     @Test func unknownIDThrowsWithValidIDs() {
         do {
             _ = try CleanerCatalog.make(id: "nope")

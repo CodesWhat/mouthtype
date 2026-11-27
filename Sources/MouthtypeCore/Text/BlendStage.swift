@@ -41,6 +41,12 @@ public struct BlendStage: Sendable {
 
     /// First word of each string, exactly as written, for use as `protectedWords`.
     public static func firstWords(of strings: [String]) -> Set<String> {
+        firstWordSets.value(for: strings) { build(firstWordsOf: $0) }
+    }
+
+    private static let firstWordSets = RecentStrings<Set<String>>()
+
+    private static func build(firstWordsOf strings: [String]) -> Set<String> {
         var result = Set<String>()
         for s in strings {
             let chars = Array(s)

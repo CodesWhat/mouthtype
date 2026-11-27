@@ -4,6 +4,9 @@ import AppKit
 public protocol MenuSection {
     var items: [NSMenuItem] { get }
     func refresh()
+    /// True when a finished take changes what this section shows, so it is refreshed between takes without the
+    /// menu-open refresh of every section and the system diagnostics.
+    var refreshesAfterTake: Bool { get }
     /// Called as the menu is about to open, before it starts tracking. Anything that reads another app's state through
     /// Accessibility has to do it here: once the menu is tracking, the system-wide focused element is empty.
     func prepareForMenuOpen()
@@ -13,6 +16,7 @@ public protocol MenuSection {
 
 extension MenuSection {
     public func refresh() {}
+    public var refreshesAfterTake: Bool { false }
     public func prepareForMenuOpen() {}
     public func menuDidClose() {}
 }
@@ -64,6 +68,12 @@ extension MenuSection {
     func refresh() {
         onRefresh?()
         sections.forEach { $0.section.refresh() }
+        rebuild()
+    }
+    /// A take finished: refresh only the sections that show takes. The full refresh (diagnostics, IOHID, every
+    /// section) still runs when the menu opens.
+    func refreshAfterTake() {
+        sections.lazy.filter(\.section.refreshesAfterTake).forEach { $0.section.refresh() }
         rebuild()
     }
     func menuNeedsUpdate(_ menu: NSMenu) {
@@ -182,5 +192,6 @@ extension MenuSection {
     }
     func setHandsFree(_ active: Bool) { daily.setHandsFree(active) }
     public func refresh() { daily.refresh() }
+    func refreshAfterTake() { daily.refreshAfterTake() }
     public func add(section: any MenuSection, startsGroup: Bool = true, isFooter: Bool = false) { daily.add(section: section, startsGroup: startsGroup, isFooter: isFooter) }
 }

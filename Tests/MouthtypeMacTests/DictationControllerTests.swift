@@ -339,9 +339,13 @@ private final class FakePill: DictationPill {
         notices.append(text)
         log.add("pill.notice:\(text)")
     }
-    func showProcessing() {
+    var onShowProcessing: (@MainActor () -> Void)?
+    var processingCancellable: [Bool] = []
+    func showProcessing(cancellable: Bool) {
         cardMessage = nil
+        processingCancellable.append(cancellable)
         log.add("pill.processing")
+        onShowProcessing?()
     }
     func showMessage(_ message: PillMessage, duration: TimeInterval) {
         cardMessage = nil
@@ -1941,16 +1945,186 @@ private final class FakeCorrections: CorrectionObserving {
         #expect(rig.store.verdicts.map(\.outcome) == ["confirmed"] && rig.cards.presented.isEmpty)
     }
 
-    @Test func aNewDictationCancelsThePendingReadBack() async {
+    @Test func aNewDictationLeavesThePendingReadBackRunning() async {
         let rig = Rig()
         rig.inserter.result = pastedResult()
         await rig.dictate()
         let before = rig.inserter.cancelledVerifications
         await rig.controller.handle(.pressed(at: 1))
-        #expect(rig.inserter.cancelledVerifications == before + 1)
+        #expect(rig.inserter.cancelledVerifications == before)
+    }
+
+    @Test func aMissThatArrivesDuringTheNextTakeIsRecordedAndShownOnceTheTakeEnds() async {
+        let rig = Rig()
+        rig.inserter.result = pastedResult()
+        await rig.dictate()
+        await rig.controller.handle(.pressed(at: keyDown + 1))
         rig.inserter.verify(PasteVerification(id: 1, verdict: .notLanded, receiptMs: nil))
-        await rig.settle()
-        #expect(rig.store.verdicts.isEmpty && rig.cards.presented.isEmpty)
+        await rig.until { rig.store.verdicts.map(\.outcome) == ["not landed"] }
+        #expect(rig.cards.presented.filter { $0.kind == .pasteFailed }.isEmpty)
+        rig.inserter.result = pastedResult(id: 2)
+        await rig.controller.handle(.released(at: keyUp + 1))
+        await rig.controller.waitForProcessing()
+        await rig.until { rig.cards.presented.contains(.notLanded(" Hello world.")) }
+    }
+
+    @Test func escapeWhileProcessingCancelsTheTakeWithoutDelivering() async {
+        let rig = Rig()
+        rig.engine.holds = 1
+        await rig.controller.handle(.pressed(at: keyDown))
+        await rig.controller.handle(.released(at: keyUp))
+        await rig.engine.waitForHeld()
+        await rig.controller.handle(.cancelled(reason: .escape))
+        rig.engine.releaseHeld()
+        await rig.controller.waitForProcessing()
+        #expect(rig.inserter.delivered.isEmpty)
+        #expect(rig.store.finishes.map(\.0).last == .cancelled)
+        #expect(rig.controller.phase == .idle)
+    }
+
+    @Test func anInputLostCancelDoesNotStopTakesThatAreAlreadyProcessing() async {
+        let rig = Rig()
+        rig.engine.holds = 1
+        await rig.controller.handle(.pressed(at: keyDown))
+        await rig.controller.handle(.released(at: keyUp))
+        await rig.engine.waitForHeld()
+        await rig.controller.handle(.cancelled(reason: .inputLost))
+        rig.engine.releaseHeld()
+        await rig.controller.waitForProcessing()
+        #expect(rig.inserter.delivered.count == 1)
+        #expect(rig.store.finishes.map(\.0).contains(.cancelled) == false)
+    }
+
+    @Test func cancellingProcessingFromThePillEndsTheTakeAsCancelled() async {
+        let rig = Rig()
+        rig.engine.holds = 1
+        await rig.controller.handle(.pressed(at: keyDown))
+        await rig.controller.handle(.released(at: keyUp))
+        await rig.engine.waitForHeld()
+        #expect(rig.controller.phase == .processing)
+        rig.controller.cancelProcessing()
+        rig.engine.releaseHeld()
+        await rig.controller.waitForProcessing()
+        #expect(rig.inserter.delivered.isEmpty)
+        #expect(rig.store.finishes.map(\.0) == [.cancelled])
+    }
+
+    @Test func clickingTheProcessingPillCancelsTheTake() async {
+        let rig = Rig()
+        rig.engine.holds = 1
+        await rig.controller.handle(.pressed(at: keyDown))
+        await rig.controller.handle(.released(at: keyUp))
+        await rig.engine.waitForHeld()
+        #expect(rig.controller.phase == .processing)
+        rig.controller.handle(control: .pill)
+        rig.engine.releaseHeld()
+        await rig.controller.waitForProcessing()
+        #expect(rig.inserter.delivered.isEmpty)
+        #expect(rig.store.finishes.map(\.0) == [.cancelled])
+    }
+
+    @Test func cancellingDuringTheStopWindowBeforeTheJobIsQueuedEndsTheTakeAsCancelled() async {
+        let rig = Rig()
+        // The pill is shown after the phase flips and before the job is queued: a click right then finds no job yet.
+        rig.pill.onShowProcessing = { [controller = rig.controller] in
+            rig.pill.onShowProcessing = nil
+            controller.handle(control: .pill)
+        }
+        await rig.controller.handle(.pressed(at: keyDown))
+        await rig.controller.handle(.released(at: keyUp))
+        await rig.controller.waitForProcessing()
+        #expect(rig.inserter.delivered.isEmpty)
+        #expect(rig.store.finishes.map(\.0) == [.cancelled])
+        #expect(rig.controller.phase == .idle)
+        #expect(rig.pill.processingCancellable.first == true)
+    }
+
+    @Test func aCancelClickedDuringTheStopWindowDoesNotCancelTheNextTake() async {
+        let rig = Rig()
+        rig.pill.onShowProcessing = { [controller = rig.controller] in
+            rig.pill.onShowProcessing = nil
+            controller.handle(control: .pill)
+        }
+        await rig.controller.handle(.pressed(at: keyDown))
+        await rig.controller.handle(.released(at: keyUp))
+        await rig.controller.waitForProcessing()
+        await rig.controller.handle(.pressed(at: keyDown + 10))
+        await rig.controller.handle(.released(at: keyUp + 10))
+        await rig.controller.waitForProcessing()
+        #expect(rig.inserter.delivered.count == 1)
+    }
+
+    @Test func cancellingProcessingWhileIdleDoesNothing() async {
+        let rig = Rig()
+        rig.controller.cancelProcessing()
+        #expect(rig.controller.phase == .idle)
+        #expect(rig.store.finishes.isEmpty)
+    }
+
+    @Test func escapeStopsQueuedTakesBehindTheRunningOne() async {
+        let rig = Rig()
+        rig.engine.holds = 1
+        await rig.controller.handle(.pressed(at: keyDown))
+        await rig.controller.handle(.released(at: keyUp))
+        await rig.engine.waitForHeld()
+        await rig.controller.handle(.pressed(at: keyDown + 1))
+        await rig.controller.handle(.released(at: keyUp + 1))
+        await rig.controller.handle(.cancelled(reason: .escape))
+        rig.engine.releaseHeld()
+        await rig.controller.waitForProcessing()
+        #expect(rig.inserter.delivered.isEmpty)
+        #expect(rig.store.finishes.map(\.0).filter { $0 == .cancelled }.count == 2)
+    }
+
+    @Test func aCancelledRequestThatThrowsItsOwnErrorEndsAsCancelledNotFailed() async {
+        let rig = Rig()
+        rig.engine.holds = 1
+        await rig.controller.handle(.pressed(at: keyDown))
+        await rig.controller.handle(.released(at: keyUp))
+        await rig.engine.waitForHeld()
+        await rig.controller.handle(.cancelled(reason: .escape))
+        rig.engine.error = URLError(.cancelled)
+        rig.engine.releaseHeld()
+        await rig.controller.waitForProcessing()
+        #expect(rig.store.finishes.map(\.0) == [.cancelled])
+    }
+
+    @Test func theControllerReportsWhenTakesStartAndStopProcessing() async {
+        let rig = Rig()
+        var reports: [Bool] = []
+        rig.controller.onProcessingChanged = { reports.append($0) }
+        rig.engine.holds = 1
+        await rig.controller.handle(.pressed(at: keyDown))
+        await rig.controller.handle(.released(at: keyUp))
+        await rig.engine.waitForHeld()
+        #expect(reports == [true])
+        rig.engine.releaseHeld()
+        await rig.controller.waitForProcessing()
+        #expect(reports == [true, false])
+    }
+
+    @Test func aMissForTheFirstTakeStillCountsAfterTheSecondTakeDelivered() async {
+        let rig = Rig()
+        rig.inserter.result = pastedResult()
+        await rig.dictate()
+        rig.inserter.result = pastedResult(id: 2)
+        await rig.controller.handle(.pressed(at: keyDown + 1))
+        await rig.controller.handle(.released(at: keyUp + 1))
+        await rig.controller.waitForProcessing()
+        rig.inserter.verify(PasteVerification(id: 1, verdict: .notLanded, receiptMs: nil))
+        await rig.until { rig.store.verdicts.map(\.outcome) == ["not landed"] }
+        #expect(rig.store.verdicts.map(\.outcome) == ["not landed"])
+    }
+
+    @Test func dismissingTheMicrophoneCardReleasesTheHeldInterruption() async {
+        let rig = Rig()
+        await rig.controller.handle(.pressed(at: keyDown))
+        rig.capture.interrupt()
+        await rig.until { rig.controller.phase == .idle }
+        rig.cards.onDismissed?(.micDisconnected(seconds: 2))
+        await rig.controller.insertInterrupted()
+        #expect(rig.inserter.delivered.isEmpty)
+        #expect(rig.store.finishes.map(\.0) == [.failed])
     }
 
     @Test func aPasteWithNoReadBackWritesNoVerdict() async {

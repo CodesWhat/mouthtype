@@ -450,21 +450,6 @@ import UniformTypeIdentifiers
 
     func removeAppStyle(bundleID: String) { updateAppStyles { $0.remove(bundleID: bundleID) } }
 
-    func chooseApplication() {
-        let panel = NSOpenPanel()
-        panel.title = "Choose an application"
-        panel.prompt = "Add application"
-        panel.allowedContentTypes = [.applicationBundle]
-        panel.canChooseFiles = true
-        panel.canChooseDirectories = false
-        panel.allowsMultipleSelection = false
-        panel.directoryURL = URL(fileURLWithPath: "/Applications", isDirectory: true)
-        panel.begin { [weak self] response in
-            guard response == .OK, let url = panel.url else { return }
-            self?.addApplication(at: url)
-        }
-    }
-
     func addApplication(at url: URL) {
         guard url.pathExtension.lowercased() == "app", let bundle = Bundle(url: url), let bundleID = bundle.bundleIdentifier else {
             appStylesError = "That application has no readable bundle identifier."

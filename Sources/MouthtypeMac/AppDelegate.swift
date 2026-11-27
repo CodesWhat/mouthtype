@@ -239,7 +239,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private let micCapture = MicCapture()
-    private let audioQuiet = RecordingAudioQuiet(output: CoreAudioQuietOutput(), enabled: { QuietAudioPreference.isEnabled() })
+    private let audioQuiet = RecordingAudioQuiet(
+        output: CoreAudioQuietOutput(), enabled: { QuietAudioPreference.isEnabled() }, marker: DefaultsQuietMuteMarker())
     private let microphoneSection = MicrophoneMenuSection()
     private let systemSection = SystemAccessMenuSection()
     private let accessibility = AccessibilityAccess()
@@ -296,7 +297,9 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             cardPresenter = presenter
             Task {
                 await PillDemo.run(controller: pill, cards: cards, presenter: presenter, options: demo)
-                NSApp.terminate(nil)
+                // Quit from a run-loop turn: this Task is a main-queue block, and NSApp.terminate's terminateLater wait
+                // can't run the termination Task while that block is still executing (see FnRemap.requestQuit).
+                FnRemap.requestQuit { NSApp.terminate(nil) }
             }
             return
         }
@@ -389,8 +392,21 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         let activity = storeOpenActivity
         storeOpenInFlight = true
         Task {
-            let outcome = await withCheckedContinuation { (done: CheckedContinuation<StoreOpenOutcome, Never>) in
+            var outcome = await withCheckedContinuation { (done: CheckedContinuation<StoreOpenOutcome, Never>) in
                 DispatchQueue.global(qos: .userInitiated).async { done.resume(returning: open(activity)) }
+            }
+            // The deadline committed a quit and the open skipped its quarantine for it. If that quit is cancelled (Keep
+            // Editing, an updater refusal), this open is spent and runs again so the damaged file is still set aside. The
+            // open can come back while the quit is still committed (a draft prompt is up), so wait for the quit to resolve.
+            while !isTerminating, activity.takeSkippedForQuit() {
+                while !isTerminating, activity.state == .quitCommitted {
+                    try? await Task.sleep(for: .milliseconds(20))
+                }
+                guard !isTerminating else { break }
+                Log.app.info("quit was withdrawn after the open skipped its quarantine; opening history again")
+                outcome = await withCheckedContinuation { (done: CheckedContinuation<StoreOpenOutcome, Never>) in
+                    DispatchQueue.global(qos: .userInitiated).async { done.resume(returning: open(activity)) }
+                }
             }
             storeOpenInFlight = false
             // A quit that outwaited the open has already been answered; building the app now would start the engine and
@@ -435,6 +451,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     private func completeLaunch(arguments: [String], menuBar: MenuBarController) {
         // Undo a Fn remap a previous run died with before anything reads the keyboard.
         _ = fnRemap.restoreIfStale()
+        // Unmute an output a previous run muted and died before restoring.
+        audioQuiet.recoverFromCrash()
         // Nothing that reads history exists yet: no pill, hotkey, menu sections or recovery. URLs queue until finishLaunch,
         // a quit waits in beginTermination, and a Home window built early shows no takes until finishLaunch re-wires it.
         openStoreOffMain { [self] opened in continueLaunch(arguments: arguments, menuBar: menuBar, opened: opened) }
@@ -571,9 +589,10 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         historySection = history
         dictation.onAttemptFinished = { [weak self, weak menuBar] in
-            menuBar?.refresh(); self?.builtSettingsWindow?.model.home.refreshRecoverability()
+            menuBar?.refreshAfterTake(); self?.builtSettingsWindow?.model.home.refreshRecoverability()
         }
         dictation.onHandsFreeChanged = { [weak menuBar] active in menuBar?.setHandsFree(active) }
+        dictation.onProcessingChanged = { [weak self] on in self?.hotkeyService?.setProcessing(on) }
         dictation.onLockEnded = { [weak self] in self?.hotkeyService?.releaseLock() }
         dictation.onAutomationLock = { [weak self] in self?.hotkeyService?.adoptLockedRecording() }
         menuBar.onStopDictation = { [weak dictation] in dictation?.stopHandsFree() }
@@ -581,13 +600,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let dictation else { return }
             Task { await dictation.cancelHandsFree() }
         }
-        pill.onControl = { [weak dictation] control in
-            guard let dictation else { return }
-            switch control {
-            case .stop: dictation.stopHandsFree()
-            case .cancel: Task { await dictation.cancelHandsFree() }
-            }
-        }
+        pill.onControl = { [weak dictation] control in dictation?.handle(control: control) }
         systemSection.onToggleRemap = { [weak self] in self?.toggleRemap() }
         systemSection.onChangeShortcut = { [weak self] in self?.showShortcutEditor() }
         systemSection.update(shortcut: ShortcutSettings.load())
@@ -701,7 +714,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                 await inserter?.prepareForTermination()
             },
             reply: { [self] ready in
-                if !ready { isTerminating = false; appUpdater.installWasDeferred() }
+                if !ready { isTerminating = false; storeOpenActivity.withdrawQuit(); appUpdater.installWasDeferred() }
                 // The draft the user agreed to discard goes only once the quit is certain; a delayed quit keeps it.
                 if ready, !signalShutdown { builtSettingsWindow?.discardDraftForQuit() }
                 replyToTermination(sender, ready)
@@ -732,6 +745,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     public func applicationWillTerminate(_ notification: Notification) {
         guard !launchRefused else { return }
         isTerminating = true
+        audioPurgeLoop?.cancel()
         audioQuiet.end()
         fileTranscriptionModel.cancel()
         guard menuBar != nil else { return }
@@ -751,8 +765,23 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    private var audioPurgeLoop: Task<Void, Never>?
+
+    /// A menu bar app can stay up for weeks, so a launch-only sweep would let the archive grow past its age and size limits.
     private func purgeAudio(archive: AudioArchive, store: TranscriptStore?) {
         guard let store else { return }
+        audioPurgeLoop?.cancel()
+        audioPurgeLoop = Task { [weak self] in
+            await AudioPurgeLoop.run(
+                shouldStop: { @MainActor in self?.isTerminating ?? true },
+                isIdle: { @MainActor in self?.dictation?.phase == .idle },
+                purge: { @MainActor in self?.runAudioPurge(archive: archive, store: store) }
+            )
+        }
+        runAudioPurge(archive: archive, store: store)
+    }
+
+    private func runAudioPurge(archive: AudioArchive, store: TranscriptStore) {
         let policy = AudioRetentionPreference.load()
         Task.detached {
             do {
@@ -1159,12 +1188,12 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         let selfTestSeconds = CaptureSelfTest.seconds(in: CommandLine.arguments)
 
         guard await prepareCapture() else {
-            if selfTestSeconds != nil { NSApp.terminate(nil) }
+            if selfTestSeconds != nil { FnRemap.requestQuit { NSApp.terminate(nil) } }
             return
         }
         if let seconds = selfTestSeconds {
             await CaptureSelfTest.run(capture: micCapture.capture, seconds: seconds)
-            NSApp.terminate(nil)
+            FnRemap.requestQuit { NSApp.terminate(nil) }
         }
     }
 }

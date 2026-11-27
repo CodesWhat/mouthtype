@@ -362,18 +362,6 @@ struct AcceptRecheck {
         self.changed = changed
     }
 
-    /// Reads the selection as the menu opens, so the menu can enable its items.
-    /// Time-boxed: the AX calls each get a shrinking timeout, and a capture that still ran past `budget` is discarded.
-    func captureForMenu(budget: TimeInterval = 0.15) -> MenuCapture {
-        let start = ContinuousClock.now
-        menuSnapshot = nil
-        let selection: SelectedText
-        do { selection = try editor.capture(budget: budget) } catch SelectionCleanupError.timedOut { return .timedOut } catch { return .unavailable }
-        if start.duration(to: .now) > .seconds(budget) { return .timedOut }
-        menuSnapshot = selection
-        return .ready
-    }
-
     /// The menu-open read without blocking the main actor. The result is only kept if this task wasn't cancelled, so a read
     /// from an earlier menu open can't land a stale snapshot for the panel to compare against.
     func captureForMenuOffMain(budget: TimeInterval = 0.15) async -> MenuCapture {

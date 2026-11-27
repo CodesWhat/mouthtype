@@ -339,13 +339,13 @@ import Testing
         let elapsed = clock.measure { for _ in 0..<runs { _ = pipeline.run(input) } }
         let ms = (Double(elapsed.components.seconds) * 1000 + Double(elapsed.components.attoseconds) / 1e15) / Double(runs)
         print("TEXTPIPELINE-PERF 300 words: \(ms) ms average over \(runs) runs")
-        guard TextTestSupport.timingAssertsEnabled else { return }
         #if DEBUG
         // Debug builds are several times slower than release; the 5 ms target applies to release.
-        #expect(ms < 50, "300 words took \(ms) ms")
+        let limit = TextTestSupport.budget(50)
         #else
-        #expect(ms < 5, "300 words took \(ms) ms")
+        let limit = TextTestSupport.budget(5)
         #endif
+        #expect(ms < limit, "300 words took \(ms) ms (limit \(limit))")
     }
 
     @Test func tenThousandWordsFinishes() {
@@ -357,6 +357,6 @@ import Testing
         print("TEXTPIPELINE-PERF 10000 words: \(ms) ms")
         #expect(!out.text.isEmpty)
         #expect(!out.edits.isEmpty)
-        if TextTestSupport.timingAssertsEnabled { #expect(ms < 3000, "10,000 words took \(ms) ms") }
+        #expect(ms < TextTestSupport.budget(3000), "10,000 words took \(ms) ms")
     }
 }

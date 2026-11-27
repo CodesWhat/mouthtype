@@ -272,6 +272,29 @@ private let paragraph =
                 == .refused(.modelDeclined))
     }
 
+    @Test func aStemSharedWithTheRefusalClauseDoesNotKeepTheSelection() {
+        #expect(
+            judge("I'm sorry, I can't process this input.", selection: "The processor overheated.", instruction: "make it formal")
+                == .refused(.modelDeclined))
+        // A stem in a separate sentence keeps the selection.
+        #expect(
+            judge("Sorry, I can't deliver the reply. The processors overheating is fixed.", selection: "The processor overheated.", instruction: "make it formal")
+                == .accepted("Sorry, I can't deliver the reply. The processors overheating is fixed."))
+        // So does a stem in the same sentence, past the comma that ends the refusal clause.
+        #expect(
+            judge("Sorry, I can't say more, but processors overheating is fixed.", selection: "The processor overheated.", instruction: "make it formal")
+                == .accepted("Sorry, I can't say more, but processors overheating is fixed."))
+    }
+
+    @Test func anImpossibilityStatementInAFaithfulRewriteIsNotADecline() {
+        #expect(
+            judge("Delivery by Friday? That isn't possible.", selection: "We can't deliver by Friday.", instruction: "rephrase it")
+                == .accepted("Delivery by Friday? That isn't possible."))
+        #expect(
+            judge("That isn't possible.", selection: "We can't deliver by Friday.", instruction: "rephrase it")
+                == .refused(.modelDeclined))
+    }
+
     @Test func anApologyInAnotherLanguageOpensWithNoFamily() {
         #expect(
             judge("Lo siento, gracias por la actualización.", selection: "Thanks for the update.")

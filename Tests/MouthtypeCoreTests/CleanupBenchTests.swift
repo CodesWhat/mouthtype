@@ -1,7 +1,7 @@
 import ArgumentParser
 import Foundation
 import Testing
-import MouthtypeCore
+@testable import MouthtypeCore
 @testable import mouthtype_bench
 
 @Suite struct CleanupCheckerTests {
@@ -185,5 +185,27 @@ import MouthtypeCore
         let object = try #require(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
         #expect(object["deterministicMilliseconds"] as? Double == 0.5)
         #expect(object["totalCleanupMilliseconds"] as? Double == 0.7)
+    }
+}
+
+@Suite struct SmartFixtureGuardTests {
+    private func ratios(_ input: String, _ output: String) -> (kept: Double, novel: Double) {
+        let inputWords = SmartCleanupGuard.contentWords(SmartCleanupGuard.writtenForm(input))
+        let outputWords = SmartCleanupGuard.contentWords(SmartCleanupGuard.writtenForm(output))
+        let kept = inputWords.isEmpty ? 1 : Double(inputWords.filter { SmartCleanupGuard.present($0, in: outputWords) }.count) / Double(inputWords.count)
+        let novel = outputWords.isEmpty ? 0 : Double(outputWords.filter { !SmartCleanupGuard.present($0, in: inputWords) }.count) / Double(outputWords.count)
+        return (kept, novel)
+    }
+
+    /// Measured on the shipped fixtures: valid targets keep at least 50% of the input's content words and add at most
+    /// 22%. The long-output novel limit (40%) sits well above that and below the old 50%, so a rewrite that mostly invents text fails.
+    @Test func everyEnglishTargetStaysInsideTheWordShareLimits() throws {
+        for testCase in try SmartFixtures.load() where testCase.language == nil && testCase.instructions == nil {
+            // Targets may carry a reading note after the wording, "(or a four-item list)".
+            let target = testCase.target.components(separatedBy: " (").first ?? testCase.target
+            let r = ratios(testCase.input, target)
+            #expect(r.kept >= SmartCleanupGuard.minimumKept(for: .medium), "\(testCase.id) kept \(r.kept)")
+            #expect(r.novel <= SmartCleanupGuard.longOutputNovel, "\(testCase.id) novel \(r.novel)")
+        }
     }
 }

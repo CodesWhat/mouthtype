@@ -1,13 +1,13 @@
-# Known limits for 0.12.3
+# Known limits for 0.12.4
 
 > [!NOTE]
-> This page covers what 0.12.3 doesn't promise. Most of it is evidence the maintainer didn't collect, not behavior known to be broken. For fixes to problems you can hit today, see [troubleshooting](TROUBLESHOOTING.md).
+> This page covers what 0.12.4 doesn't promise. Most of it is evidence the maintainer didn't collect, not behavior known to be broken. For fixes to problems you can hit today, see [troubleshooting](TROUBLESHOOTING.md).
 
 ## Not verified
 
 | Area | What isn't verified | Safe assumption |
 | --- | --- | --- |
-| Fresh install | Installing on a Mac that has never run Mouthtype wasn't verified for 0.12.3. That was a maintainer scope decision. | The first-run permission prompts and model downloads were tested only on machines that already had grants and caches, so they may behave differently on yours. |
+| Fresh install | Installing on a Mac that has never run Mouthtype wasn't verified for 0.12.4. That was a maintainer scope decision. | The first-run permission prompts and model downloads were tested only on machines that already had grants and caches, so they may behave differently on yours. |
 | Non-English speech | Dictation in languages other than English was checked with fixtures and synthetic voices, not by people speaking those languages on a Mac. Auto-detect's language picks weren't measured on real speech. | Expect more corrections outside English, most of all in the Beta languages. Pick the language yourself if Auto-detect guesses wrong. |
 | Japanese, Hindi and Tamil (Beta) | These languages were checked with synthetic speech only, never a fluent speaker or a physical microphone. The Whisper Turbo model is a separate 1.6 GB download, and live words are unavailable while it is in use, including English takes in an Auto-detect set that contains these languages. | Expect more corrections than in the Parakeet languages. Cleanup is Basic only, and the download path hasn't been run on a fresh machine. |
 | Press Return after inserting | The list in Settings > Advanced was checked with unit tests and offscreen renders only, never in a live app. | Try it in a throwaway chat before relying on it. Terminals can't confirm a paste, so when you add one Mouthtype presses Return once the terminal has read the pasted text, and skips it if that read doesn't come within 2 seconds. Other apps send only when Mouthtype can confirm the text landed. Neither has been tried in live apps yet. |
@@ -18,7 +18,7 @@
 | Support links | The menu bar and About panel links were checked in tests, not opened in a live default browser. | They should open GitHub Sponsors and the Donate page in your default browser. |
 | Edit Selection by Voice | Automated tests cover the flow, but it was not run on a device after its final review fixes. | Check the preview before you accept. Nothing changes until you do. |
 | Typing calibration | Scoring is covered by tests, and the Stats card has not been used with VoiceOver. | Your measured speed only affects the time-saved figure. |
-| Speech recognition engine | FluidAudio 0.18.0 was not checked on real speech, including long takes. | Expect the same accuracy as before, but report any change in long takes. |
+| Speech recognition engine | FluidAudio 0.18.4 was not checked on real speech, including long takes. | Expect the same accuracy as before, but report any change in long takes. |
 | VoiceOver | Acceptance testing is deferred. | Controls have accessibility identifiers and render correctly offscreen, but that doesn't show they work with VoiceOver. |
 | Update installation | Other macOS versions and fresh installs aren't verified. | Signed update checks are tested. An update from one release to the next was observed installing and relaunching on one Mac. |
 | Other apps | Other browsers, terminals and Electron apps need more testing. | TextEdit and Chrome have physical coverage. An unknown delivery status isn't proof the text failed to land. |

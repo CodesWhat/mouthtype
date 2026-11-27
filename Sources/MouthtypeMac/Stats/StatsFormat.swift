@@ -5,8 +5,6 @@ import MouthtypeCore
 enum StatsFormat {
     static func number(_ n: Int) -> String { n.formatted(.number) }
 
-    static func wpm(_ value: Double?) -> String { value.map { "\(Int($0.rounded())) WPM" } ?? "No data yet" }
-
     /// "2 h 5 min", "12 min", "Under a minute".
     static func duration(minutes: Double) -> String {
         let total = Int(minutes.rounded())

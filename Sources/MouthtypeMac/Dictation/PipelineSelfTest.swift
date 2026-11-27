@@ -96,7 +96,7 @@ enum PipelineSelfTest {
         } catch {
             Log.selftest.error("pipeline selftest failed: \(String(describing: error), privacy: .public)")
         }
-        NSApp.terminate(nil)
+        FnRemap.requestQuit { NSApp.terminate(nil) }
     }
 
     private static func waitForEngine(_ host: EngineHost) async throws {

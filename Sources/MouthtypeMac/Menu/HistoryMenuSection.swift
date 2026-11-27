@@ -31,6 +31,8 @@ final class HistoryMenuSection: NSObject, MenuSection {
         refresh()
     }
 
+    var refreshesAfterTake: Bool { true }
+
     func refresh() {
         guard let store else { onError("Recent takes are unavailable."); return }
         do {

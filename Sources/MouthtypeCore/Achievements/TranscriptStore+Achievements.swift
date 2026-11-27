@@ -8,9 +8,22 @@ extension TranscriptStore {
         try pool.read { db in try Self.fetchAchievementExtras(db, calibrated: calibrated) }
     }
 
+    static let achievementDuration = "COALESCE(voiced_ms, audio_ms)"
+    static let achievementBase = "FROM dictation WHERE words_final > 0 AND COALESCE(is_secure, 0) = 0"
+    /// The queries that scan every take. The `dictation_stats` index has to cover each of them.
+    static let achievementAppsSQL = """
+        SELECT app_name, MIN(local_day) AS first_day \(achievementBase) AND app_name IS NOT NULL AND app_name != ''
+        GROUP BY app_name ORDER BY MIN(started_at)
+        """
+    static let achievementHandsFreeSQL = "SELECT COUNT(*) AS n, MIN(local_day) AS first_day \(achievementBase) AND mode = 'hands_free'"
+    static let achievementNightOwlSQL = """
+        SELECT MIN(local_day) \(achievementBase) AND words_final >= 20
+        AND ((CAST(started_at AS INTEGER) + utc_offset_s) % 86400 + 86400) % 86400 < 14400
+        """
+
     static func fetchAchievementExtras(_ db: Database, calibrated: Bool) throws -> AchievementExtras {
-        let duration = "COALESCE(voiced_ms, audio_ms)"
-        let base = "FROM dictation WHERE words_final > 0 AND COALESCE(is_secure, 0) = 0"
+        let duration = achievementDuration
+        let base = achievementBase
         var extras = AchievementExtras(calibrated: calibrated)
 
         extras.days = try Row.fetchAll(
@@ -31,16 +44,11 @@ extension TranscriptStore {
         // Apps in the order they first appeared.
         let apps = try Row.fetchAll(
             db,
-            sql: """
-                SELECT app_name, MIN(local_day) AS first_day \(base) AND app_name IS NOT NULL AND app_name != ''
-                GROUP BY app_name ORDER BY MIN(started_at)
-                """)
+            sql: achievementAppsSQL)
         extras.distinctApps = apps.count
         if apps.count >= 3 { extras.thirdAppDay = apps[2]["first_day"] }
 
-        if let row = try Row.fetchOne(
-            db, sql: "SELECT COUNT(*) AS n, MIN(local_day) AS first_day \(base) AND mode = 'hands_free'")
-        {
+        if let row = try Row.fetchOne(db, sql: achievementHandsFreeSQL) {
             extras.handsFreeCount = row["n"]
             extras.handsFreeFirstDay = row["first_day"]
         }
@@ -68,12 +76,7 @@ extension TranscriptStore {
         }
 
         // The stored offset gives the local time of day, so the hour follows the zone the take was made in.
-        extras.nightOwlDay = try String.fetchOne(
-            db,
-            sql: """
-                SELECT MIN(local_day) \(base) AND words_final >= 20
-                AND ((CAST(started_at AS INTEGER) + utc_offset_s) % 86400 + 86400) % 86400 < 14400
-                """)
+        extras.nightOwlDay = try String.fetchOne(db, sql: achievementNightOwlSQL)
 
         if let row = try Row.fetchOne(
             db,

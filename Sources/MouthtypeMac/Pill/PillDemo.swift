@@ -63,7 +63,7 @@ public enum PillDemo {
         controller.levelSource = original
 
         mark("processing", controller)
-        controller.showProcessing()
+        controller.showProcessing(cancellable: true)
         try? await Task.sleep(for: .seconds(2 * Double(options.slowmo.squareRoot())))
 
         let scale = Double(options.slowmo.squareRoot())

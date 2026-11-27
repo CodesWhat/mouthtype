@@ -25,13 +25,6 @@ struct PixelColor: Equatable {
         copy.alpha = alpha * value
         return copy
     }
-
-    /// This colour mixed toward `other` by `amount`, keeping this colour's alpha.
-    func mixed(with other: PixelColor, _ amount: Double) -> PixelColor {
-        PixelColor(
-            red: red + (other.red - red) * amount, green: green + (other.green - green) * amount,
-            blue: blue + (other.blue - blue) * amount, alpha: alpha)
-    }
 }
 
 /// A grid of pixels drawn from character templates, the way the bitmap fonts are: whole pixels, no smoothing. Turned into a

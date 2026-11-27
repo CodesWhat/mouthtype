@@ -13,7 +13,7 @@ Both live on the **Style** page in the Mouthtype window.
 | Fast | Local model that handles fillers, corrections and spoken technical notation while keeping your wording. Uses S1-mini by Superwhisper. | About 1.4 GB |
 | Thorough | A larger local model for the same job, and the one Transform Selection uses. Uses Gemma 4 E4B. | About 5.2 GB |
 
-Neither model rewrites what you said into a different voice. If a model's output is invalid or misses its deadline, Mouthtype delivers the Basic result instead.
+Neither model rewrites what you said into a different voice. If a model's output is invalid or misses its deadline, Mouthtype delivers the Basic result instead. The models only run on takes of 2 to 400 words; a longer take gets Basic cleanup alone.
 
 The default level is Fast. Models download only when you ask:
 

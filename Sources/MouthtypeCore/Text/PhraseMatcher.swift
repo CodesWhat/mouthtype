@@ -23,25 +23,50 @@ struct PhraseMatcher: Sendable {
     }
 
     private let buckets: [Character: [Pattern]]
+    private let seen: Set<String>
+    private let count: Int
 
     /// `patterns[i]` is reported as `Match.pattern == i`. Empty patterns and later case-insensitive duplicates
     /// never match.
     init(patterns: [String]) {
-        var seen = Set<String>()
-        var built: [Character: [Pattern]] = [:]
-        for (index, raw) in patterns.enumerated() {
+        self.init(adding: patterns, to: [:], seen: [], offset: 0)
+    }
+
+    private init(adding patterns: [String], to buckets: [Character: [Pattern]], seen: Set<String>, offset: Int) {
+        var seen = seen
+        var built = buckets
+        var touched = Set<Character>()
+        for (position, raw) in patterns.enumerated() {
+            let index = offset + position
             let collapsed = PhraseKey.collapsed(raw)
             guard !collapsed.isEmpty else { continue }
             let chars = TextScan.lowered(Array(collapsed))
             guard seen.insert(String(chars)).inserted else { continue }
             built[chars[0], default: []].append(Pattern(chars: chars, index: index))
+            touched.insert(chars[0])
         }
-        for key in built.keys {
+        for key in touched {
             built[key]?.sort { a, b in
                 a.chars.count != b.chars.count ? a.chars.count > b.chars.count : a.index < b.index
             }
         }
         self.buckets = built
+        self.seen = seen
+        self.count = offset + patterns.count
+    }
+
+    /// The same matcher as `PhraseMatcher(patterns: original + extra)`, without re-reading `original`. For a long,
+    /// stable library plus a few phrases that change every take.
+    func appending(_ extra: [String]) -> PhraseMatcher {
+        extra.isEmpty ? self : PhraseMatcher(adding: extra, to: buckets, seen: seen, offset: count)
+    }
+
+    private static let recent = RecentStrings<PhraseMatcher>()
+
+    /// `PhraseMatcher(patterns:)` for a list the last few takes already built: the same library across takes skips
+    /// the rebuild, and an edited library is a different list and builds fresh.
+    static func shared(patterns: [String]) -> PhraseMatcher {
+        recent.value(for: patterns) { PhraseMatcher(patterns: $0) }
     }
 
     var isEmpty: Bool { buckets.isEmpty }

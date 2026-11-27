@@ -172,7 +172,7 @@ enum RecoverySelfTest {
         report("temporary store and archive in \(directory.path)")
         guard let store = try? TranscriptStore(url: directory.appendingPathComponent("mouthtype.sqlite")) else {
             report("FAIL temporary store")
-            NSApp.terminate(nil)
+            FnRemap.requestQuit { NSApp.terminate(nil) }
             return
         }
         let archive = AudioArchive(supportDirectory: directory)
@@ -181,7 +181,7 @@ enum RecoverySelfTest {
         report("waiting for the engine")
         guard await waitForEngine(engineHost) else {
             report("FAIL the engine did not load")
-            NSApp.terminate(nil)
+            FnRemap.requestQuit { NSApp.terminate(nil) }
             return
         }
         let recoverText = await speak("Sounds good, I'll send it over now.", in: directory, name: "recover")
@@ -489,6 +489,6 @@ enum RecoverySelfTest {
         report(failures.isEmpty ? "PASS" : "FAIL: \(failures.joined(separator: "; "))")
         window.close()
         try? FileManager.default.removeItem(at: directory)
-        NSApp.terminate(nil)
+        FnRemap.requestQuit { NSApp.terminate(nil) }
     }
 }

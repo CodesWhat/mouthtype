@@ -133,6 +133,11 @@ def main():
         report = json.loads(result.read_text())
         if report.get("error") or len(report.get("clips", [])) != len(clips):
             raise RuntimeError("Recognition evaluation failed; inspect recognition.json and recognition.log")
+        # package-release.py --eval-receipt checks this against the release commit and the recognition.json beside it.
+        receipt = {"schema": 1, "kind": "real-model-eval", "model": "parakeet-tdt-v3",
+                   "source_head": manifest["source_head"], "clips": len(clips),
+                   "recognition_sha256": hashlib.sha256(result.read_bytes()).hexdigest()}
+        (output / "eval-receipt.json").write_text(json.dumps(receipt, indent=2) + "\n")
     print(output)
 
 
