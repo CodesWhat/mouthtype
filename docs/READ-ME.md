@@ -23,7 +23,7 @@ The app’s Resources folder contains these notes and its license. Corresponding
 - Fixed: cleanup's length limit scales with the take, a negation stays on its word, and "had second thoughts" no longer becomes a list. Edit Selection by Voice no longer lets a refusal clause fool its check.
 - Fixed: recovery lists and prunes audio that has no history row, and audio retention is reapplied every six hours. A crash that left your output muted is repaired on the next launch.
 - Fixed: a history database saved by a newer version is left alone, with a message to update. Cancelling a file transcription keeps the last result.
-- Security: a project's .git pointer is only followed to a folder inside the project.
+- Security: a project's .git pointer is only followed into a linked worktree or submodule git directory.
 - Speech recognition uses FluidAudio 0.18.4. The menu refreshes less after a take, Home search waits for a pause in typing, and the dictionary list renders lazily.
 
 ## What changed in 0.12.3
