@@ -10,6 +10,7 @@ swiftc -swift-version 6 -warnings-as-errors -parse-as-library -sanitize=fuzzer,a
     "$root/Sources/MouthtypeCore/Text/TextScan.swift" \
     "$root/Sources/MouthtypeCore/Text/PhraseKey.swift" \
     "$root/Sources/MouthtypeCore/Text/PhraseMatcher.swift" \
+    "$root/Sources/MouthtypeCore/Text/RecentStrings.swift" \
     "$root/Tests/Fuzzing/PhraseMatcherFuzz.swift" \
     -o "$output/phrase-matcher"
 exec "$output/phrase-matcher" "$output/corpus" \
