@@ -1188,12 +1188,12 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         let selfTestSeconds = CaptureSelfTest.seconds(in: CommandLine.arguments)
 
         guard await prepareCapture() else {
-            if selfTestSeconds != nil { NSApp.terminate(nil) }
+            if selfTestSeconds != nil { FnRemap.requestQuit { NSApp.terminate(nil) } }
             return
         }
         if let seconds = selfTestSeconds {
             await CaptureSelfTest.run(capture: micCapture.capture, seconds: seconds)
-            NSApp.terminate(nil)
+            FnRemap.requestQuit { NSApp.terminate(nil) }
         }
     }
 }
