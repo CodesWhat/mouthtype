@@ -81,8 +81,4 @@ enum FontRegistry {
         ["ttf", "otf"].flatMap { bundle.urls(forResourcesWithExtension: $0, subdirectory: directory) ?? [] }
             .sorted { $0.lastPathComponent < $1.lastPathComponent }
     }
-
-    nonisolated static func isInstalled(family: String) -> Bool {
-        NSFontManager.shared.availableFontFamilies.contains(family)
-    }
 }

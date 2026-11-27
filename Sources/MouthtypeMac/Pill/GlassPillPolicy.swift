@@ -210,18 +210,6 @@ final class GlassBackdropCache {
         }
     }
 
-    /// The measured backdrop, waiting for it when it isn't cached. The decode runs off the main thread, so the caller
-    /// suspends instead of blocking. This is the same measurement `lookup` stores, for a caller that can wait for it.
-    func resolve(screen: Int, file: URL, screenFrame: CGRect, region: CGRect) async -> GlassPillPolicy.Backdrop? {
-        let key = key(file: file, region: region)
-        latest[screen] = key
-        if let entry = entries[screen], entry.key == key { return entry.backdrop }
-        let measure = measure
-        let result = await OffPool.run { measure(file, screenFrame, region) }
-        finish(screen: screen, key: key, backdrop: result)
-        return result
-    }
-
     private func finish(screen: Int, key: Key, backdrop: GlassPillPolicy.Backdrop?) {
         if inFlight[screen] == key { inFlight[screen] = nil }
         guard latest[screen] == key else { return }
