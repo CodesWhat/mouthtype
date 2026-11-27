@@ -165,7 +165,7 @@ A single recording stops after 20 minutes; a "One minute left" card appears at 1
 
 If a paste fails or there's nowhere to paste, the result stays available to copy. **Paste Last Take** and **Copy Last Take** restore the latest saved take after restart. <kbd>Control</kbd>+<kbd>Command</kbd>+<kbd>V</kbd> and <kbd>Control</kbd>+<kbd>Command</kbd>+<kbd>C</kbd> are their global shortcuts, shown beside them in the menu, unless your dictation shortcut uses the same combination, in which case the menu shows none. **Recent Takes** lists earlier ones.
 
-A recording interrupted by a crash can be recovered on the next launch. **Saved Recordings** makes older interrupted or failed recordings available to recover without pasting into the wrong app. Audio that has no history entry is listed there too, and each take is recovered in the language it was recorded in. Failed recovery keeps a Recover action so it can be retried, and Recover and Discard stay done. Recovery pauses new recordings until it finishes.
+A recording interrupted by a crash can be recovered on the next launch. **Saved Recordings** makes older interrupted or failed recordings available to recover without pasting into the wrong app. Audio that has no history entry is listed there too. A take with a history entry is recovered in the language it was recorded in; audio without one uses your current language setting. Failed recovery keeps a Recover action so it can be retried, and Recover and Discard stay done. Recovery pauses new recordings until it finishes.
 
 Click is the default sound set: a bright key-down thunk to start, a duller key-up thunk to stop, and matching lock and error cues. **Settings > General > Recording sounds** turns cues on or off. Other sound sets and a picker are deferred.
 

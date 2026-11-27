@@ -32,7 +32,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Esc cancels a take that is still processing, and only Esc does. The next take no longer drops the previous paste's read-back, and dismissing the microphone card releases the microphone.
 - If a crash left your output muted, Mouthtype unmutes it on the next launch.
 - A cancelled file transcription run keeps the last result instead of clearing it.
-- Recovery lists and prunes audio that has no history row and recovers it in the take's own language. Recover and Discard now stick. Audio retention is reapplied every six hours instead of only at launch.
+- Recovery lists and prunes audio that has no history row, and a take with a history row recovers in the language it was dictated in. Recover and Discard now stick. Audio retention is reapplied every six hours instead of only at launch.
 - A history database saved by a newer Mouthtype is left untouched, with a message to update.
 - Cancelling a quit that had already skipped history's recovery step reopens history properly.
 - "Had second thoughts" no longer turns into a list.

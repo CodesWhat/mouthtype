@@ -91,7 +91,7 @@ Mouthtype keeps your text when delivery goes wrong.
 | "Secure field, not pasted" (a secure field, like a password box, gets nothing pasted) | Nothing is pasted and the card keeps the text |
 | The microphone disconnects mid-take | What was captured is saved. **Insert** or **Discard** it. Dismissing the card releases the microphone and leaves the take in Saved Recordings |
 | "Recover your last dictation?" after a crash or force-quit | Accept the offer on the next launch |
-| Older interrupted or failed recordings | Open **Saved Recordings** in the menu. Recovery pauses new recordings until it finishes. Audio with no history entry is listed too, and each take is recovered in the language it was recorded in. Recover and Discard stay done |
+| Older interrupted or failed recordings | Open **Saved Recordings** in the menu. Recovery pauses new recordings until it finishes. Audio with no history entry is listed too. A take with a history entry is recovered in the language it was recorded in; audio without one uses your current language setting. Recover and Discard stay done |
 | You need an earlier take's text | Home lists your recent takes. **Copy** puts a take's text on the clipboard, and **Recover** reruns one whose audio is still saved |
 
 More fixes are in [Troubleshooting](../TROUBLESHOOTING.md).
